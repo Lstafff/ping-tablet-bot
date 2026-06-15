@@ -42,6 +42,10 @@ class BotFormattingTest(unittest.TestCase):
 
         self.assertEqual(texts.opponent_title(opponent), "Тест")
 
+    def test_delete_opponent_texts_are_available(self) -> None:
+        self.assertIn("@test", texts.delete_opponent_confirm("@test"))
+        self.assertIn("@test", texts.delete_opponent_done("@test"))
+
 
 if __name__ == "__main__":
     unittest.main()

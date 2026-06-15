@@ -132,6 +132,17 @@ def edit_menu(opponent_name: str, stats: StatsLike) -> str:
     )
 
 
+def delete_opponent_confirm(opponent_name: str) -> str:
+    return (
+        f"<b>🗑️ Удалить соперника {html.escape(opponent_name)}?</b>\n\n"
+        "Будет удалён этот соперник и вся статистика матчей с ним."
+    )
+
+
+def delete_opponent_done(opponent_name: str) -> str:
+    return f"<b>✅ Готово</b>\n\nСоперник {html.escape(opponent_name)} удалён."
+
+
 def edit_games_prompt(opponent_name: str) -> str:
     return (
         f"<b>✏️ Редактирование счёта партий с {html.escape(opponent_name)}</b>\n\n"
