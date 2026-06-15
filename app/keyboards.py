@@ -9,8 +9,7 @@ def main_menu_keyboard(has_opponents: bool) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if has_opponents:
         builder.button(text=texts.BUTTON_OPPONENTS, callback_data="opponents")
-    else:
-        builder.button(text=texts.BUTTON_INVITE_OPPONENT, callback_data="invite")
+    builder.button(text=texts.BUTTON_INVITE_OPPONENT, callback_data="invite")
     builder.button(text=texts.BUTTON_TOTAL_STATS, callback_data="stats_all")
     builder.adjust(1)
     return builder.as_markup()
@@ -19,8 +18,7 @@ def main_menu_keyboard(has_opponents: bool) -> InlineKeyboardMarkup:
 def opponents_keyboard(opponents: list[Opponent]) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for opponent in opponents:
-        builder.button(text=opponent.name, callback_data=f"opponent:{opponent.id}")
-    builder.button(text=texts.BUTTON_INVITE_OPPONENT, callback_data="invite")
+        builder.button(text=texts.opponent_title(opponent), callback_data=f"opponent:{opponent.id}")
     builder.button(text=texts.BUTTON_MAIN_MENU, callback_data="main")
     builder.adjust(1)
     return builder.as_markup()

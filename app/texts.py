@@ -14,19 +14,24 @@ TEST_OPPONENT_USERNAME = "test"
 BUTTON_OPPONENTS = "🥷 Соперники"
 BUTTON_INVITE_OPPONENT = "💌 Пригласить соперника"
 BUTTON_TOTAL_STATS = "📊 Общая статистика"
-BUTTON_ADD_SCORE = "⚔️ Добавить результат"
-BUTTON_EDIT = "✏️ Редактировать"
+BUTTON_ADD_SCORE = "🏓 Добавить результат"
+BUTTON_EDIT = "✏️ Изменить результаты"
 BUTTON_BACK = "⬅️ Назад"
-BUTTON_MAIN_MENU = "🏠 Главное меню"
+BUTTON_MAIN_MENU = "🏠 Меню"
 BUTTON_EDIT_GAMES = "🔢 Счёт партий"
-BUTTON_EDIT_POINTS = "🏏 Количество мячей"
+BUTTON_EDIT_POINTS = "🎯 Количество мячей"
 
-MAIN_MENU_TEXT = "<b>🏠 Главное меню</b>"
+MAIN_MENU_TEXT = (
+    "<b>🏓 Теннисный счётчик</b>\n\n"
+    "Это бот для ведения статистики матчей с друзьями.\n\n"
+    "Если нашёл ошибку — пиши @lstaff"
+)
 OPPONENTS_MENU_TEXT = "<b>Соперники</b>\n\nВыберите соперника по имени."
 
 INVITE_INVALID_TEXT = "<b>😔 Ссылка не работает...</b>\n\nКажется с ней что-то не так. Попроси новую ссылку у твоего соперника"
 INVITE_SELF_TEXT = "<b>🔥 Сделали ссылку!</b>\n\nОтправь её другому игроку, чтобы начать вести статстику"
 INVITE_ACCEPTED_TEXT = "<b>🥳 Готово!</b>\n\nТвой соперник добавлен. Теперь можно вести статистику партий"
+INVITE_ALREADY_CONNECTED_TEXT = "<b>👌 Уже знакомы</b>\n\nЭтот соперник уже есть в твоём списке."
 
 ERROR_SCORE_NEEDS_TWO_NUMBERS = "👀 Напиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника. Например: 11-7.\n\nПартия заканчиается после 11 очков у победителя. При счёте 10-10 начинаются овертаймы (по одной подаче) до разницы в 2 очка."
 ERROR_VALUES_CANNOT_BE_NEGATIVE = "❌ Как вы ушли в минус? Очки не могут быть отрицательными."
@@ -70,16 +75,12 @@ def display_user_name(first_name: str, username: Optional[str]) -> str:
 
 def opponent_title(opponent: OpponentLike) -> str:
     if opponent.username:
-        username = username_label(opponent.username)
-        name = opponent.first_name or opponent.name
-        if name == username:
-            return name
-        return f"{name} {username}"
+        return username_label(opponent.username)
 
     if opponent.opponent_user_id is None and opponent.name == TEST_OPPONENT_NAME:
-        return f"{opponent.name} {username_label(TEST_OPPONENT_USERNAME)}"
+        return username_label(TEST_OPPONENT_USERNAME)
 
-    return opponent.name
+    return opponent.first_name or opponent.name
 
 
 def username_label(username: str) -> str:
@@ -101,10 +102,17 @@ def invite(invite_link: str) -> str:
     )
 
 
+def invite_new_opponent_notification(opponent_name: str) -> str:
+    return (
+        "<b>🥳 Новый соперник</b>\n\n"
+        f"{html.escape(opponent_name)} открыл твою ссылку и добавлен в список соперников."
+    )
+
+
 def score_prompt(opponent_name: str) -> str:
     return (
-        f"<b>⚔️ Матч с {html.escape(opponent_name)}</b>\n\n"
-        "👀 Напиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника.\n"
+        f"<b>🏓 Матч с {html.escape(opponent_name)}</b>\n\n"
+        "👀 Напиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника."
         "Например: <code>11-7</code> или <code>15 13</code>.\n\n"
         "<blockquote>"
         "Партия заканчивается после 11 очков у победителя. При счёте 10-10 начинаются овертаймы (по одной подаче) до разницы в 2 очка."
@@ -138,7 +146,7 @@ def edit_points_prompt(opponent_name: str) -> str:
 
 def score_input_error(opponent_name: str, error: Exception) -> str:
     return (
-        f"<b>{html.escape(opponent_name)}</b>\n\n"
+        f"<b>🏓 Матч с {html.escape(opponent_name)}</b>\n\n"
         f"{html.escape(str(error))}\n\n"
         "Попробуйте ещё раз: сначала ваш счёт, потом счёт соперника."
     )
@@ -153,7 +161,7 @@ def score_saved(opponent_name: str, score: ScoreLike, stats: StatsLike) -> str:
         )
 
     return (
-        f"<b>⚔️ Матч с {html.escape(opponent_name)}</b>\n\n"
+        f"<b>🏓 Матч с {html.escape(opponent_name)}</b>\n\n"
         f"✅ Добавлен счёт: {score.own_score}-{score.opponent_score}.{overtime}\n\n"
         "<b>📊 Текущая статистика:</b>\n"
         f"{format_stats(stats)}\n\n"
@@ -175,8 +183,8 @@ def pair_needs_two_numbers(example: str) -> str:
 
 def format_stats(stats: StatsLike) -> str:
     return (
-        f"↳ Партии: {stats.games}\n"
-        f"↳ Победы / Поражения: {stats.wins}-{stats.losses}\n"
-        f"↳ Мячи: {stats.points_for}-{stats.points_against}\n"
-        f"↳ Всего мячей: {stats.points_for + stats.points_against}"
+        f"↪ Партии: {stats.games}\n"
+        f"↪ Победы / Поражения: {stats.wins}-{stats.losses}\n"
+        f"↪ Мячи: {stats.points_for}-{stats.points_against}\n"
+        f"↪ Всего мячей: {stats.points_for + stats.points_against}"
     )

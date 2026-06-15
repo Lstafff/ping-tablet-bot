@@ -15,7 +15,7 @@ class BotFormattingTest(unittest.TestCase):
             username="test",
         )
 
-        self.assertEqual(texts.opponent_title(opponent), "Тест @test")
+        self.assertEqual(texts.opponent_title(opponent), "@test")
 
     def test_test_opponent_title_includes_demo_username(self) -> None:
         opponent = Opponent(
@@ -27,8 +27,20 @@ class BotFormattingTest(unittest.TestCase):
 
         self.assertEqual(
             texts.opponent_title(opponent),
-            f"{texts.TEST_OPPONENT_NAME} @{texts.TEST_OPPONENT_USERNAME}",
+            f"@{texts.TEST_OPPONENT_USERNAME}",
         )
+
+    def test_opponent_title_falls_back_to_name_without_username(self) -> None:
+        opponent = Opponent(
+            id=1,
+            owner_id=1,
+            name="Сохранённое имя",
+            opponent_user_id=2,
+            first_name="Тест",
+            username=None,
+        )
+
+        self.assertEqual(texts.opponent_title(opponent), "Тест")
 
 
 if __name__ == "__main__":

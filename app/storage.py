@@ -51,6 +51,13 @@ class Session:
     opponent_id: Optional[int]
 
 
+@dataclass(frozen=True)
+class InviteAcceptance:
+    inviter_id: int
+    is_self_invite: bool
+    is_new_opponent: bool
+
+
 class Database:
     def __init__(self, path: str) -> None:
         self.path = path
@@ -180,6 +187,18 @@ class Database:
 
     def add_opponent(self, owner_id: int, name: str, opponent_user_id: Optional[int]) -> Opponent:
         now = now_moscow_iso()
+        if opponent_user_id is not None:
+            row = self.connection.execute(
+                """
+                SELECT id FROM opponents
+                WHERE owner_id = ? AND opponent_user_id = ?
+                """,
+                (owner_id, opponent_user_id),
+            ).fetchone()
+            if row is not None:
+                return self.get_opponent(owner_id, int(row["id"]))
+            name = self._unique_opponent_name(owner_id, name)
+
         self.connection.execute(
             """
             INSERT OR IGNORE INTO opponents (owner_id, opponent_user_id, name, created_at)
@@ -275,26 +294,27 @@ class Database:
         self.connection.commit()
         return token
 
-    def accept_invite(self, token: str, invited_user_id: int) -> Optional[int]:
+    def accept_invite(self, token: str, invited_user_id: int) -> Optional[InviteAcceptance]:
         row = self.connection.execute(
             """
-            SELECT token, inviter_id, used_by
+            SELECT token, inviter_id
             FROM invites
             WHERE token = ?
             """,
             (token,),
         ).fetchone()
-        if row is None or row["used_by"] is not None:
+        if row is None:
             return None
 
         inviter_id = int(row["inviter_id"])
         if inviter_id == invited_user_id:
-            return inviter_id
+            return InviteAcceptance(inviter_id=inviter_id, is_self_invite=True, is_new_opponent=False)
 
         inviter = self.get_user(inviter_id)
         invited = self.get_user(invited_user_id)
         invited_name = texts.display_user_name(invited.first_name, invited.username)
         inviter_name = texts.display_user_name(inviter.first_name, inviter.username)
+        already_linked = self._has_linked_opponent(inviter_id, invited_user_id)
 
         self.add_opponent(inviter_id, invited_name, invited_user_id)
         self.add_opponent(invited_user_id, inviter_name, inviter_id)
@@ -307,7 +327,7 @@ class Database:
             (invited_user_id, now_moscow_iso(), token),
         )
         self.connection.commit()
-        return inviter_id
+        return InviteAcceptance(inviter_id=inviter_id, is_self_invite=False, is_new_opponent=not already_linked)
 
     def add_game(self, owner_id: int, opponent_id: int, score: ParsedScore) -> None:
         opponent = self.get_opponent(owner_id, opponent_id)
@@ -527,7 +547,30 @@ class Database:
         )
         self.connection.commit()
 
+    def _has_linked_opponent(self, owner_id: int, opponent_user_id: int) -> bool:
+        row = self.connection.execute(
+            """
+            SELECT 1 FROM opponents
+            WHERE owner_id = ? AND opponent_user_id = ?
+            """,
+            (owner_id, opponent_user_id),
+        ).fetchone()
+        return row is not None
+
+    def _unique_opponent_name(self, owner_id: int, name: str) -> str:
+        candidate = name
+        counter = 2
+        while self.connection.execute(
+            """
+            SELECT 1 FROM opponents
+            WHERE owner_id = ? AND name = ?
+            """,
+            (owner_id, candidate),
+        ).fetchone():
+            candidate = f"{name} ({counter})"
+            counter += 1
+        return candidate
+
 
 def now_moscow_iso() -> str:
     return datetime.now(MOSCOW_TZ).isoformat(timespec="seconds")
-

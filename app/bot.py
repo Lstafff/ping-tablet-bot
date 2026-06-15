@@ -35,10 +35,10 @@ async def start(message: Message, bot: Bot) -> None:
 
     payload = parse_start_payload(message.text or "")
     if payload.startswith("invite_"):
-        await accept_invite_flow(message, payload.removeprefix("invite_"), bot)
+        await accept_invite_flow(message, payload.removeprefix("invite_"), bot, force_new=True)
         return
 
-    await show_main_menu(bot, message.chat.id, user_id)
+    await show_main_menu(bot, message.chat.id, user_id, force_new=True)
 
 
 @router.message(Command("menu"))
@@ -46,7 +46,7 @@ async def menu(message: Message, bot: Bot) -> None:
     user_id = message.from_user.id
     ensure_user(message.from_user)
     await delete_message(bot, message)
-    await show_main_menu(bot, message.chat.id, user_id)
+    await show_main_menu(bot, message.chat.id, user_id, force_new=True)
 
 
 @router.callback_query(F.data == "main")
@@ -233,9 +233,9 @@ async def handle_edit_points_input(message: Message, bot: Bot, user_id: int, opp
     await show_opponent(bot, message.chat.id, user_id, opponent_id)
 
 
-async def show_main_menu(bot: Bot, chat_id: int, user_id: int) -> None:
+async def show_main_menu(bot: Bot, chat_id: int, user_id: int, force_new: bool = False) -> None:
     opponents = db.list_opponents(user_id)
-    await render(bot, chat_id, user_id, texts.MAIN_MENU_TEXT, main_menu_keyboard(bool(opponents)))
+    await render(bot, chat_id, user_id, texts.MAIN_MENU_TEXT, main_menu_keyboard(bool(opponents)), force_new=force_new)
 
 
 async def show_opponents(bot: Bot, chat_id: int, user_id: int) -> None:
@@ -252,17 +252,34 @@ async def show_opponent(bot: Bot, chat_id: int, user_id: int, opponent_id: int) 
     await render(bot, chat_id, user_id, texts.opponent_stats(texts.opponent_title(opponent), stats), opponent_keyboard(opponent_id))
 
 
-async def accept_invite_flow(message: Message, token: str, bot: Bot) -> None:
+async def accept_invite_flow(message: Message, token: str, bot: Bot, force_new: bool = False) -> None:
     user_id = message.from_user.id
-    inviter_id = db.accept_invite(token, user_id)
-    if inviter_id is None:
+    acceptance = db.accept_invite(token, user_id)
+    if acceptance is None:
         text = texts.INVITE_INVALID_TEXT
-    elif inviter_id == user_id:
+    elif acceptance.is_self_invite:
         text = texts.INVITE_SELF_TEXT
-    else:
+    elif acceptance.is_new_opponent:
         text = texts.INVITE_ACCEPTED_TEXT
+        await notify_inviter_about_new_opponent(bot, acceptance.inviter_id, user_id)
+    else:
+        text = texts.INVITE_ALREADY_CONNECTED_TEXT
     has_opponents = bool(db.list_opponents(user_id))
-    await render(bot, message.chat.id, user_id, text, main_menu_keyboard(has_opponents))
+    await render(bot, message.chat.id, user_id, text, main_menu_keyboard(has_opponents), force_new=force_new)
+
+
+async def notify_inviter_about_new_opponent(bot: Bot, inviter_id: int, invited_user_id: int) -> None:
+    invited = db.get_user(invited_user_id)
+    try:
+        await render(
+            bot,
+            inviter_id,
+            inviter_id,
+            texts.invite_new_opponent_notification(texts.display_user_name(invited.first_name, invited.username)),
+            main_menu_keyboard(True),
+        )
+    except Exception:
+        logging.exception("Failed to notify inviter about a new opponent")
 
 
 async def render(
@@ -271,9 +288,16 @@ async def render(
     user_id: int,
     text: str,
     reply_markup: InlineKeyboardMarkup,
+    force_new: bool = False,
 ) -> None:
     user = db.get_user(user_id)
-    if user.last_message_id is not None:
+    if force_new and user.last_message_id is not None:
+        try:
+            await bot.delete_message(chat_id, user.last_message_id)
+        except TelegramBadRequest:
+            pass
+
+    if not force_new and user.last_message_id is not None:
         try:
             await bot.edit_message_text(
                 chat_id=chat_id,

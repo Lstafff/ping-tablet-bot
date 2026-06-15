@@ -45,6 +45,28 @@ class StorageTest(unittest.TestCase):
             self.assertEqual((second_stats.wins, second_stats.losses), (0, 1))
             self.assertEqual((second_stats.points_for, second_stats.points_against), (7, 11))
 
+    def test_invite_link_can_be_used_by_multiple_players(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(str(Path(directory) / "bot.sqlite3"))
+            db.ensure_user(1, "Игрок 1", "owner")
+            db.ensure_user(2, "Игрок", None)
+            db.ensure_user(3, "Игрок", None)
+            token = db.create_invite(1)
+
+            first_acceptance = db.accept_invite(token, 2)
+            second_acceptance = db.accept_invite(token, 3)
+            repeated_acceptance = db.accept_invite(token, 2)
+
+            self.assertIsNotNone(first_acceptance)
+            self.assertIsNotNone(second_acceptance)
+            self.assertIsNotNone(repeated_acceptance)
+            self.assertTrue(first_acceptance.is_new_opponent)
+            self.assertTrue(second_acceptance.is_new_opponent)
+            self.assertFalse(repeated_acceptance.is_new_opponent)
+
+            opponent_user_ids = {opponent.opponent_user_id for opponent in db.list_opponents(1)}
+            self.assertEqual(opponent_user_ids, {2, 3})
+
 
 if __name__ == "__main__":
     unittest.main()
