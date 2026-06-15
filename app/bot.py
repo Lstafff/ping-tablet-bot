@@ -293,7 +293,10 @@ async def show_total_stats(bot: Bot, chat_id: int, user_id: int) -> None:
         message_id = await render_rich_message(
             bot,
             chat_id,
-            total_stats_rich_html(stats),
+            total_stats_rich_html(
+                stats,
+                texts.display_user_name(user.first_name, user.username),
+            ),
             keyboard,
             user.last_message_id,
         )

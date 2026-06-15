@@ -16,18 +16,24 @@ class TelegramRichMessageError(RuntimeError):
     pass
 
 
-def total_stats_rich_html(stats: StatsLike) -> str:
+def total_stats_rich_html(stats: StatsLike, user_name: str) -> str:
+    safe_user_name = format_rich_user_name(user_name)
+
     return (
-        "<h1>📊 Статистика всех матчей</h1>"
+        "<h2>📊 Статистика всех матчей</h2>"
+        "<hr/>"
         "<table bordered striped>"
-        "<tr><th>Показатель</th><th>Значение</th></tr>"
-        f"<tr><td>Партии</td><td align=\"right\">{stats.games}</td></tr>"
-        f"<tr><td>Победы</td><td align=\"right\">{stats.wins}</td></tr>"
-        f"<tr><td>Поражения</td><td align=\"right\">{stats.losses}</td></tr>"
-        f"<tr><td>Мячи</td><td align=\"right\">{stats.points_for}-{stats.points_against}</td></tr>"
-        f"<tr><td>Всего мячей</td><td align=\"right\">{stats.points_for + stats.points_against}</td></tr>"
+        f"<tr><th>Показатель</th><th>🥷 {safe_user_name}</th><th>🏓 Оппоненты</th></tr>"
+        f"<tr><td>Партии</td><td align=\"right\">{stats.wins}</td><td align=\"right\">{stats.losses}</td></tr>"
+        f"<tr><td>Всего сыграно</td><td colspan=\"2\" align=\"right\">{stats.games}</td></tr>"
+        f"<tr><td>Мячи</td><td align=\"right\">{stats.points_for}</td><td align=\"right\">{stats.points_against}</td></tr>"
+        f"<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">{stats.points_for + stats.points_against}</td></tr>"
         "</table>"
     )
+
+
+def format_rich_user_name(user_name: str) -> str:
+    return html.escape(user_name.strip() or "Игрок")
 
 
 async def render_rich_message(
