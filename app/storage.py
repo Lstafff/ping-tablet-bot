@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from app import texts
 from app.scoring import ParsedScore
 
 
@@ -28,6 +29,8 @@ class Opponent:
     owner_id: int
     name: str
     opponent_user_id: Optional[int]
+    first_name: Optional[str] = None
+    username: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -144,7 +147,7 @@ class Database:
                 username = excluded.username,
                 updated_at = excluded.updated_at
             """,
-            (telegram_id, first_name or "Игрок", username, now, now),
+            (telegram_id, first_name or texts.DEFAULT_USER_NAME, username, now, now),
         )
         self.connection.commit()
         return self.get_user(telegram_id)
@@ -173,7 +176,7 @@ class Database:
     def ensure_test_opponent(self, owner_id: int) -> None:
         if self.list_opponents(owner_id):
             return
-        self.add_opponent(owner_id=owner_id, name="Тестовый соперник", opponent_user_id=None)
+        self.add_opponent(owner_id=owner_id, name=texts.TEST_OPPONENT_NAME, opponent_user_id=None)
 
     def add_opponent(self, owner_id: int, name: str, opponent_user_id: Optional[int]) -> Opponent:
         now = now_moscow_iso()
@@ -207,10 +210,17 @@ class Database:
     def list_opponents(self, owner_id: int) -> list[Opponent]:
         rows = self.connection.execute(
             """
-            SELECT id, owner_id, name, opponent_user_id
-            FROM opponents
-            WHERE owner_id = ?
-            ORDER BY lower(name)
+            SELECT
+                o.id,
+                o.owner_id,
+                o.name,
+                o.opponent_user_id,
+                u.first_name,
+                u.username
+            FROM opponents o
+            LEFT JOIN users u ON u.telegram_id = o.opponent_user_id
+            WHERE o.owner_id = ?
+            ORDER BY lower(o.name)
             """,
             (owner_id,),
         ).fetchall()
@@ -220,6 +230,8 @@ class Database:
                 owner_id=row["owner_id"],
                 name=row["name"],
                 opponent_user_id=row["opponent_user_id"],
+                first_name=row["first_name"],
+                username=row["username"],
             )
             for row in rows
         ]
@@ -227,9 +239,16 @@ class Database:
     def get_opponent(self, owner_id: int, opponent_id: int) -> Opponent:
         row = self.connection.execute(
             """
-            SELECT id, owner_id, name, opponent_user_id
-            FROM opponents
-            WHERE owner_id = ? AND id = ?
+            SELECT
+                o.id,
+                o.owner_id,
+                o.name,
+                o.opponent_user_id,
+                u.first_name,
+                u.username
+            FROM opponents o
+            LEFT JOIN users u ON u.telegram_id = o.opponent_user_id
+            WHERE o.owner_id = ? AND o.id = ?
             """,
             (owner_id, opponent_id),
         ).fetchone()
@@ -240,6 +259,8 @@ class Database:
             owner_id=row["owner_id"],
             name=row["name"],
             opponent_user_id=row["opponent_user_id"],
+            first_name=row["first_name"],
+            username=row["username"],
         )
 
     def create_invite(self, inviter_id: int) -> str:
@@ -272,8 +293,8 @@ class Database:
 
         inviter = self.get_user(inviter_id)
         invited = self.get_user(invited_user_id)
-        invited_name = display_user_name(invited)
-        inviter_name = display_user_name(inviter)
+        invited_name = texts.display_user_name(invited.first_name, invited.username)
+        inviter_name = texts.display_user_name(inviter.first_name, inviter.username)
 
         self.add_opponent(inviter_id, invited_name, invited_user_id)
         self.add_opponent(invited_user_id, inviter_name, inviter_id)
@@ -510,8 +531,3 @@ class Database:
 def now_moscow_iso() -> str:
     return datetime.now(MOSCOW_TZ).isoformat(timespec="seconds")
 
-
-def display_user_name(user: User) -> str:
-    if user.username:
-        return f"@{user.username}"
-    return user.first_name or "Игрок"

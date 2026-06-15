@@ -1,5 +1,4 @@
 import asyncio
-import html
 import logging
 from typing import Optional
 
@@ -9,6 +8,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, User as TelegramUser
 
+from app import texts
 from app.config import load_config
 from app.keyboards import (
     back_to_opponent_keyboard,
@@ -19,7 +19,7 @@ from app.keyboards import (
     opponents_keyboard,
 )
 from app.scoring import ScoreError, parse_pair, parse_score
-from app.storage import Database, Stats
+from app.storage import Database
 
 
 router = Router()
@@ -63,15 +63,8 @@ async def stats_all_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
     stats = db.get_total_stats(callback.from_user.id)
-    text = (
-        "<b>Общая статистика</b>\n\n"
-        f"Партии: {stats.games}\n"
-        f"Победы-поражения: {stats.wins}-{stats.losses}\n"
-        f"Мячи: {stats.points_for}-{stats.points_against}\n"
-        f"Всего мячей: {stats.points_for + stats.points_against}"
-    )
     has_opponents = bool(db.list_opponents(callback.from_user.id))
-    await render(bot, callback.message.chat.id, callback.from_user.id, text, main_menu_keyboard(has_opponents))
+    await render(bot, callback.message.chat.id, callback.from_user.id, texts.total_stats(stats), main_menu_keyboard(has_opponents))
 
 
 @router.callback_query(F.data == "invite")
@@ -81,13 +74,7 @@ async def invite_callback(callback: CallbackQuery, bot: Bot) -> None:
     token = db.create_invite(callback.from_user.id)
     bot_info = await bot.get_me()
     invite_link = f"https://t.me/{bot_info.username}?start=invite_{token}"
-    text = (
-        "<b>Приглашение соперника</b>\n\n"
-        "Отправьте эту ссылку человеку, с которым хотите вести статистику:\n"
-        f"<code>{html.escape(invite_link)}</code>\n\n"
-        "Когда он откроет ссылку и запустит бота, вы появитесь друг у друга в списке соперников."
-    )
-    await render(bot, callback.message.chat.id, callback.from_user.id, text, invite_keyboard())
+    await render(bot, callback.message.chat.id, callback.from_user.id, texts.invite(invite_link), invite_keyboard())
 
 
 @router.callback_query(F.data == "opponents")
@@ -113,12 +100,13 @@ async def score_add_callback(callback: CallbackQuery, bot: Bot) -> None:
     opponent_id = int(callback.data.split(":", 1)[1])
     opponent = db.get_opponent(callback.from_user.id, opponent_id)
     db.set_session(callback.from_user.id, "await_score", opponent_id)
-    text = (
-        f"<b>{html.escape(opponent.name)}</b>\n\n"
-        "Напишите результат партии: сначала ваш счет, потом счет соперника.\n"
-        "Например: <code>11-7</code> или <code>15 13</code>."
+    await render(
+        bot,
+        callback.message.chat.id,
+        callback.from_user.id,
+        texts.score_prompt(texts.opponent_title(opponent)),
+        back_to_opponent_keyboard(opponent_id),
     )
-    await render(bot, callback.message.chat.id, callback.from_user.id, text, back_to_opponent_keyboard(opponent_id))
 
 
 @router.callback_query(F.data.startswith("edit:"))
@@ -128,12 +116,13 @@ async def edit_callback(callback: CallbackQuery, bot: Bot) -> None:
     opponent_id = int(callback.data.split(":", 1)[1])
     opponent = db.get_opponent(callback.from_user.id, opponent_id)
     stats = db.get_opponent_stats(callback.from_user.id, opponent_id)
-    text = (
-        f"<b>Редактирование: {html.escape(opponent.name)}</b>\n\n"
-        f"Сейчас партии: {stats.wins}-{stats.losses}\n"
-        f"Сейчас мячи: {stats.points_for}-{stats.points_against}"
+    await render(
+        bot,
+        callback.message.chat.id,
+        callback.from_user.id,
+        texts.edit_menu(texts.opponent_title(opponent), stats),
+        edit_keyboard(opponent_id),
     )
-    await render(bot, callback.message.chat.id, callback.from_user.id, text, edit_keyboard(opponent_id))
 
 
 @router.callback_query(F.data.startswith("edit_games:"))
@@ -143,12 +132,13 @@ async def edit_games_callback(callback: CallbackQuery, bot: Bot) -> None:
     opponent_id = int(callback.data.split(":", 1)[1])
     opponent = db.get_opponent(callback.from_user.id, opponent_id)
     db.set_session(callback.from_user.id, "await_edit_games", opponent_id)
-    text = (
-        f"<b>Счет партий: {html.escape(opponent.name)}</b>\n\n"
-        "Напишите общий счет по партиям: сначала ваши победы, потом поражения.\n"
-        "Например: <code>8-5</code>."
+    await render(
+        bot,
+        callback.message.chat.id,
+        callback.from_user.id,
+        texts.edit_games_prompt(texts.opponent_title(opponent)),
+        back_to_opponent_keyboard(opponent_id),
     )
-    await render(bot, callback.message.chat.id, callback.from_user.id, text, back_to_opponent_keyboard(opponent_id))
 
 
 @router.callback_query(F.data.startswith("edit_points:"))
@@ -158,12 +148,13 @@ async def edit_points_callback(callback: CallbackQuery, bot: Bot) -> None:
     opponent_id = int(callback.data.split(":", 1)[1])
     opponent = db.get_opponent(callback.from_user.id, opponent_id)
     db.set_session(callback.from_user.id, "await_edit_points", opponent_id)
-    text = (
-        f"<b>Количество мячей: {html.escape(opponent.name)}</b>\n\n"
-        "Напишите общий счет по мячам: сначала ваши мячи, потом мячи соперника.\n"
-        "Например: <code>132-118</code>."
+    await render(
+        bot,
+        callback.message.chat.id,
+        callback.from_user.id,
+        texts.edit_points_prompt(texts.opponent_title(opponent)),
+        back_to_opponent_keyboard(opponent_id),
     )
-    await render(bot, callback.message.chat.id, callback.from_user.id, text, back_to_opponent_keyboard(opponent_id))
 
 
 @router.message()
@@ -198,39 +189,31 @@ async def handle_score_input(message: Message, bot: Bot, user_id: int, opponent_
     try:
         score = parse_score(message.text or "")
     except ScoreError as error:
-        text = (
-            f"<b>{html.escape(opponent.name)}</b>\n\n"
-            f"{html.escape(str(error))}\n\n"
-            "Попробуйте еще раз: сначала ваш счет, потом счет соперника."
+        await render(
+            bot,
+            message.chat.id,
+            user_id,
+            texts.score_input_error(texts.opponent_title(opponent), error),
+            back_to_opponent_keyboard(opponent_id),
         )
-        await render(bot, message.chat.id, user_id, text, back_to_opponent_keyboard(opponent_id))
         return
 
     db.add_game(user_id, opponent_id, score)
     stats = db.get_opponent_stats(user_id, opponent_id)
-
-    overtime = ""
-    if score.overtime_own or score.overtime_opponent:
-        overtime = (
-            "\nРазбивка: "
-            f"{score.regular_own}-{score.regular_opponent} в основное время, "
-            f"{score.overtime_own}-{score.overtime_opponent} в овертайме."
-        )
-
-    text = (
-        f"<b>{html.escape(opponent.name)}</b>\n\n"
-        f"Сохранено: {score.own_score}-{score.opponent_score}.{overtime}\n\n"
-        f"Текущая статистика: {format_stats(stats)}\n\n"
-        "Можно сразу написать следующий результат."
+    await render(
+        bot,
+        message.chat.id,
+        user_id,
+        texts.score_saved(texts.opponent_title(opponent), score, stats),
+        back_to_opponent_keyboard(opponent_id),
     )
-    await render(bot, message.chat.id, user_id, text, back_to_opponent_keyboard(opponent_id))
 
 
 async def handle_edit_games_input(message: Message, bot: Bot, user_id: int, opponent_id: int) -> None:
     try:
         wins, losses = parse_pair(message.text or "", "8-5")
     except ScoreError as error:
-        await render(bot, message.chat.id, user_id, html.escape(str(error)), back_to_opponent_keyboard(opponent_id))
+        await render(bot, message.chat.id, user_id, texts.plain_error(error), back_to_opponent_keyboard(opponent_id))
         return
 
     db.set_games_total(user_id, opponent_id, wins, losses)
@@ -242,7 +225,7 @@ async def handle_edit_points_input(message: Message, bot: Bot, user_id: int, opp
     try:
         points_for, points_against = parse_pair(message.text or "", "132-118")
     except ScoreError as error:
-        await render(bot, message.chat.id, user_id, html.escape(str(error)), back_to_opponent_keyboard(opponent_id))
+        await render(bot, message.chat.id, user_id, texts.plain_error(error), back_to_opponent_keyboard(opponent_id))
         return
 
     db.set_points_total(user_id, opponent_id, points_for, points_against)
@@ -252,8 +235,7 @@ async def handle_edit_points_input(message: Message, bot: Bot, user_id: int, opp
 
 async def show_main_menu(bot: Bot, chat_id: int, user_id: int) -> None:
     opponents = db.list_opponents(user_id)
-    text = "<b>Главное меню</b>"
-    await render(bot, chat_id, user_id, text, main_menu_keyboard(bool(opponents)))
+    await render(bot, chat_id, user_id, texts.MAIN_MENU_TEXT, main_menu_keyboard(bool(opponents)))
 
 
 async def show_opponents(bot: Bot, chat_id: int, user_id: int) -> None:
@@ -261,29 +243,24 @@ async def show_opponents(bot: Bot, chat_id: int, user_id: int) -> None:
     if not opponents:
         await show_main_menu(bot, chat_id, user_id)
         return
-    text = "<b>Соперники</b>\n\nВыберите соперника по имени."
-    await render(bot, chat_id, user_id, text, opponents_keyboard(opponents))
+    await render(bot, chat_id, user_id, texts.OPPONENTS_MENU_TEXT, opponents_keyboard(opponents))
 
 
 async def show_opponent(bot: Bot, chat_id: int, user_id: int, opponent_id: int) -> None:
     opponent = db.get_opponent(user_id, opponent_id)
     stats = db.get_opponent_stats(user_id, opponent_id)
-    text = (
-        f"<b>{html.escape(opponent.name)}</b>\n\n"
-        f"{format_stats(stats)}"
-    )
-    await render(bot, chat_id, user_id, text, opponent_keyboard(opponent_id))
+    await render(bot, chat_id, user_id, texts.opponent_stats(texts.opponent_title(opponent), stats), opponent_keyboard(opponent_id))
 
 
 async def accept_invite_flow(message: Message, token: str, bot: Bot) -> None:
     user_id = message.from_user.id
     inviter_id = db.accept_invite(token, user_id)
     if inviter_id is None:
-        text = "<b>Приглашение недействительно</b>\n\nСсылка уже использована или не найдена."
+        text = texts.INVITE_INVALID_TEXT
     elif inviter_id == user_id:
-        text = "<b>Это ваше приглашение</b>\n\nОтправьте ссылку другому игроку."
+        text = texts.INVITE_SELF_TEXT
     else:
-        text = "<b>Готово</b>\n\nСоперник добавлен. Теперь можно вести статистику партий."
+        text = texts.INVITE_ACCEPTED_TEXT
     has_opponents = bool(db.list_opponents(user_id))
     await render(bot, message.chat.id, user_id, text, main_menu_keyboard(has_opponents))
 
@@ -329,7 +306,7 @@ async def delete_message(bot: Bot, message: Message) -> None:
 def ensure_user(user: Optional[TelegramUser]) -> None:
     if user is None:
         return
-    db.ensure_user(user.id, user.first_name or "Игрок", user.username)
+    db.ensure_user(user.id, user.first_name or texts.DEFAULT_USER_NAME, user.username)
     if seed_test_opponent:
         db.ensure_test_opponent(user.id)
 
@@ -339,15 +316,6 @@ def parse_start_payload(text: str) -> str:
     if len(parts) < 2:
         return ""
     return parts[1].strip()
-
-
-def format_stats(stats: Stats) -> str:
-    return (
-        f"Партии: {stats.games}\n"
-        f"Победы-поражения: {stats.wins}-{stats.losses}\n"
-        f"Мячи: {stats.points_for}-{stats.points_against}\n"
-        f"Всего мячей: {stats.points_for + stats.points_against}"
-    )
 
 
 async def main() -> None:

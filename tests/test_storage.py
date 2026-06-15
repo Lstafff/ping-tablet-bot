@@ -29,11 +29,14 @@ class StorageTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             db = Database(str(Path(directory) / "bot.sqlite3"))
             db.ensure_user(1, "Игрок 1", None)
-            db.ensure_user(2, "Игрок 2", None)
+            db.ensure_user(2, "Игрок 2", "test")
             first_opponent = db.add_opponent(1, "Игрок 2", 2)
             second_opponent = db.add_opponent(2, "Игрок 1", 1)
 
             db.add_game(1, first_opponent.id, parse_score("11-7"))
+
+            self.assertEqual(first_opponent.first_name, "Игрок 2")
+            self.assertEqual(first_opponent.username, "test")
 
             first_stats = db.get_opponent_stats(1, first_opponent.id)
             second_stats = db.get_opponent_stats(2, second_opponent.id)
