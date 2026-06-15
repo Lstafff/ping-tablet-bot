@@ -424,6 +424,18 @@ class Database:
         return total
 
     def set_games_total(self, owner_id: int, opponent_id: int, wins: int, losses: int) -> None:
+        self._set_games_total_for_one(owner_id, opponent_id, wins, losses)
+        linked_opponent = self._get_linked_opponent(owner_id, opponent_id)
+        if linked_opponent is not None:
+            self._set_games_total_for_one(linked_opponent.owner_id, linked_opponent.id, losses, wins)
+
+    def set_points_total(self, owner_id: int, opponent_id: int, points_for: int, points_against: int) -> None:
+        self._set_points_total_for_one(owner_id, opponent_id, points_for, points_against)
+        linked_opponent = self._get_linked_opponent(owner_id, opponent_id)
+        if linked_opponent is not None:
+            self._set_points_total_for_one(linked_opponent.owner_id, linked_opponent.id, points_against, points_for)
+
+    def _set_games_total_for_one(self, owner_id: int, opponent_id: int, wins: int, losses: int) -> None:
         raw = self.get_opponent_stats(owner_id, opponent_id, adjusted=False)
         adjustment = self._get_adjustment(owner_id, opponent_id)
         self._upsert_adjustment(
@@ -435,7 +447,7 @@ class Database:
             points_against_delta=adjustment["points_against_delta"],
         )
 
-    def set_points_total(self, owner_id: int, opponent_id: int, points_for: int, points_against: int) -> None:
+    def _set_points_total_for_one(self, owner_id: int, opponent_id: int, points_for: int, points_against: int) -> None:
         raw = self.get_opponent_stats(owner_id, opponent_id, adjusted=False)
         adjustment = self._get_adjustment(owner_id, opponent_id)
         self._upsert_adjustment(
@@ -542,6 +554,22 @@ class Database:
 
         self._upsert_adjustment(owner_id, opponent_id, 0, 0, 0, 0)
         return self._get_adjustment(owner_id, opponent_id)
+
+    def _get_linked_opponent(self, owner_id: int, opponent_id: int) -> Optional[Opponent]:
+        opponent = self.get_opponent(owner_id, opponent_id)
+        if opponent.opponent_user_id is None:
+            return None
+
+        row = self.connection.execute(
+            """
+            SELECT id FROM opponents
+            WHERE owner_id = ? AND opponent_user_id = ?
+            """,
+            (opponent.opponent_user_id, owner_id),
+        ).fetchone()
+        if row is None:
+            return None
+        return self.get_opponent(opponent.opponent_user_id, int(row["id"]))
 
     def _upsert_adjustment(
         self,

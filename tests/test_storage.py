@@ -45,6 +45,26 @@ class StorageTest(unittest.TestCase):
             self.assertEqual((second_stats.wins, second_stats.losses), (0, 1))
             self.assertEqual((second_stats.points_for, second_stats.points_against), (7, 11))
 
+    def test_manual_totals_for_linked_opponent_are_visible_for_both_players(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(str(Path(directory) / "bot.sqlite3"))
+            db.ensure_user(1, "Игрок 1", None)
+            db.ensure_user(2, "Игрок 2", None)
+            first_opponent = db.add_opponent(1, "Игрок 2", 2)
+            second_opponent = db.add_opponent(2, "Игрок 1", 1)
+            db.add_game(1, first_opponent.id, parse_score("11-7"))
+
+            db.set_games_total(1, first_opponent.id, 3, 2)
+            db.set_points_total(1, first_opponent.id, 55, 47)
+
+            first_stats = db.get_opponent_stats(1, first_opponent.id)
+            second_stats = db.get_opponent_stats(2, second_opponent.id)
+
+            self.assertEqual((first_stats.wins, first_stats.losses), (3, 2))
+            self.assertEqual((first_stats.points_for, first_stats.points_against), (55, 47))
+            self.assertEqual((second_stats.wins, second_stats.losses), (2, 3))
+            self.assertEqual((second_stats.points_for, second_stats.points_against), (47, 55))
+
     def test_invite_link_can_be_used_by_multiple_players(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             db = Database(str(Path(directory) / "bot.sqlite3"))
