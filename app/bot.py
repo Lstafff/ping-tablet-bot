@@ -1,12 +1,12 @@
 import asyncio
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, User as TelegramUser
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InputRichMessage, Message, User as TelegramUser
 
 from app import texts
 from app.config import load_config
@@ -20,7 +20,6 @@ from app.keyboards import (
     opponent_keyboard,
     opponents_keyboard,
 )
-from app.rich_messages import render_rich_message, total_stats_rich_html
 from app.scoring import ScoreError, parse_pair, parse_score
 from app.storage import Database
 
@@ -293,7 +292,7 @@ async def show_total_stats(bot: Bot, chat_id: int, user_id: int) -> None:
         message_id = await render_rich_message(
             bot,
             chat_id,
-            total_stats_rich_html(
+            texts.total_stats_rich_html(
                 stats,
                 texts.display_user_name(user.first_name, user.username),
             ),
@@ -353,15 +352,11 @@ async def render(
 
     if not force_new and user.last_message_id is not None:
         try:
-            await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=user.last_message_id,
-                text=text,
-                reply_markup=reply_markup,
-                parse_mode=ParseMode.HTML,
-            )
+            message_id = await render_rich_message(bot, chat_id, text, reply_markup, user.last_message_id)
+            db.set_last_message_id(user_id, message_id)
             return
-        except TelegramBadRequest as error:
+        except Exception as error:
+            logging.exception("Failed to render rich message")
             if "message is not modified" in str(error).lower():
                 return
             try:
@@ -369,13 +364,66 @@ async def render(
             except TelegramBadRequest:
                 pass
 
+    try:
+        message_id = await render_rich_message(bot, chat_id, text, reply_markup, None)
+        db.set_last_message_id(user_id, message_id)
+        return
+    except Exception:
+        logging.exception("Failed to send rich message")
+
     sent = await bot.send_message(
         chat_id=chat_id,
-        text=text,
+        text=texts.rich_to_basic_html(text),
         reply_markup=reply_markup,
         parse_mode=ParseMode.HTML,
     )
     db.set_last_message_id(user_id, sent.message_id)
+
+
+async def render_rich_message(
+    bot: Bot,
+    chat_id: int,
+    rich_html: str,
+    reply_markup: InlineKeyboardMarkup,
+    last_message_id: Optional[int],
+) -> int:
+    if last_message_id is not None:
+        try:
+            result = await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=last_message_id,
+                rich_message=InputRichMessage(html=rich_html),
+                reply_markup=reply_markup,
+                parse_mode=None,
+            )
+            return message_id_from_result(result, last_message_id)
+        except Exception as error:
+            if "message is not modified" in str(error).lower():
+                return last_message_id
+
+    sent = await bot.send_rich_message(
+        chat_id=chat_id,
+        rich_message=InputRichMessage(html=rich_html),
+        reply_markup=reply_markup,
+    )
+    new_message_id = message_id_from_result(sent, None)
+
+    if last_message_id is not None and new_message_id != last_message_id:
+        try:
+            await bot.delete_message(chat_id, last_message_id)
+        except TelegramAPIError:
+            pass
+
+    return new_message_id
+
+
+def message_id_from_result(result: Any, fallback: Optional[int]) -> int:
+    message_id = getattr(result, "message_id", None)
+    if isinstance(message_id, int):
+        return message_id
+    if fallback is not None:
+        return fallback
+    raise RuntimeError("Telegram API did not return message_id.")
 
 
 async def delete_message(bot: Bot, message: Message) -> None:
