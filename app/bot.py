@@ -12,6 +12,8 @@ from app import texts
 from app.config import load_config
 from app.keyboards import (
     back_to_opponent_keyboard,
+    back_to_main_keyboard,
+    delete_opponent_keyboard,
     edit_keyboard,
     invite_keyboard,
     main_menu_keyboard,
@@ -63,8 +65,7 @@ async def stats_all_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
     stats = db.get_total_stats(callback.from_user.id)
-    has_opponents = bool(db.list_opponents(callback.from_user.id))
-    await render(bot, callback.message.chat.id, callback.from_user.id, texts.total_stats(stats), main_menu_keyboard(has_opponents))
+    await render(bot, callback.message.chat.id, callback.from_user.id, texts.total_stats(stats), back_to_main_keyboard())
 
 
 @router.callback_query(F.data == "invite")
@@ -154,6 +155,40 @@ async def edit_points_callback(callback: CallbackQuery, bot: Bot) -> None:
         callback.from_user.id,
         texts.edit_points_prompt(texts.opponent_title(opponent)),
         back_to_opponent_keyboard(opponent_id),
+    )
+
+
+@router.callback_query(F.data.startswith("delete:"))
+async def delete_callback(callback: CallbackQuery, bot: Bot) -> None:
+    await callback.answer()
+    ensure_user(callback.from_user)
+    opponent_id = int(callback.data.split(":", 1)[1])
+    opponent = db.get_opponent(callback.from_user.id, opponent_id)
+    await render(
+        bot,
+        callback.message.chat.id,
+        callback.from_user.id,
+        texts.delete_opponent_confirm(texts.opponent_title(opponent)),
+        delete_opponent_keyboard(opponent_id),
+    )
+
+
+@router.callback_query(F.data.startswith("delete_confirm:"))
+async def delete_confirm_callback(callback: CallbackQuery, bot: Bot) -> None:
+    await callback.answer()
+    ensure_user(callback.from_user)
+    opponent_id = int(callback.data.split(":", 1)[1])
+    opponent = db.get_opponent(callback.from_user.id, opponent_id)
+    opponent_name = texts.opponent_title(opponent)
+    db.delete_opponent(callback.from_user.id, opponent_id)
+    db.clear_session(callback.from_user.id)
+    has_opponents = bool(db.list_opponents(callback.from_user.id))
+    await render(
+        bot,
+        callback.message.chat.id,
+        callback.from_user.id,
+        texts.delete_opponent_done(opponent_name),
+        main_menu_keyboard(has_opponents),
     )
 
 

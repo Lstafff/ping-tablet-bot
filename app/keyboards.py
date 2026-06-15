@@ -24,11 +24,27 @@ def opponents_keyboard(opponents: list[Opponent]) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def back_to_main_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text=texts.BUTTON_BACK, callback_data="main")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
 def opponent_keyboard(opponent_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text=texts.BUTTON_ADD_SCORE, callback_data=f"score_add:{opponent_id}")
     builder.button(text=texts.BUTTON_EDIT, callback_data=f"edit:{opponent_id}")
+    builder.button(text=texts.BUTTON_DELETE_OPPONENT, callback_data=f"delete:{opponent_id}")
     builder.button(text=texts.BUTTON_BACK, callback_data="opponents")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def delete_opponent_keyboard(opponent_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text=texts.BUTTON_CONFIRM_DELETE_OPPONENT, callback_data=f"delete_confirm:{opponent_id}")
+    builder.button(text=texts.BUTTON_CANCEL, callback_data=f"opponent:{opponent_id}")
     builder.adjust(1)
     return builder.as_markup()
 

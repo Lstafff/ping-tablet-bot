@@ -282,6 +282,37 @@ class Database:
             username=row["username"],
         )
 
+    def delete_opponent(self, owner_id: int, opponent_id: int) -> None:
+        opponent = self.get_opponent(owner_id, opponent_id)
+        if opponent.opponent_user_id is None:
+            self.connection.execute(
+                """
+                DELETE FROM games
+                WHERE owner_id = ? AND opponent_id = ?
+                """,
+                (owner_id, opponent_id),
+            )
+        else:
+            self.connection.execute(
+                """
+                DELETE FROM games
+                WHERE
+                    (player_a_id = ? AND player_b_id = ?)
+                    OR
+                    (player_a_id = ? AND player_b_id = ?)
+                """,
+                (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id),
+            )
+
+        self.connection.execute(
+            """
+            DELETE FROM opponents
+            WHERE owner_id = ? AND id = ?
+            """,
+            (owner_id, opponent_id),
+        )
+        self.connection.commit()
+
     def create_invite(self, inviter_id: int) -> str:
         token = secrets.token_urlsafe(18)
         self.connection.execute(

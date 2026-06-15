@@ -12,10 +12,13 @@ TEST_OPPONENT_NAME = "Тестовый соперник"
 TEST_OPPONENT_USERNAME = "test"
 
 BUTTON_OPPONENTS = "🥷 Соперники"
-BUTTON_INVITE_OPPONENT = "💌 Пригласить соперника"
+BUTTON_INVITE_OPPONENT = "💌 Пригласить"
 BUTTON_TOTAL_STATS = "📊 Общая статистика"
 BUTTON_ADD_SCORE = "🏓 Добавить результат"
 BUTTON_EDIT = "✏️ Изменить результаты"
+BUTTON_DELETE_OPPONENT = "🗑️ Удалить соперника"
+BUTTON_CONFIRM_DELETE_OPPONENT = "✅ Да, удалить"
+BUTTON_CANCEL = "↩️ Отмена"
 BUTTON_BACK = "⬅️ Назад"
 BUTTON_MAIN_MENU = "🏠 Меню"
 BUTTON_EDIT_GAMES = "🔢 Счёт партий"
@@ -26,7 +29,7 @@ MAIN_MENU_TEXT = (
     "Это бот для ведения статистики матчей с друзьями.\n\n"
     "Если нашёл ошибку — пиши @lstaff"
 )
-OPPONENTS_MENU_TEXT = "<b>Соперники</b>\n\nВыберите соперника по имени."
+OPPONENTS_MENU_TEXT = "<b>🥷 Соперники</b>\n\nКто твой соперник сегодня?"
 
 INVITE_INVALID_TEXT = "<b>😔 Ссылка не работает...</b>\n\nКажется с ней что-то не так. Попроси новую ссылку у твоего соперника"
 INVITE_SELF_TEXT = "<b>🔥 Сделали ссылку!</b>\n\nОтправь её другому игроку, чтобы начать вести статстику"
@@ -104,8 +107,8 @@ def invite(invite_link: str) -> str:
 
 def invite_new_opponent_notification(opponent_name: str) -> str:
     return (
-        "<b>🥳 Новый соперник</b>\n\n"
-        f"{html.escape(opponent_name)} открыл твою ссылку и добавлен в список соперников."
+        "<b>💌 Новый соперник</b>\n\n"
+        f"{html.escape(opponent_name)} открыл твою ссылку, пора сыграть!"
     )
 
 
@@ -122,25 +125,24 @@ def score_prompt(opponent_name: str) -> str:
 
 def edit_menu(opponent_name: str, stats: StatsLike) -> str:
     return (
-        f"<b>Редактирование: {html.escape(opponent_name)}</b>\n\n"
-        f"📊 Общая статистика: {stats.wins}-{stats.losses}\n"
-        f"🎯 Всего мячей: {stats.points_for}-{stats.points_against}"
+        f"<b>✏️ Редактирование стастистики с {html.escape(opponent_name)}</b>\n\n"
+        f"Общая статистика: {stats.wins}-{stats.losses}\n"
+        f"Всего мячей: {stats.points_for}-{stats.points_against}\n\n"
+        "Что хотите изменить?"
     )
 
 
 def edit_games_prompt(opponent_name: str) -> str:
     return (
-        f"<b>✏️ Редактирование: счёта партий с {html.escape(opponent_name)}</b>\n\n"
-        "Напишите общий счет по партиям: сначала ваши победы, потом поражения.\n"
-        "Например: <code>8-5</code>."
+        f"<b>✏️ Редактирование счёта партий с {html.escape(opponent_name)}</b>\n\n"
+        "Напишите общий счет по партиям: сначала ваши победы, потом поражения. Например: <code>8-5</code>."
     )
 
 
 def edit_points_prompt(opponent_name: str) -> str:
     return (
-        f"<b>✏️ Редактирование: количества мячей с {html.escape(opponent_name)}</b>\n\n"
-        "Напишите общий счет по мячам: сначала ваши мячи, потом мячи соперника.\n"
-        "Например: <code>132-118</code>."
+        f"<b>✏️ Редактирование количества мячей с {html.escape(opponent_name)}</b>\n\n"
+        "Напишите общий счет по мячам: сначала ваши мячи, потом мячи соперника. Например: <code>132-118</code>."
     )
 
 

@@ -67,6 +67,32 @@ class StorageTest(unittest.TestCase):
             opponent_user_ids = {opponent.opponent_user_id for opponent in db.list_opponents(1)}
             self.assertEqual(opponent_user_ids, {2, 3})
 
+    def test_delete_local_opponent_removes_stats(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(str(Path(directory) / "bot.sqlite3"))
+            db.ensure_user(1, "Игрок", None)
+            opponent = db.add_opponent(1, "Тестовый соперник", None)
+            db.add_game(1, opponent.id, parse_score("11-7"))
+
+            db.delete_opponent(1, opponent.id)
+
+            self.assertEqual(db.list_opponents(1), [])
+            self.assertEqual(db.get_total_stats(1).games, 0)
+
+    def test_delete_linked_opponent_removes_shared_stats_for_both_players(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(str(Path(directory) / "bot.sqlite3"))
+            db.ensure_user(1, "Игрок 1", None)
+            db.ensure_user(2, "Игрок 2", None)
+            first_opponent = db.add_opponent(1, "Игрок 2", 2)
+            second_opponent = db.add_opponent(2, "Игрок 1", 1)
+            db.add_game(1, first_opponent.id, parse_score("11-7"))
+
+            db.delete_opponent(1, first_opponent.id)
+
+            self.assertEqual(db.list_opponents(1), [])
+            self.assertEqual(db.get_opponent_stats(2, second_opponent.id).games, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
