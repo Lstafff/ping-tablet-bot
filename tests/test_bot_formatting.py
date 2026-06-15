@@ -1,4 +1,5 @@
 import unittest
+from urllib.parse import parse_qs, urlparse
 
 from app import texts
 from app.storage import Opponent
@@ -47,10 +48,13 @@ class BotFormattingTest(unittest.TestCase):
         self.assertIn("@test", texts.delete_opponent_done("@test"))
 
     def test_invite_share_url_contains_invite_link(self) -> None:
-        share_url = texts.invite_share_url("https://t.me/ping_tablet_bot?start=invite_test")
+        invite_link = "https://t.me/ping_tablet_bot?start=invite_test"
+        share_url = texts.invite_share_url(invite_link)
+        query = parse_qs(urlparse(share_url).query)
 
         self.assertTrue(share_url.startswith("https://t.me/share/url?"))
-        self.assertIn("url=https%3A//t.me/ping_tablet_bot%3Fstart%3Dinvite_test", share_url)
+        self.assertEqual(query["url"], [invite_link])
+        self.assertEqual(query["text"], ["пинг 🏓 понг 🏓 каунтер"])
 
 
 if __name__ == "__main__":

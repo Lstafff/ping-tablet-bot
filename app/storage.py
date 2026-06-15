@@ -285,38 +285,38 @@ class Database:
     def delete_opponent(self, owner_id: int, opponent_id: int) -> None:
         opponent = self.get_opponent(owner_id, opponent_id)
         linked_opponent = self._get_linked_opponent(owner_id, opponent_id)
-        if opponent.opponent_user_id is None:
+        with self.connection:
+            if opponent.opponent_user_id is None:
+                self.connection.execute(
+                    """
+                    DELETE FROM games
+                    WHERE owner_id = ? AND opponent_id = ?
+                    """,
+                    (owner_id, opponent_id),
+                )
+            else:
+                self.connection.execute(
+                    """
+                    DELETE FROM games
+                    WHERE
+                        (player_a_id = ? AND player_b_id = ?)
+                        OR
+                        (player_a_id = ? AND player_b_id = ?)
+                    """,
+                    (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id),
+                )
+
+            self._delete_adjustment(owner_id, opponent_id)
+            if linked_opponent is not None:
+                self._delete_adjustment(linked_opponent.owner_id, linked_opponent.id)
+
             self.connection.execute(
                 """
-                DELETE FROM games
-                WHERE owner_id = ? AND opponent_id = ?
+                DELETE FROM opponents
+                WHERE owner_id = ? AND id = ?
                 """,
                 (owner_id, opponent_id),
             )
-        else:
-            self.connection.execute(
-                """
-                DELETE FROM games
-                WHERE
-                    (player_a_id = ? AND player_b_id = ?)
-                    OR
-                    (player_a_id = ? AND player_b_id = ?)
-                """,
-                (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id),
-            )
-
-        self._delete_adjustment(owner_id, opponent_id)
-        if linked_opponent is not None:
-            self._delete_adjustment(linked_opponent.owner_id, linked_opponent.id)
-
-        self.connection.execute(
-            """
-            DELETE FROM opponents
-            WHERE owner_id = ? AND id = ?
-            """,
-            (owner_id, opponent_id),
-        )
-        self.connection.commit()
 
     def create_invite(self, inviter_id: int) -> str:
         token = secrets.token_urlsafe(18)
@@ -429,16 +429,18 @@ class Database:
         return total
 
     def set_games_total(self, owner_id: int, opponent_id: int, wins: int, losses: int) -> None:
-        self._set_games_total_for_one(owner_id, opponent_id, wins, losses)
-        linked_opponent = self._get_linked_opponent(owner_id, opponent_id)
-        if linked_opponent is not None:
-            self._set_games_total_for_one(linked_opponent.owner_id, linked_opponent.id, losses, wins)
+        with self.connection:
+            self._set_games_total_for_one(owner_id, opponent_id, wins, losses)
+            linked_opponent = self._get_linked_opponent(owner_id, opponent_id)
+            if linked_opponent is not None:
+                self._set_games_total_for_one(linked_opponent.owner_id, linked_opponent.id, losses, wins)
 
     def set_points_total(self, owner_id: int, opponent_id: int, points_for: int, points_against: int) -> None:
-        self._set_points_total_for_one(owner_id, opponent_id, points_for, points_against)
-        linked_opponent = self._get_linked_opponent(owner_id, opponent_id)
-        if linked_opponent is not None:
-            self._set_points_total_for_one(linked_opponent.owner_id, linked_opponent.id, points_against, points_for)
+        with self.connection:
+            self._set_points_total_for_one(owner_id, opponent_id, points_for, points_against)
+            linked_opponent = self._get_linked_opponent(owner_id, opponent_id)
+            if linked_opponent is not None:
+                self._set_points_total_for_one(linked_opponent.owner_id, linked_opponent.id, points_against, points_for)
 
     def _set_games_total_for_one(self, owner_id: int, opponent_id: int, wins: int, losses: int) -> None:
         raw = self.get_opponent_stats(owner_id, opponent_id, adjusted=False)
@@ -545,7 +547,7 @@ class Database:
 
         return Stats(wins=wins, losses=losses, points_for=points_for, points_against=points_against)
 
-    def _get_adjustment(self, owner_id: int, opponent_id: int) -> sqlite3.Row:
+    def _get_adjustment(self, owner_id: int, opponent_id: int) -> dict[str, int]:
         row = self.connection.execute(
             """
             SELECT games_won_delta, games_lost_delta, points_for_delta, points_against_delta
@@ -554,11 +556,19 @@ class Database:
             """,
             (owner_id, opponent_id),
         ).fetchone()
-        if row is not None:
-            return row
-
-        self._upsert_adjustment(owner_id, opponent_id, 0, 0, 0, 0)
-        return self._get_adjustment(owner_id, opponent_id)
+        if row is None:
+            return {
+                "games_won_delta": 0,
+                "games_lost_delta": 0,
+                "points_for_delta": 0,
+                "points_against_delta": 0,
+            }
+        return {
+            "games_won_delta": int(row["games_won_delta"]),
+            "games_lost_delta": int(row["games_lost_delta"]),
+            "points_for_delta": int(row["points_for_delta"]),
+            "points_against_delta": int(row["points_against_delta"]),
+        }
 
     def _delete_adjustment(self, owner_id: int, opponent_id: int) -> None:
         self.connection.execute(
@@ -618,7 +628,6 @@ class Database:
                 now_moscow_iso(),
             ),
         )
-        self.connection.commit()
 
     def _has_linked_opponent(self, owner_id: int, opponent_user_id: int) -> bool:
         row = self.connection.execute(

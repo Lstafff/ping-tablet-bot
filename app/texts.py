@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import html
-from urllib.parse import quote
 from typing import Optional, Protocol
+from urllib.parse import urlencode
 
 
 # Здесь собраны тексты, которые видит пользователь.
@@ -108,8 +108,8 @@ def invite(invite_link: str) -> str:
 
 
 def invite_share_url(invite_link: str) -> str:
-    share_text = "Присоединяйся, будем вести статистику матчей в Ping Counter."
-    return f"https://t.me/share/url?url={quote(invite_link)}&text={quote(share_text)}"
+    share_text = "пинг 🏓 понг 🏓 каунтер"
+    return f"https://t.me/share/url?{urlencode({'url': invite_link, 'text': share_text})}"
 
 
 def invite_new_opponent_notification(opponent_name: str) -> str:

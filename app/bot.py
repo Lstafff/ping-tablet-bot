@@ -4,7 +4,7 @@ from typing import Optional
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, User as TelegramUser
 
@@ -20,6 +20,7 @@ from app.keyboards import (
     opponent_keyboard,
     opponents_keyboard,
 )
+from app.rich_messages import render_rich_message, total_stats_rich_html
 from app.scoring import ScoreError, parse_pair, parse_score
 from app.storage import Database
 
@@ -64,8 +65,7 @@ async def main_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def stats_all_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    stats = db.get_total_stats(callback.from_user.id)
-    await render(bot, callback.message.chat.id, callback.from_user.id, texts.total_stats(stats), back_to_main_keyboard())
+    await show_total_stats(bot, callback.message.chat.id, callback.from_user.id)
 
 
 @router.callback_query(F.data == "invite")
@@ -285,6 +285,24 @@ async def show_opponent(bot: Bot, chat_id: int, user_id: int, opponent_id: int) 
     await render(bot, chat_id, user_id, texts.opponent_stats(texts.opponent_title(opponent), stats), opponent_keyboard(opponent_id))
 
 
+async def show_total_stats(bot: Bot, chat_id: int, user_id: int) -> None:
+    stats = db.get_total_stats(user_id)
+    keyboard = back_to_main_keyboard()
+    try:
+        user = db.get_user(user_id)
+        message_id = await render_rich_message(
+            bot,
+            chat_id,
+            total_stats_rich_html(stats),
+            keyboard,
+            user.last_message_id,
+        )
+        db.set_last_message_id(user_id, message_id)
+    except Exception:
+        logging.exception("Failed to render rich total stats")
+        await render(bot, chat_id, user_id, texts.total_stats(stats), keyboard)
+
+
 async def accept_invite_flow(message: Message, token: str, bot: Bot, force_new: bool = False) -> None:
     user_id = message.from_user.id
     acceptance = db.accept_invite(token, user_id)
@@ -311,7 +329,7 @@ async def notify_inviter_about_new_opponent(bot: Bot, inviter_id: int, invited_u
             texts.invite_new_opponent_notification(texts.display_user_name(invited.first_name, invited.username)),
             main_menu_keyboard(True),
         )
-    except Exception:
+    except TelegramAPIError:
         logging.exception("Failed to notify inviter about a new opponent")
 
 
@@ -343,6 +361,10 @@ async def render(
         except TelegramBadRequest as error:
             if "message is not modified" in str(error).lower():
                 return
+            try:
+                await bot.delete_message(chat_id, user.last_message_id)
+            except TelegramBadRequest:
+                pass
 
     sent = await bot.send_message(
         chat_id=chat_id,
