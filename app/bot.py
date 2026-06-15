@@ -75,7 +75,7 @@ async def invite_callback(callback: CallbackQuery, bot: Bot) -> None:
     token = db.create_invite(callback.from_user.id)
     bot_info = await bot.get_me()
     invite_link = f"https://t.me/{bot_info.username}?start=invite_{token}"
-    await render(bot, callback.message.chat.id, callback.from_user.id, texts.invite(invite_link), invite_keyboard())
+    await render(bot, callback.message.chat.id, callback.from_user.id, texts.invite(invite_link), invite_keyboard(invite_link))
 
 
 @router.callback_query(F.data == "opponents")
@@ -200,7 +200,6 @@ async def text_message(message: Message, bot: Bot) -> None:
 
     session = db.get_session(user_id)
     if session is None or session.opponent_id is None:
-        await show_main_menu(bot, message.chat.id, user_id)
         return
 
     if session.mode == "await_score":
@@ -216,7 +215,6 @@ async def text_message(message: Message, bot: Bot) -> None:
         return
 
     db.clear_session(user_id)
-    await show_main_menu(bot, message.chat.id, user_id)
 
 
 async def handle_score_input(message: Message, bot: Bot, user_id: int, opponent_id: int) -> None:

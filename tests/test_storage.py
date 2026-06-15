@@ -107,11 +107,15 @@ class StorageTest(unittest.TestCase):
             first_opponent = db.add_opponent(1, "Игрок 2", 2)
             second_opponent = db.add_opponent(2, "Игрок 1", 1)
             db.add_game(1, first_opponent.id, parse_score("11-7"))
+            db.set_games_total(1, first_opponent.id, 123, 4)
+            db.set_points_total(1, first_opponent.id, 55, 47)
 
             db.delete_opponent(1, first_opponent.id)
 
+            second_stats = db.get_opponent_stats(2, second_opponent.id)
             self.assertEqual(db.list_opponents(1), [])
-            self.assertEqual(db.get_opponent_stats(2, second_opponent.id).games, 0)
+            self.assertEqual(second_stats.games, 0)
+            self.assertEqual((second_stats.points_for, second_stats.points_against), (0, 0))
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+from urllib.parse import quote
 from typing import Optional, Protocol
 
 
@@ -13,9 +14,10 @@ TEST_OPPONENT_USERNAME = "test"
 
 BUTTON_OPPONENTS = "🥷 Соперники"
 BUTTON_INVITE_OPPONENT = "💌 Пригласить"
-BUTTON_TOTAL_STATS = "📊 Общая статистика"
-BUTTON_ADD_SCORE = "🏓 Добавить результат"
-BUTTON_EDIT = "✏️ Изменить результаты"
+BUTTON_SEND_INVITE = "💌 Отправить"
+BUTTON_TOTAL_STATS = "📊 Статистика"
+BUTTON_ADD_SCORE = "🏓 Добавить счёт"
+BUTTON_EDIT = "✏️ Изменить счёт"
 BUTTON_DELETE_OPPONENT = "🗑️ Удалить соперника"
 BUTTON_CONFIRM_DELETE_OPPONENT = "✅ Да, удалить"
 BUTTON_CANCEL = "↩️ Отмена"
@@ -99,10 +101,15 @@ def total_stats(stats: StatsLike) -> str:
 def invite(invite_link: str) -> str:
     return (
         "<b>🥷 Пригласи соперника</b>\n\n"
-        "Отправь эту ссылку или перешли сообщение своему сопернику:\n"
+        "Отправь эту ссылку или перешли сообщение своему сопернику:\n\n"
         f"<code>{html.escape(invite_link)}</code>\n\n"
         "Когда он откроет ссылку и запустит бота, вы появитесь друг у друга в списке соперников."
     )
+
+
+def invite_share_url(invite_link: str) -> str:
+    share_text = "Присоединяйся, будем вести статистику матчей в Ping Counter."
+    return f"https://t.me/share/url?url={quote(invite_link)}&text={quote(share_text)}"
 
 
 def invite_new_opponent_notification(opponent_name: str) -> str:
@@ -196,8 +203,8 @@ def pair_needs_two_numbers(example: str) -> str:
 
 def format_stats(stats: StatsLike) -> str:
     return (
-        f"↪ Партии: {stats.games}\n"
-        f"↪ Победы / Поражения: {stats.wins}-{stats.losses}\n"
-        f"↪ Мячи: {stats.points_for}-{stats.points_against}\n"
-        f"↪ Всего мячей: {stats.points_for + stats.points_against}"
+        f"･ Партии: {stats.games}\n"
+        f"･ Победы / Поражения: {stats.wins}-{stats.losses}\n"
+        f"･ Мячи: {stats.points_for}-{stats.points_against}\n"
+        f"･ Всего мячей: {stats.points_for + stats.points_against}"
     )

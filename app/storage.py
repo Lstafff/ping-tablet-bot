@@ -284,6 +284,7 @@ class Database:
 
     def delete_opponent(self, owner_id: int, opponent_id: int) -> None:
         opponent = self.get_opponent(owner_id, opponent_id)
+        linked_opponent = self._get_linked_opponent(owner_id, opponent_id)
         if opponent.opponent_user_id is None:
             self.connection.execute(
                 """
@@ -303,6 +304,10 @@ class Database:
                 """,
                 (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id),
             )
+
+        self._delete_adjustment(owner_id, opponent_id)
+        if linked_opponent is not None:
+            self._delete_adjustment(linked_opponent.owner_id, linked_opponent.id)
 
         self.connection.execute(
             """
@@ -554,6 +559,15 @@ class Database:
 
         self._upsert_adjustment(owner_id, opponent_id, 0, 0, 0, 0)
         return self._get_adjustment(owner_id, opponent_id)
+
+    def _delete_adjustment(self, owner_id: int, opponent_id: int) -> None:
+        self.connection.execute(
+            """
+            DELETE FROM aggregate_adjustments
+            WHERE owner_id = ? AND opponent_id = ?
+            """,
+            (owner_id, opponent_id),
+        )
 
     def _get_linked_opponent(self, owner_id: int, opponent_id: int) -> Optional[Opponent]:
         opponent = self.get_opponent(owner_id, opponent_id)
