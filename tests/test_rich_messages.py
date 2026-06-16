@@ -1,7 +1,7 @@
 import unittest
 from dataclasses import dataclass
 
-from app.texts import format_rich_user_name, format_stats, rich_to_basic_html, total_stats_rich_html
+from app.texts import format_rich_user_name, format_stats, opponent_stats, rich_to_basic_html, total_stats_rich_html
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,7 @@ class RichMessagesTest(unittest.TestCase):
             "<Глеб & Co>",
         )
 
-        self.assertIn("<h2>📊 Статистика всех матчей</h2><table bordered striped>", rich_html)
+        self.assertIn("<h2>📊 Статистика всех матчей</h2><hr/><table bordered striped>", rich_html)
         self.assertIn("<table bordered striped>", rich_html)
         self.assertIn("<th>🥷 &lt;Глеб &amp; Co&gt;</th>", rich_html)
         self.assertIn("<tr><td>Победы</td><td align=\"right\">3</td><td align=\"right\">2</td></tr>", rich_html)
@@ -45,6 +45,13 @@ class RichMessagesTest(unittest.TestCase):
         self.assertIn("<tr><td>Всего сыграно</td><td colspan=\"2\" align=\"right\">5</td></tr>", rich_html)
         self.assertIn("<tr><td>Мячи</td><td align=\"right\">43</td><td align=\"right\">39</td></tr>", rich_html)
         self.assertIn("<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">82</td></tr>", rich_html)
+
+    def test_opponent_stats_uses_user_name(self) -> None:
+        rich_html = opponent_stats("@test", Stats(wins=3, losses=2, points_for=43, points_against=39), "@me")
+
+        self.assertIn("<th>🥷 @me</th>", rich_html)
+        self.assertIn("<th>🏓 @test</th>", rich_html)
+        self.assertNotIn("<th>🥷 Игрок</th>", rich_html)
 
     def test_rich_to_basic_html_downgrades_headings(self) -> None:
         self.assertEqual(

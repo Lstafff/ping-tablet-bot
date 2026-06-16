@@ -136,11 +136,16 @@ async def edit_callback(callback: CallbackQuery, bot: Bot) -> None:
     opponent_id = int(callback.data.split(":", 1)[1])
     opponent = db.get_opponent(callback.from_user.id, opponent_id)
     stats = db.get_opponent_stats(callback.from_user.id, opponent_id)
+    user = db.get_user(callback.from_user.id)
     await render(
         bot,
         callback.message.chat.id,
         callback.from_user.id,
-        texts.edit_menu(texts.opponent_title(opponent), stats),
+        texts.edit_menu(
+            texts.opponent_title(opponent),
+            stats,
+            texts.display_user_name(user.first_name, user.username),
+        ),
         edit_keyboard(opponent_id),
     )
 
@@ -278,11 +283,17 @@ async def handle_score_input(message: Message, bot: Bot, user_id: int, opponent_
 
     db.add_game(user_id, opponent_id, score)
     stats = db.get_opponent_stats(user_id, opponent_id)
+    user = db.get_user(user_id)
     await render(
         bot,
         message.chat.id,
         user_id,
-        texts.score_saved(texts.opponent_title(opponent), score, stats),
+        texts.score_saved(
+            texts.opponent_title(opponent),
+            score,
+            stats,
+            texts.display_user_name(user.first_name, user.username),
+        ),
         back_to_opponent_keyboard(opponent_id),
     )
 
@@ -327,7 +338,18 @@ async def show_opponents(bot: Bot, chat_id: int, user_id: int) -> None:
 async def show_opponent(bot: Bot, chat_id: int, user_id: int, opponent_id: int) -> None:
     opponent = db.get_opponent(user_id, opponent_id)
     stats = db.get_opponent_stats(user_id, opponent_id)
-    await render(bot, chat_id, user_id, texts.opponent_stats(texts.opponent_title(opponent), stats), opponent_keyboard(opponent_id))
+    user = db.get_user(user_id)
+    await render(
+        bot,
+        chat_id,
+        user_id,
+        texts.opponent_stats(
+            texts.opponent_title(opponent),
+            stats,
+            texts.display_user_name(user.first_name, user.username),
+        ),
+        opponent_keyboard(opponent_id),
+    )
 
 
 async def show_total_stats(bot: Bot, chat_id: int, user_id: int) -> None:

@@ -20,7 +20,7 @@ BUTTON_HAVE_INVITE_CODE = "✋ У меня есть код"
 BUTTON_TOTAL_STATS = "📊 Статистика"
 BUTTON_ADD_SCORE = "🏓 Добавить счёт"
 BUTTON_EDIT = "✏️ Изменить счёт"
-BUTTON_DELETE_OPPONENT = "🗑️ Удалить соперника"
+BUTTON_DELETE_OPPONENT = "❌ Удалить соперника"
 BUTTON_CONFIRM_DELETE_OPPONENT = "✅ Да, удалить"
 BUTTON_CANCEL = "↩️ Отмена"
 BUTTON_BACK = "⬅️ Назад"
@@ -130,6 +130,7 @@ def total_stats(stats: StatsLike) -> str:
 def total_stats_rich_html(stats: StatsLike, user_name: str) -> str:
     return (
         "<h2>📊 Статистика всех матчей</h2>"
+        "<hr/>"
         f"{format_stats(stats, user_name=user_name, opponent_name='Оппоненты')}"
     )
 
@@ -225,11 +226,12 @@ def score_prompt(opponent_name: str) -> str:
 
 
 # Меню редактирования статистики с соперником.
-def edit_menu(opponent_name: str, stats: StatsLike) -> str:
+def edit_menu(opponent_name: str, stats: StatsLike, user_name: str = DEFAULT_USER_NAME) -> str:
     return (
         f"<h2>✏️ Изменение статистики с {html.escape(opponent_name)}</h2>"
-        f"{format_stats(stats, opponent_name=opponent_name)}\n\n"
-        "Что хотите изменить?"
+        "<hr/>"
+        f"{format_stats(stats, user_name=user_name, opponent_name=opponent_name)}"
+        "\n\nЧто хотите изменить?"
     )
 
 
@@ -275,7 +277,7 @@ def score_input_error(opponent_name: str, error: Exception) -> str:
 
 
 # Сообщение после сохранения результата партии.
-def score_saved(opponent_name: str, score: ScoreLike, stats: StatsLike) -> str:
+def score_saved(opponent_name: str, score: ScoreLike, stats: StatsLike, user_name: str = DEFAULT_USER_NAME) -> str:
     overtime = ""
     if score.overtime_own or score.overtime_opponent:
         overtime = (
@@ -287,17 +289,17 @@ def score_saved(opponent_name: str, score: ScoreLike, stats: StatsLike) -> str:
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
         f"\n✅ Добавлен счёт: {score.own_score}-{score.opponent_score}.{overtime}\n\n"
         "<h2>📊 Текущая статистика:</h2>\n"
-        f"{format_stats(stats, opponent_name=opponent_name)}"
+        f"{format_stats(stats, user_name=user_name, opponent_name=opponent_name)}"
         "\n\nМожно сразу написать результат следующего матча."
     )
 
 
 # Карточка статистики с одним соперником.
-def opponent_stats(opponent_name: str, stats: StatsLike) -> str:
+def opponent_stats(opponent_name: str, stats: StatsLike, user_name: str = DEFAULT_USER_NAME) -> str:
     return (
         f"<h2>📊 Статистика матчей с {html.escape(opponent_name)}</h2>"
         "<hr/>"
-        f"{format_stats(stats, opponent_name=opponent_name)}"
+        f"{format_stats(stats, user_name=user_name, opponent_name=opponent_name)}"
     )
 
 
