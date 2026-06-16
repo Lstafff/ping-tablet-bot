@@ -23,7 +23,7 @@ class RichMessagesTest(unittest.TestCase):
             "<Глеб & Co>",
         )
 
-        self.assertIn("<h2>📊 Статистика всех матчей</h2>\n", rich_html)
+        self.assertIn("<h2>📊 Статистика всех матчей</h2><table bordered striped>", rich_html)
         self.assertIn("<table bordered striped>", rich_html)
         self.assertIn("<th>🥷 &lt;Глеб &amp; Co&gt;</th>", rich_html)
         self.assertIn("<tr><td>Победы</td><td align=\"right\">3</td><td align=\"right\">2</td></tr>", rich_html)
@@ -39,10 +39,12 @@ class RichMessagesTest(unittest.TestCase):
         rich_html = format_stats(Stats(wins=3, losses=2, points_for=43, points_against=39))
 
         self.assertIn("<table bordered striped>", rich_html)
-        self.assertIn("<tr><td>Партии</td><td align=\"right\">5</td></tr>", rich_html)
-        self.assertIn("<tr><td>Победы / Поражения</td><td align=\"right\">3-2</td></tr>", rich_html)
-        self.assertIn("<tr><td>Мячи</td><td align=\"right\">43-39</td></tr>", rich_html)
-        self.assertIn("<tr><td>Всего мячей</td><td align=\"right\">82</td></tr>", rich_html)
+        self.assertIn("<th>🥷 Игрок</th>", rich_html)
+        self.assertIn("<th>🏓 Соперники</th>", rich_html)
+        self.assertIn("<tr><td>Победы</td><td align=\"right\">3</td><td align=\"right\">2</td></tr>", rich_html)
+        self.assertIn("<tr><td>Всего сыграно</td><td colspan=\"2\" align=\"right\">5</td></tr>", rich_html)
+        self.assertIn("<tr><td>Мячи</td><td align=\"right\">43</td><td align=\"right\">39</td></tr>", rich_html)
+        self.assertIn("<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">82</td></tr>", rich_html)
 
     def test_rich_to_basic_html_downgrades_headings(self) -> None:
         self.assertEqual(
@@ -54,8 +56,8 @@ class RichMessagesTest(unittest.TestCase):
         self.assertEqual(
             rich_to_basic_html(format_stats(Stats(wins=3, losses=2, points_for=43, points_against=39))),
             (
-                "Партии: 5\n"
                 "Победы / Поражения: 3-2\n"
+                "Партии: 5\n"
                 "Мячи: 43-39\n"
                 "Всего мячей: 82\n"
             ),

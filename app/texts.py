@@ -122,24 +122,15 @@ def username_label(username: str) -> str:
 def total_stats(stats: StatsLike) -> str:
     return (
         "<h2>📊 Статистика всех матчей</h2>"
-        f"\n{format_stats(stats)}"
+        f"{format_stats(stats)}"
     )
 
 
 # Rich-таблица на экране общей статистики.
 def total_stats_rich_html(stats: StatsLike, user_name: str) -> str:
-    safe_user_name = format_rich_user_name(user_name)
-
     return (
         "<h2>📊 Статистика всех матчей</h2>"
-        "\n"
-        "<table bordered striped>"
-        f"<tr><th>Показатель</th><th>🥷 {safe_user_name}</th><th>🏓 Оппоненты</th></tr>"
-        f"<tr><td>Победы</td><td align=\"right\">{stats.wins}</td><td align=\"right\">{stats.losses}</td></tr>"
-        f"<tr><td>Всего сыграно</td><td colspan=\"2\" align=\"right\">{stats.games}</td></tr>"
-        f"<tr><td>Мячи</td><td align=\"right\">{stats.points_for}</td><td align=\"right\">{stats.points_against}</td></tr>"
-        f"<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">{stats.points_for + stats.points_against}</td></tr>"
-        "</table>"
+        f"{format_stats(stats, user_name=user_name, opponent_name='Оппоненты')}"
     )
 
 
@@ -173,6 +164,15 @@ def table_row_to_basic_html(match: re.Match[str]) -> str:
 
     if cells[0] == "Показатель":
         return ""
+
+    if len(cells) == 3 and cells[0] == "Победы":
+        return f"Победы / Поражения: {cells[1]}-{cells[2]}\n"
+
+    if len(cells) == 3 and cells[0] == "Мячи":
+        return f"Мячи: {cells[1]}-{cells[2]}\n"
+
+    if len(cells) == 2 and cells[0] == "Всего сыграно":
+        return f"Партии: {cells[1]}\n"
 
     if len(cells) == 2:
         return f"{cells[0]}: {cells[1]}\n"
@@ -228,7 +228,7 @@ def score_prompt(opponent_name: str) -> str:
 def edit_menu(opponent_name: str, stats: StatsLike) -> str:
     return (
         f"<h2>✏️ Изменение статистики с {html.escape(opponent_name)}</h2>"
-        f"\n{format_stats(stats)}\n\n"
+        f"{format_stats(stats, opponent_name=opponent_name)}\n\n"
         "Что хотите изменить?"
     )
 
@@ -286,9 +286,9 @@ def score_saved(opponent_name: str, score: ScoreLike, stats: StatsLike) -> str:
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
         f"\n✅ Добавлен счёт: {score.own_score}-{score.opponent_score}.{overtime}\n\n"
-        "<h2>📊 Текущая статистика:</h2>"
-        f"\n\n{format_stats(stats)}\n\n"
-        "Можно сразу написать результат следующего матча."
+        "<h2>📊 Текущая статистика:</h2>\n"
+        f"{format_stats(stats, opponent_name=opponent_name)}"
+        "\n\nМожно сразу написать результат следующего матча."
     )
 
 
@@ -296,7 +296,8 @@ def score_saved(opponent_name: str, score: ScoreLike, stats: StatsLike) -> str:
 def opponent_stats(opponent_name: str, stats: StatsLike) -> str:
     return (
         f"<h2>📊 Статистика матчей с {html.escape(opponent_name)}</h2>"
-        f"\n{format_stats(stats)}"
+        "<hr/>"
+        f"{format_stats(stats, opponent_name=opponent_name)}"
     )
 
 
@@ -311,13 +312,16 @@ def pair_needs_two_numbers(example: str) -> str:
 
 
 # Общая таблица статистики для экранов со счётом.
-def format_stats(stats: StatsLike) -> str:
+def format_stats(stats: StatsLike, user_name: str = DEFAULT_USER_NAME, opponent_name: str = "Соперники") -> str:
+    safe_user_name = format_rich_user_name(user_name)
+    safe_opponent_name = format_rich_user_name(opponent_name)
+
     return (
         "<table bordered striped>"
-        "<tr><th>Показатель</th><th>Значение</th></tr>"
-        f"<tr><td>Партии</td><td align=\"right\">{stats.games}</td></tr>"
-        f"<tr><td>Победы / Поражения</td><td align=\"right\">{stats.wins}-{stats.losses}</td></tr>"
-        f"<tr><td>Мячи</td><td align=\"right\">{stats.points_for}-{stats.points_against}</td></tr>"
-        f"<tr><td>Всего мячей</td><td align=\"right\">{stats.points_for + stats.points_against}</td></tr>"
+        f"<tr><th>Показатель</th><th>🥷 {safe_user_name}</th><th>🏓 {safe_opponent_name}</th></tr>"
+        f"<tr><td>Победы</td><td align=\"right\">{stats.wins}</td><td align=\"right\">{stats.losses}</td></tr>"
+        f"<tr><td>Всего сыграно</td><td colspan=\"2\" align=\"right\">{stats.games}</td></tr>"
+        f"<tr><td>Мячи</td><td align=\"right\">{stats.points_for}</td><td align=\"right\">{stats.points_against}</td></tr>"
+        f"<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">{stats.points_for + stats.points_against}</td></tr>"
         "</table>"
     )
