@@ -387,12 +387,14 @@ async def render_rich_message(
     reply_markup: InlineKeyboardMarkup,
     last_message_id: Optional[int],
 ) -> int:
+    telegram_rich_html = rich_html.replace("\n", "<br/>")
+
     if last_message_id is not None:
         try:
             result = await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=last_message_id,
-                rich_message=InputRichMessage(html=rich_html),
+                rich_message=InputRichMessage(html=telegram_rich_html),
                 reply_markup=reply_markup,
                 parse_mode=None,
             )
@@ -403,7 +405,7 @@ async def render_rich_message(
 
     sent = await bot.send_rich_message(
         chat_id=chat_id,
-        rich_message=InputRichMessage(html=rich_html),
+        rich_message=InputRichMessage(html=telegram_rich_html),
         reply_markup=reply_markup,
     )
     new_message_id = message_id_from_result(sent, None)
