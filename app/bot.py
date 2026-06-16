@@ -71,10 +71,30 @@ async def stats_all_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def invite_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    token = db.create_invite(callback.from_user.id)
+    invite_code = db.get_or_create_invite_code(callback.from_user.id)
     bot_info = await bot.get_me()
-    invite_link = f"https://t.me/{bot_info.username}?start=invite_{token}"
-    await render(bot, callback.message.chat.id, callback.from_user.id, texts.invite(invite_link), invite_keyboard(invite_link))
+    invite_link = f"https://t.me/{bot_info.username}?start=invite_{invite_code}"
+    await render(
+        bot,
+        callback.message.chat.id,
+        callback.from_user.id,
+        texts.invite(invite_link, invite_code),
+        invite_keyboard(invite_link),
+    )
+
+
+@router.callback_query(F.data == "invite_code")
+async def invite_code_callback(callback: CallbackQuery, bot: Bot) -> None:
+    await callback.answer()
+    ensure_user(callback.from_user)
+    db.set_session(callback.from_user.id, "await_invite_code", None)
+    await render(
+        bot,
+        callback.message.chat.id,
+        callback.from_user.id,
+        texts.invite_code_prompt(),
+        back_to_main_keyboard(),
+    )
 
 
 @router.callback_query(F.data == "opponents")
@@ -198,7 +218,14 @@ async def text_message(message: Message, bot: Bot) -> None:
     await delete_message(bot, message)
 
     session = db.get_session(user_id)
-    if session is None or session.opponent_id is None:
+    if session is None:
+        return
+
+    if session.mode == "await_invite_code":
+        await handle_invite_code_input(message, bot, user_id)
+        return
+
+    if session.opponent_id is None:
         return
 
     if session.mode == "await_score":
@@ -214,6 +241,25 @@ async def text_message(message: Message, bot: Bot) -> None:
         return
 
     db.clear_session(user_id)
+
+
+async def handle_invite_code_input(message: Message, bot: Bot, user_id: int) -> None:
+    acceptance = db.accept_invite(message.text or "", user_id)
+    if acceptance is None:
+        await render(bot, message.chat.id, user_id, texts.INVITE_CODE_INVALID_TEXT, back_to_main_keyboard())
+        return
+
+    db.clear_session(user_id)
+    if acceptance.is_self_invite:
+        text = texts.INVITE_SELF_TEXT
+    elif acceptance.is_new_opponent:
+        text = texts.INVITE_ACCEPTED_TEXT
+        await notify_inviter_about_new_opponent(bot, acceptance.inviter_id, user_id)
+    else:
+        text = texts.INVITE_ALREADY_CONNECTED_TEXT
+
+    has_opponents = bool(db.list_opponents(user_id))
+    await render(bot, message.chat.id, user_id, text, main_menu_keyboard(has_opponents))
 
 
 async def handle_score_input(message: Message, bot: Bot, user_id: int, opponent_id: int) -> None:

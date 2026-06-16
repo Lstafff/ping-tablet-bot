@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import secrets
 import sqlite3
+import string
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -13,6 +14,8 @@ from app.scoring import ParsedScore
 
 
 MOSCOW_TZ = ZoneInfo("Europe/Moscow")
+INVITE_CODE_ALPHABET = string.ascii_uppercase + string.digits
+INVITE_CODE_LENGTH = 8
 
 
 @dataclass(frozen=True)
@@ -139,9 +142,35 @@ class Database:
                 used_at TEXT,
                 FOREIGN KEY(inviter_id) REFERENCES users(telegram_id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS invite_uses (
+                inviter_id INTEGER NOT NULL,
+                invited_user_id INTEGER NOT NULL,
+                invite_code TEXT NOT NULL,
+                accepted_at TEXT NOT NULL,
+                PRIMARY KEY(inviter_id, invited_user_id),
+                FOREIGN KEY(inviter_id) REFERENCES users(telegram_id) ON DELETE CASCADE,
+                FOREIGN KEY(invited_user_id) REFERENCES users(telegram_id) ON DELETE CASCADE
+            );
+            """
+        )
+        self._ensure_column("users", "invite_code", "TEXT")
+        self.connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite_code
+            ON users(invite_code)
+            WHERE invite_code IS NOT NULL
             """
         )
         self.connection.commit()
+
+    def _ensure_column(self, table: str, column: str, definition: str) -> None:
+        columns = {
+            row["name"]
+            for row in self.connection.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if column not in columns:
+            self.connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     def ensure_user(self, telegram_id: int, first_name: str, username: Optional[str]) -> User:
         now = now_moscow_iso()
@@ -319,28 +348,51 @@ class Database:
             )
 
     def create_invite(self, inviter_id: int) -> str:
-        token = secrets.token_urlsafe(18)
-        self.connection.execute(
-            """
-            INSERT INTO invites (token, inviter_id, created_at)
-            VALUES (?, ?, ?)
-            """,
-            (token, inviter_id, now_moscow_iso()),
-        )
-        self.connection.commit()
-        return token
+        return self.get_or_create_invite_code(inviter_id)
 
-    def accept_invite(self, token: str, invited_user_id: int) -> Optional[InviteAcceptance]:
+    def get_or_create_invite_code(self, inviter_id: int) -> str:
         row = self.connection.execute(
-            """
-            SELECT token, inviter_id
-            FROM invites
-            WHERE token = ?
-            """,
-            (token,),
+            "SELECT invite_code FROM users WHERE telegram_id = ?",
+            (inviter_id,),
         ).fetchone()
         if row is None:
-            return None
+            raise LookupError("Пользователь не найден.")
+        if row["invite_code"]:
+            return str(row["invite_code"])
+
+        invite_code = self._generate_unique_invite_code()
+        self.connection.execute(
+            """
+            UPDATE users
+            SET invite_code = ?, updated_at = ?
+            WHERE telegram_id = ?
+            """,
+            (invite_code, now_moscow_iso(), inviter_id),
+        )
+        self.connection.commit()
+        return invite_code
+
+    def accept_invite(self, invite_code: str, invited_user_id: int) -> Optional[InviteAcceptance]:
+        normalized_invite_code = normalize_invite_code(invite_code)
+        row = self.connection.execute(
+            """
+            SELECT telegram_id AS inviter_id
+            FROM users
+            WHERE invite_code = ?
+            """,
+            (normalized_invite_code,),
+        ).fetchone()
+        if row is None:
+            row = self.connection.execute(
+                """
+                SELECT inviter_id
+                FROM invites
+                WHERE token = ?
+                """,
+                (invite_code,),
+            ).fetchone()
+            if row is None:
+                return None
 
         inviter_id = int(row["inviter_id"])
         if inviter_id == invited_user_id:
@@ -354,16 +406,32 @@ class Database:
 
         self.add_opponent(inviter_id, invited_name, invited_user_id)
         self.add_opponent(invited_user_id, inviter_name, inviter_id)
-        self.connection.execute(
-            """
-            UPDATE invites
-            SET used_by = ?, used_at = ?
-            WHERE token = ?
-            """,
-            (invited_user_id, now_moscow_iso(), token),
-        )
-        self.connection.commit()
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO invite_uses (
+                    inviter_id, invited_user_id, invite_code, accepted_at
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (inviter_id, invited_user_id, normalized_invite_code or invite_code, now_moscow_iso()),
+            )
+            self.connection.execute(
+                """
+                UPDATE invites
+                SET used_by = ?, used_at = ?
+                WHERE token = ?
+                """,
+                (invited_user_id, now_moscow_iso(), invite_code),
+            )
         return InviteAcceptance(inviter_id=inviter_id, is_self_invite=False, is_new_opponent=not already_linked)
+
+    def get_invite_referral_count(self, inviter_id: int) -> int:
+        row = self.connection.execute(
+            "SELECT COUNT(*) AS referral_count FROM invite_uses WHERE inviter_id = ?",
+            (inviter_id,),
+        ).fetchone()
+        return int(row["referral_count"])
 
     def add_game(self, owner_id: int, opponent_id: int, score: ParsedScore) -> None:
         opponent = self.get_opponent(owner_id, opponent_id)
@@ -653,6 +721,20 @@ class Database:
             counter += 1
         return candidate
 
+    def _generate_unique_invite_code(self) -> str:
+        while True:
+            invite_code = "".join(secrets.choice(INVITE_CODE_ALPHABET) for _ in range(INVITE_CODE_LENGTH))
+            row = self.connection.execute(
+                "SELECT 1 FROM users WHERE invite_code = ?",
+                (invite_code,),
+            ).fetchone()
+            if row is None:
+                return invite_code
+
 
 def now_moscow_iso() -> str:
     return datetime.now(MOSCOW_TZ).isoformat(timespec="seconds")
+
+
+def normalize_invite_code(invite_code: str) -> str:
+    return invite_code.strip().replace(" ", "").upper()

@@ -68,6 +68,7 @@ def edit_keyboard(opponent_id: int) -> InlineKeyboardMarkup:
 def invite_keyboard(invite_link: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text=texts.BUTTON_SEND_INVITE, url=texts.invite_share_url(invite_link))
+    builder.button(text=texts.BUTTON_HAVE_INVITE_CODE, callback_data="invite_code")
     builder.button(text=texts.BUTTON_MAIN_MENU, callback_data="main")
     builder.adjust(1)
     return builder.as_markup()

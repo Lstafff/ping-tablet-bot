@@ -14,8 +14,9 @@ TEST_OPPONENT_NAME = "Тестовый соперник"
 TEST_OPPONENT_USERNAME = "test"
 
 BUTTON_OPPONENTS = "🥷 Соперники"
-BUTTON_INVITE_OPPONENT = "💌 Пригласить"
+BUTTON_INVITE_OPPONENT = "👊 Бросить вызов"
 BUTTON_SEND_INVITE = "💌 Отправить"
+BUTTON_HAVE_INVITE_CODE = "✋ У меня есть код"
 BUTTON_TOTAL_STATS = "📊 Статистика"
 BUTTON_ADD_SCORE = "🏓 Добавить счёт"
 BUTTON_EDIT = "✏️ Изменить счёт"
@@ -40,6 +41,10 @@ OPPONENTS_MENU_TEXT = (
 INVITE_INVALID_TEXT = (
     "<h2>😔 Ссылка не работает...</h2>"
     "\nКажется с ней что-то не так. Попроси новую ссылку у твоего соперника"
+)
+INVITE_CODE_INVALID_TEXT = (
+    "<h2>😔 Код не работает...</h2>"
+    "\nПроверь код или попроси соперника отправить его ещё раз."
 )
 INVITE_SELF_TEXT = (
     "<h2>🔥 Сделали ссылку!</h2>"
@@ -149,16 +154,37 @@ def rich_to_basic_html(rich_html: str) -> str:
     basic_html = re.sub(r"</h[1-6]>", "</b>", basic_html)
     basic_html = re.sub(r"<cite>", "<i>", basic_html)
     basic_html = re.sub(r"</cite>", "</i>", basic_html)
+    basic_html = re.sub(r"<tr>(.*?)</tr>", table_row_to_basic_html, basic_html)
+    basic_html = re.sub(r"<table[^>]*>", "", basic_html)
+    basic_html = re.sub(r"</table>", "", basic_html)
     basic_html = re.sub(r"<hr\s*/?>", "\n\n", basic_html)
     basic_html = re.sub(r"<br\s*/?>", "\n", basic_html)
     return basic_html
 
 
-# Экран приглашения: ссылка, которую можно переслать сопернику.
-def invite(invite_link: str) -> str:
+# Превращает строку rich-таблицы в простой текст для запасного режима.
+def table_row_to_basic_html(match: re.Match[str]) -> str:
+    row_html = match.group(1)
+    cells = re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", row_html)
+    cells = [re.sub(r"<[^>]+>", "", cell).strip() for cell in cells]
+
+    if not cells:
+        return ""
+
+    if cells[0] == "Показатель":
+        return ""
+
+    if len(cells) == 2:
+        return f"{cells[0]}: {cells[1]}\n"
+
+    return f"{cells[0]}: {' / '.join(cells[1:])}\n"
+
+
+# Экран приглашения: ссылка и код, которые можно переслать сопернику.
+def invite(invite_link: str, invite_code: str) -> str:
     return (
-        "<h2>🥷 Пригласи соперника</h2>"
-        "\nОтправь эту ссылку или перешли сообщение своему сопернику:\n\n"
+        "<h2>🥷 Бросить вызов сопернику</h2>"
+        f"\nОтправь эту ссылку или код <code>{html.escape(invite_code)}</code> своему сопернику:\n\n"
         f"<code>{html.escape(invite_link)}</code>\n\n"
         "Когда он откроет ссылку и запустит бота, вы появитесь друг у друга в списке соперников."
     )
@@ -166,8 +192,16 @@ def invite(invite_link: str) -> str:
 
 # Ссылка для кнопки "Отправить" на экране приглашения.
 def invite_share_url(invite_link: str) -> str:
-    share_text = "пинг 🏓 понг 🏓 каунтер"
-    return f"https://t.me/share/url?{urlencode({'url': invite_link, 'text': share_text})}"
+    share_text = f"тебе бросили вызов\nв пинг 🏓 понг 🏓 каунтер\n\n{invite_link}"
+    return f"https://t.me/share/url?{urlencode({'text': share_text})}"
+
+
+# Экран ручного ввода кода приглашения.
+def invite_code_prompt() -> str:
+    return (
+        "<h2>✋ Ввести код</h2>"
+        "\nОтправь в чат код, который прислал твой соперник."
+    )
 
 
 # Уведомление автору ссылки, когда новый соперник принял приглашение.
@@ -182,9 +216,9 @@ def invite_new_opponent_notification(opponent_name: str) -> str:
 def score_prompt(opponent_name: str) -> str:
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
-        "\n👀 Напиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника."
-        "Например: <code>11-7</code> или <code>15 13</code>.\n\n"
+        "\n👀 Напиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника. Например: <code>11-7</code> или <code>15 13</code>.\n"
         "<blockquote>"
+        "<h4>Правила</h4>"
         "Партия заканчивается после 11 очков у победителя. При счёте 10-10 начинаются овертаймы (по одной подаче) до разницы в 2 очка."
         "</blockquote>"
     )
@@ -193,9 +227,8 @@ def score_prompt(opponent_name: str) -> str:
 # Меню редактирования статистики с соперником.
 def edit_menu(opponent_name: str, stats: StatsLike) -> str:
     return (
-        f"<h2>✏️ Редактирование стастистики с {html.escape(opponent_name)}</h2>"
-        f"\nОбщая статистика: {stats.wins}-{stats.losses}\n"
-        f"Всего мячей: {stats.points_for}-{stats.points_against}\n\n"
+        f"<h2>✏️ Изменение статистики с {html.escape(opponent_name)}</h2>"
+        f"\n{format_stats(stats)}\n\n"
         "Что хотите изменить?"
     )
 
@@ -219,7 +252,7 @@ def delete_opponent_done(opponent_name: str) -> str:
 # Экран ручного изменения общего счёта партий.
 def edit_games_prompt(opponent_name: str) -> str:
     return (
-        f"<h2>✏️ Редактирование счёта партий с {html.escape(opponent_name)}</h2>"
+        f"<h2>✏️ Изменение счёта партий с {html.escape(opponent_name)}</h2>"
         "\nНапишите общий счет по партиям: сначала ваши победы, потом поражения. Например: <code>8-5</code>."
     )
 
@@ -227,7 +260,7 @@ def edit_games_prompt(opponent_name: str) -> str:
 # Экран ручного изменения общего счёта по мячам.
 def edit_points_prompt(opponent_name: str) -> str:
     return (
-        f"<h2>✏️ Редактирование количества мячей с {html.escape(opponent_name)}</h2>"
+        f"<h2>✏️ Изменение количества мячей с {html.escape(opponent_name)}</h2>"
         "\nНапишите общий счет по мячам: сначала ваши мячи, потом мячи соперника. Например: <code>132-118</code>."
     )
 
@@ -277,11 +310,14 @@ def pair_needs_two_numbers(example: str) -> str:
     return f"Напишите два числа через пробел, дефис или двоеточие: {example}."
 
 
-# Общий блок статистики для обычных экранов.
+# Общая таблица статистики для экранов со счётом.
 def format_stats(stats: StatsLike) -> str:
     return (
-        f"･ Партии: {stats.games}\n"
-        f"･ Победы / Поражения: {stats.wins}-{stats.losses}\n"
-        f"･ Мячи: {stats.points_for}-{stats.points_against}\n"
-        f"･ Всего мячей: {stats.points_for + stats.points_against}"
+        "<table bordered striped>"
+        "<tr><th>Показатель</th><th>Значение</th></tr>"
+        f"<tr><td>Партии</td><td align=\"right\">{stats.games}</td></tr>"
+        f"<tr><td>Победы / Поражения</td><td align=\"right\">{stats.wins}-{stats.losses}</td></tr>"
+        f"<tr><td>Мячи</td><td align=\"right\">{stats.points_for}-{stats.points_against}</td></tr>"
+        f"<tr><td>Всего мячей</td><td align=\"right\">{stats.points_for + stats.points_against}</td></tr>"
+        "</table>"
     )

@@ -53,8 +53,17 @@ class BotFormattingTest(unittest.TestCase):
         query = parse_qs(urlparse(share_url).query)
 
         self.assertTrue(share_url.startswith("https://t.me/share/url?"))
-        self.assertEqual(query["url"], [invite_link])
-        self.assertEqual(query["text"], ["пинг 🏓 понг 🏓 каунтер"])
+        self.assertNotIn("url", query)
+        self.assertEqual(
+            query["text"],
+            [f"тебе бросили вызов\nв пинг 🏓 понг 🏓 каунтер\n\n{invite_link}"],
+        )
+
+    def test_invite_text_contains_link_and_code(self) -> None:
+        text = texts.invite("https://t.me/ping_tablet_bot?start=invite_ABC12345", "ABC12345")
+
+        self.assertIn("<code>ABC12345</code>", text)
+        self.assertIn("<code>https://t.me/ping_tablet_bot?start=invite_ABC12345</code>", text)
 
 
 if __name__ == "__main__":

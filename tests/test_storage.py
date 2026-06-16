@@ -86,6 +86,30 @@ class StorageTest(unittest.TestCase):
 
             opponent_user_ids = {opponent.opponent_user_id for opponent in db.list_opponents(1)}
             self.assertEqual(opponent_user_ids, {2, 3})
+            self.assertEqual(db.get_invite_referral_count(1), 2)
+
+    def test_invite_code_is_stable_for_user(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(str(Path(directory) / "bot.sqlite3"))
+            db.ensure_user(1, "Игрок 1", "owner")
+
+            first_code = db.get_or_create_invite_code(1)
+            second_code = db.get_or_create_invite_code(1)
+
+            self.assertEqual(first_code, second_code)
+
+    def test_invite_code_can_be_entered_manually(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(str(Path(directory) / "bot.sqlite3"))
+            db.ensure_user(1, "Игрок 1", "owner")
+            db.ensure_user(2, "Игрок 2", None)
+            invite_code = db.get_or_create_invite_code(1)
+
+            acceptance = db.accept_invite(invite_code.lower(), 2)
+
+            self.assertIsNotNone(acceptance)
+            self.assertTrue(acceptance.is_new_opponent)
+            self.assertEqual(db.get_invite_referral_count(1), 1)
 
     def test_delete_local_opponent_removes_stats(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
