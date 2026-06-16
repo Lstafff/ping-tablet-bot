@@ -17,6 +17,7 @@ from app.keyboards import (
     edit_keyboard,
     invite_keyboard,
     main_menu_keyboard,
+    opponent_daily_stats_keyboard,
     opponent_keyboard,
     opponents_keyboard,
 )
@@ -27,6 +28,7 @@ from app.storage import Database
 router = Router()
 db: Optional[Database] = None
 seed_test_opponent = True
+DAILY_STATS_PAGE_SIZE = 14
 
 
 @router.message(CommandStart())
@@ -65,6 +67,11 @@ async def stats_all_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
     await show_total_stats(bot, callback.message.chat.id, callback.from_user.id)
+
+
+@router.callback_query(F.data == "noop")
+async def noop_callback(callback: CallbackQuery) -> None:
+    await callback.answer()
 
 
 @router.callback_query(F.data == "invite")
@@ -148,6 +155,16 @@ async def edit_callback(callback: CallbackQuery, bot: Bot) -> None:
         ),
         edit_keyboard(opponent_id),
     )
+
+
+@router.callback_query(F.data.startswith("stats_days:"))
+async def stats_days_callback(callback: CallbackQuery, bot: Bot) -> None:
+    await callback.answer()
+    ensure_user(callback.from_user)
+    parts = callback.data.split(":")
+    opponent_id = int(parts[1])
+    page = int(parts[2]) if len(parts) > 2 else 1
+    await show_opponent_daily_stats(bot, callback.message.chat.id, callback.from_user.id, opponent_id, page)
 
 
 @router.callback_query(F.data.startswith("edit_games:"))
@@ -349,6 +366,27 @@ async def show_opponent(bot: Bot, chat_id: int, user_id: int, opponent_id: int) 
             texts.display_user_name(user.first_name, user.username),
         ),
         opponent_keyboard(opponent_id),
+    )
+
+
+async def show_opponent_daily_stats(bot: Bot, chat_id: int, user_id: int, opponent_id: int, page: int = 1) -> None:
+    opponent = db.get_opponent(user_id, opponent_id)
+    daily_stats = db.get_opponent_daily_stats(user_id, opponent_id)
+    user = db.get_user(user_id)
+    total_pages = max(1, (len(daily_stats) + DAILY_STATS_PAGE_SIZE - 1) // DAILY_STATS_PAGE_SIZE)
+    page = min(max(page, 1), total_pages)
+    page_start = (page - 1) * DAILY_STATS_PAGE_SIZE
+    page_daily_stats = daily_stats[page_start : page_start + DAILY_STATS_PAGE_SIZE]
+    await render(
+        bot,
+        chat_id,
+        user_id,
+        texts.opponent_daily_stats(
+            texts.opponent_title(opponent),
+            page_daily_stats,
+            texts.display_user_name(user.first_name, user.username),
+        ),
+        opponent_daily_stats_keyboard(opponent_id, page, total_pages),
     )
 
 

@@ -49,6 +49,13 @@ class Stats:
 
 
 @dataclass(frozen=True)
+class DailyStats:
+    played_on: str
+    wins: int
+    losses: int
+
+
+@dataclass(frozen=True)
 class Session:
     mode: str
     opponent_id: Optional[int]
@@ -155,6 +162,22 @@ class Database:
             """
         )
         self._ensure_column("users", "invite_code", "TEXT")
+        self._ensure_column("aggregate_adjustments", "games_updated_at", "TEXT")
+        self._ensure_column("aggregate_adjustments", "points_updated_at", "TEXT")
+        self.connection.execute(
+            """
+            UPDATE aggregate_adjustments
+            SET games_updated_at = updated_at
+            WHERE games_updated_at IS NULL
+            """
+        )
+        self.connection.execute(
+            """
+            UPDATE aggregate_adjustments
+            SET points_updated_at = updated_at
+            WHERE points_updated_at IS NULL
+            """
+        )
         self.connection.execute(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite_code
@@ -496,6 +519,59 @@ class Database:
             )
         return total
 
+    def get_opponent_daily_stats(self, owner_id: int, opponent_id: int) -> list[DailyStats]:
+        opponent = self.get_opponent(owner_id, opponent_id)
+        daily: dict[str, tuple[int, int]] = {}
+
+        if opponent.opponent_user_id is None:
+            rows = self.connection.execute(
+                """
+                SELECT played_at, player_a_score, player_b_score
+                FROM games
+                WHERE owner_id = ? AND opponent_id = ?
+                ORDER BY played_at DESC
+                """,
+                (owner_id, opponent.id),
+            ).fetchall()
+            for row in rows:
+                own_score = int(row["player_a_score"])
+                opponent_score = int(row["player_b_score"])
+                add_daily_result(daily, row["played_at"], own_score, opponent_score)
+        else:
+            rows = self.connection.execute(
+                """
+                SELECT player_a_id, player_b_id, player_a_score, player_b_score, played_at
+                FROM games
+                WHERE
+                    (player_a_id = ? AND player_b_id = ?)
+                    OR
+                    (player_a_id = ? AND player_b_id = ?)
+                ORDER BY played_at DESC
+                """,
+                (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id),
+            ).fetchall()
+            for row in rows:
+                if int(row["player_a_id"]) == owner_id:
+                    own_score = int(row["player_a_score"])
+                    opponent_score = int(row["player_b_score"])
+                else:
+                    own_score = int(row["player_b_score"])
+                    opponent_score = int(row["player_a_score"])
+                add_daily_result(daily, row["played_at"], own_score, opponent_score)
+
+        adjustment = self._get_adjustment(owner_id, opponent_id)
+        add_daily_delta(
+            daily,
+            adjustment["games_updated_at"],
+            adjustment["games_won_delta"],
+            adjustment["games_lost_delta"],
+        )
+
+        return [
+            DailyStats(played_on=played_on, wins=wins, losses=losses)
+            for played_on, (wins, losses) in sorted(daily.items(), reverse=True)
+        ]
+
     def set_games_total(self, owner_id: int, opponent_id: int, wins: int, losses: int) -> None:
         with self.connection:
             self._set_games_total_for_one(owner_id, opponent_id, wins, losses)
@@ -520,6 +596,8 @@ class Database:
             games_lost_delta=losses - raw.losses,
             points_for_delta=adjustment["points_for_delta"],
             points_against_delta=adjustment["points_against_delta"],
+            games_updated_at=now_moscow_iso(),
+            points_updated_at=adjustment["points_updated_at"],
         )
 
     def _set_points_total_for_one(self, owner_id: int, opponent_id: int, points_for: int, points_against: int) -> None:
@@ -532,6 +610,8 @@ class Database:
             games_lost_delta=adjustment["games_lost_delta"],
             points_for_delta=points_for - raw.points_for,
             points_against_delta=points_against - raw.points_against,
+            games_updated_at=adjustment["games_updated_at"],
+            points_updated_at=now_moscow_iso(),
         )
 
     def set_session(self, owner_id: int, mode: str, opponent_id: Optional[int]) -> None:
@@ -618,7 +698,13 @@ class Database:
     def _get_adjustment(self, owner_id: int, opponent_id: int) -> dict[str, int]:
         row = self.connection.execute(
             """
-            SELECT games_won_delta, games_lost_delta, points_for_delta, points_against_delta
+            SELECT
+                games_won_delta,
+                games_lost_delta,
+                points_for_delta,
+                points_against_delta,
+                games_updated_at,
+                points_updated_at
             FROM aggregate_adjustments
             WHERE owner_id = ? AND opponent_id = ?
             """,
@@ -630,12 +716,16 @@ class Database:
                 "games_lost_delta": 0,
                 "points_for_delta": 0,
                 "points_against_delta": 0,
+                "games_updated_at": None,
+                "points_updated_at": None,
             }
         return {
             "games_won_delta": int(row["games_won_delta"]),
             "games_lost_delta": int(row["games_lost_delta"]),
             "points_for_delta": int(row["points_for_delta"]),
             "points_against_delta": int(row["points_against_delta"]),
+            "games_updated_at": row["games_updated_at"],
+            "points_updated_at": row["points_updated_at"],
         }
 
     def _delete_adjustment(self, owner_id: int, opponent_id: int) -> None:
@@ -671,20 +761,25 @@ class Database:
         games_lost_delta: int,
         points_for_delta: int,
         points_against_delta: int,
+        games_updated_at: Optional[str],
+        points_updated_at: Optional[str],
     ) -> None:
         self.connection.execute(
             """
             INSERT INTO aggregate_adjustments (
                 owner_id, opponent_id, games_won_delta, games_lost_delta,
-                points_for_delta, points_against_delta, updated_at
+                points_for_delta, points_against_delta, updated_at,
+                games_updated_at, points_updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(owner_id, opponent_id) DO UPDATE SET
                 games_won_delta = excluded.games_won_delta,
                 games_lost_delta = excluded.games_lost_delta,
                 points_for_delta = excluded.points_for_delta,
                 points_against_delta = excluded.points_against_delta,
-                updated_at = excluded.updated_at
+                updated_at = excluded.updated_at,
+                games_updated_at = excluded.games_updated_at,
+                points_updated_at = excluded.points_updated_at
             """,
             (
                 owner_id,
@@ -694,6 +789,8 @@ class Database:
                 points_for_delta,
                 points_against_delta,
                 now_moscow_iso(),
+                games_updated_at,
+                points_updated_at,
             ),
         )
 
@@ -738,3 +835,27 @@ def now_moscow_iso() -> str:
 
 def normalize_invite_code(invite_code: str) -> str:
     return invite_code.strip().replace(" ", "").upper()
+
+
+def add_daily_result(daily: dict[str, tuple[int, int]], played_at: str, own_score: int, opponent_score: int) -> None:
+    played_on = played_at[:10]
+    wins, losses = daily.get(played_on, (0, 0))
+    if own_score > opponent_score:
+        wins += 1
+    else:
+        losses += 1
+    daily[played_on] = (wins, losses)
+
+
+def add_daily_delta(
+    daily: dict[str, tuple[int, int]],
+    played_at: Optional[str],
+    wins_delta: int,
+    losses_delta: int,
+) -> None:
+    if played_at is None or (wins_delta == 0 and losses_delta == 0):
+        return
+
+    played_on = played_at[:10]
+    wins, losses = daily.get(played_on, (0, 0))
+    daily[played_on] = (wins + wins_delta, losses + losses_delta)

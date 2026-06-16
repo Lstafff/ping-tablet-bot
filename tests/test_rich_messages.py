@@ -1,7 +1,15 @@
 import unittest
 from dataclasses import dataclass
 
-from app.texts import format_rich_user_name, format_stats, opponent_stats, rich_to_basic_html, total_stats_rich_html
+from app.texts import (
+    format_day,
+    format_rich_user_name,
+    format_stats,
+    opponent_daily_stats,
+    opponent_stats,
+    rich_to_basic_html,
+    total_stats_rich_html,
+)
 
 
 @dataclass(frozen=True)
@@ -14,6 +22,13 @@ class Stats:
     @property
     def games(self) -> int:
         return self.wins + self.losses
+
+
+@dataclass(frozen=True)
+class DailyStats:
+    played_on: str
+    wins: int
+    losses: int
 
 
 class RichMessagesTest(unittest.TestCase):
@@ -52,6 +67,19 @@ class RichMessagesTest(unittest.TestCase):
         self.assertIn("<th>🥷 @me</th>", rich_html)
         self.assertIn("<th>🏓 @test</th>", rich_html)
         self.assertNotIn("<th>🥷 Игрок</th>", rich_html)
+
+    def test_opponent_daily_stats_uses_day_table(self) -> None:
+        rich_html = opponent_daily_stats(
+            "@test",
+            [DailyStats(played_on="2026-06-12", wins=12, losses=3)],
+            "@me",
+        )
+
+        self.assertIn("<th>День</th><th>@me</th><th>@test</th>", rich_html)
+        self.assertIn("<tr><td>12 июня '26</td><td align=\"right\">12</td><td align=\"right\">3</td></tr>", rich_html)
+
+    def test_format_day_uses_russian_month(self) -> None:
+        self.assertEqual(format_day("2026-06-12"), "12 июня '26")
 
     def test_rich_to_basic_html_downgrades_headings(self) -> None:
         self.assertEqual(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import re
+from datetime import datetime
 from typing import Optional, Protocol
 from urllib.parse import urlencode
 
@@ -19,7 +20,8 @@ BUTTON_SEND_INVITE = "💌 Отправить"
 BUTTON_HAVE_INVITE_CODE = "✋ У меня есть код"
 BUTTON_TOTAL_STATS = "📊 Статистика"
 BUTTON_ADD_SCORE = "🏓 Добавить счёт"
-BUTTON_EDIT = "✏️ Изменить счёт"
+BUTTON_EDIT = "✏️ Изменить"
+BUTTON_OPPONENT_DAILY_STATS = "📊 Статистика"
 BUTTON_DELETE_OPPONENT = "❌ Удалить соперника"
 BUTTON_CONFIRM_DELETE_OPPONENT = "✅ Да, удалить"
 BUTTON_CANCEL = "↩️ Отмена"
@@ -67,6 +69,20 @@ ERROR_DEUCE_NEEDS_TWO_POINT_LEAD = "❌ Ещё не всё! При счёте 10
 ERROR_OVERTIME_ONLY_AFTER_DEUCE = "❌ Ещё играем! Счёт больше 11 возможен только после 10:10."
 ERROR_WIN_REQUIRES_TWO_POINT_LEAD = "❌ Кажется, что-то не так... Победа в партии должна быть с разницей минимум в 2 очка."
 PAIR_DEFAULT_EXAMPLE = "11-7"
+MONTHS_RU = {
+    1: "января",
+    2: "февраля",
+    3: "марта",
+    4: "апреля",
+    5: "мая",
+    6: "июня",
+    7: "июля",
+    8: "августа",
+    9: "сентября",
+    10: "октября",
+    11: "ноября",
+    12: "декабря",
+}
 
 
 class StatsLike(Protocol):
@@ -91,6 +107,12 @@ class OpponentLike(Protocol):
     opponent_user_id: Optional[int]
     first_name: Optional[str]
     username: Optional[str]
+
+
+class DailyStatsLike(Protocol):
+    played_on: str
+    wins: int
+    losses: int
 
 
 # Имя игрока для таблиц и уведомлений: @username, если есть, иначе имя.
@@ -163,7 +185,7 @@ def table_row_to_basic_html(match: re.Match[str]) -> str:
     if not cells:
         return ""
 
-    if cells[0] == "Показатель":
+    if cells[0] in {"Показатель", "День"}:
         return ""
 
     if len(cells) == 3 and cells[0] == "Победы":
@@ -217,7 +239,7 @@ def invite_new_opponent_notification(opponent_name: str) -> str:
 def score_prompt(opponent_name: str) -> str:
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
-        "\n👀 Напиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника. Например: <code>11-7</code> или <code>15 13</code>.\n"
+        "\nНапиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника. Например: <code>11-7</code> или <code>15 13</code>.\n"
         "<blockquote>"
         "<h4>Правила</h4>"
         "Партия заканчивается после 11 очков у победителя. При счёте 10-10 начинаются овертаймы (по одной подаче) до разницы в 2 очка."
@@ -288,18 +310,43 @@ def score_saved(opponent_name: str, score: ScoreLike, stats: StatsLike, user_nam
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
         f"\n✅ Добавлен счёт: {score.own_score}-{score.opponent_score}.{overtime}\n\n"
-        "<h2>📊 Текущая статистика:</h2>\n"
+        "<h2>📊 Текущая статистика:</h2>"
         f"{format_stats(stats, user_name=user_name, opponent_name=opponent_name)}"
-        "\n\nМожно сразу написать результат следующего матча."
+        "\nМожно сразу написать результат следующего матча."
     )
 
 
 # Карточка статистики с одним соперником.
 def opponent_stats(opponent_name: str, stats: StatsLike, user_name: str = DEFAULT_USER_NAME) -> str:
     return (
-        f"<h2>📊 Статистика матчей с {html.escape(opponent_name)}</h2>"
+        f"<h2>🏓 Матчи с {html.escape(opponent_name)}</h2>"
         "<hr/>"
         f"{format_stats(stats, user_name=user_name, opponent_name=opponent_name)}"
+    )
+
+
+# Таблица статистики с конкретным соперником по дням.
+def opponent_daily_stats(opponent_name: str, daily_stats: list[DailyStatsLike], user_name: str = DEFAULT_USER_NAME) -> str:
+    safe_user_name = format_rich_user_name(user_name)
+    safe_opponent_name = format_rich_user_name(opponent_name)
+    rows = "".join(
+        (
+            f"<tr><td>{format_day(daily_stat.played_on)}</td>"
+            f"<td align=\"right\">{daily_stat.wins}</td>"
+            f"<td align=\"right\">{daily_stat.losses}</td></tr>"
+        )
+        for daily_stat in daily_stats
+    )
+    if not rows:
+        rows = "<tr><td colspan=\"3\">Пока нет сыгранных матчей.</td></tr>"
+
+    return (
+        f"<h2>📊 Статистика по дням с {html.escape(opponent_name)}</h2>"
+        "<hr/>"
+        "<table bordered striped>"
+        f"<tr><th>День</th><th>{safe_user_name}</th><th>{safe_opponent_name}</th></tr>"
+        f"{rows}"
+        "</table>"
     )
 
 
@@ -327,3 +374,8 @@ def format_stats(stats: StatsLike, user_name: str = DEFAULT_USER_NAME, opponent_
         f"<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">{stats.points_for + stats.points_against}</td></tr>"
         "</table>"
     )
+
+
+def format_day(played_on: str) -> str:
+    day = datetime.strptime(played_on, "%Y-%m-%d")
+    return f"{day.day} {MONTHS_RU[day.month]} '{day.year % 100:02d}"

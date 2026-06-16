@@ -65,6 +65,71 @@ class StorageTest(unittest.TestCase):
             self.assertEqual((second_stats.wins, second_stats.losses), (2, 3))
             self.assertEqual((second_stats.points_for, second_stats.points_against), (47, 55))
 
+    def test_opponent_daily_stats_for_local_opponent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(str(Path(directory) / "bot.sqlite3"))
+            db.ensure_user(1, "Игрок", None)
+            opponent = db.add_opponent(1, "Тестовый соперник", None)
+            db.add_game(1, opponent.id, parse_score("11-7"))
+            db.connection.execute("UPDATE games SET played_at = ? WHERE id = ?", ("2026-06-12T10:00:00+03:00", 1))
+            db.add_game(1, opponent.id, parse_score("8-11"))
+            db.connection.execute("UPDATE games SET played_at = ? WHERE id = ?", ("2026-06-12T11:00:00+03:00", 2))
+            db.add_game(1, opponent.id, parse_score("11-5"))
+            db.connection.execute("UPDATE games SET played_at = ? WHERE id = ?", ("2026-06-14T11:00:00+03:00", 3))
+            db.connection.commit()
+
+            daily_stats = db.get_opponent_daily_stats(1, opponent.id)
+
+            self.assertEqual(
+                [(day.played_on, day.wins, day.losses) for day in daily_stats],
+                [("2026-06-14", 1, 0), ("2026-06-12", 1, 1)],
+            )
+
+    def test_manual_games_total_is_visible_in_daily_stats_on_edit_day(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(str(Path(directory) / "bot.sqlite3"))
+            db.ensure_user(1, "Игрок", None)
+            opponent = db.add_opponent(1, "Тестовый соперник", None)
+
+            db.set_games_total(1, opponent.id, 4, 2)
+            db.connection.execute(
+                "UPDATE aggregate_adjustments SET games_updated_at = ? WHERE owner_id = ? AND opponent_id = ?",
+                ("2026-06-13T12:00:00+03:00", 1, opponent.id),
+            )
+            db.connection.commit()
+
+            daily_stats = db.get_opponent_daily_stats(1, opponent.id)
+
+            self.assertEqual(
+                [(day.played_on, day.wins, day.losses) for day in daily_stats],
+                [("2026-06-13", 4, 2)],
+            )
+
+    def test_opponent_daily_stats_for_linked_opponent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(str(Path(directory) / "bot.sqlite3"))
+            db.ensure_user(1, "Игрок 1", None)
+            db.ensure_user(2, "Игрок 2", None)
+            first_opponent = db.add_opponent(1, "Игрок 2", 2)
+            second_opponent = db.add_opponent(2, "Игрок 1", 1)
+            db.add_game(1, first_opponent.id, parse_score("11-7"))
+            db.connection.execute("UPDATE games SET played_at = ? WHERE id = ?", ("2026-06-12T10:00:00+03:00", 1))
+            db.add_game(2, second_opponent.id, parse_score("11-8"))
+            db.connection.execute("UPDATE games SET played_at = ? WHERE id = ?", ("2026-06-12T11:00:00+03:00", 2))
+            db.connection.commit()
+
+            first_daily_stats = db.get_opponent_daily_stats(1, first_opponent.id)
+            second_daily_stats = db.get_opponent_daily_stats(2, second_opponent.id)
+
+            self.assertEqual(
+                [(day.played_on, day.wins, day.losses) for day in first_daily_stats],
+                [("2026-06-12", 1, 1)],
+            )
+            self.assertEqual(
+                [(day.played_on, day.wins, day.losses) for day in second_daily_stats],
+                [("2026-06-12", 1, 1)],
+            )
+
     def test_invite_link_can_be_used_by_multiple_players(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             db = Database(str(Path(directory) / "bot.sqlite3"))
