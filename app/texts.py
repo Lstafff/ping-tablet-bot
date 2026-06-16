@@ -28,16 +28,31 @@ BUTTON_EDIT_GAMES = "🔢 Счёт партий"
 BUTTON_EDIT_POINTS = "🎯 Количество мячей"
 
 MAIN_MENU_TEXT = (
-    "<h2>🏓 Теннисный счётчик</h2>\n\n"
-    "Это бот для ведения статистики матчей с друзьями.\n\n"
+    "<h2>🏓 Теннисный счётчик</h2>"
+    "\n\nЭто бот для ведения статистики матчей с друзьями.\n\n"
     "Если нашёл ошибку — пиши @lstaff"
 )
-OPPONENTS_MENU_TEXT = "<h2>🥷 Соперники</h2>\n\nКто твой соперник сегодня?"
+OPPONENTS_MENU_TEXT = (
+    "<h2>🥷 Соперники</h2>"
+    "\n\nКто твой соперник сегодня?"
+)
 
-INVITE_INVALID_TEXT = "<h2>😔 Ссылка не работает...</h2>\n\nКажется с ней что-то не так. Попроси новую ссылку у твоего соперника"
-INVITE_SELF_TEXT = "<h2>🔥 Сделали ссылку!</h2>\n\nОтправь её другому игроку, чтобы начать вести статстику"
-INVITE_ACCEPTED_TEXT = "<h2>🥳 Готово!</h2>\n\nТвой соперник добавлен. Теперь можно вести статистику партий"
-INVITE_ALREADY_CONNECTED_TEXT = "<h2>👌 Уже знакомы</h2>\n\nЭтот соперник уже есть в твоём списке"
+INVITE_INVALID_TEXT = (
+    "<h2>😔 Ссылка не работает...</h2>"
+    "\n\nКажется с ней что-то не так. Попроси новую ссылку у твоего соперника"
+)
+INVITE_SELF_TEXT = (
+    "<h2>🔥 Сделали ссылку!</h2>"
+    "\n\nОтправь её другому игроку, чтобы начать вести статстику"
+)
+INVITE_ACCEPTED_TEXT = (
+    "<h2>🥳 Готово!</h2>"
+    "\n\nТвой соперник добавлен. Теперь можно вести статистику партий"
+)
+INVITE_ALREADY_CONNECTED_TEXT = (
+    "<h2>👌 Уже знакомы</h2>"
+    "\n\nЭтот соперник уже есть в твоём списке"
+)
 
 ERROR_SCORE_NEEDS_TWO_NUMBERS = "👀 Напиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника. Например: 11-7.\n\nПартия заканчиается после 11 очков у победителя. При счёте 10-10 начинаются овертаймы (по одной подаче) до разницы в 2 очка."
 ERROR_VALUES_CANNOT_BE_NEGATIVE = "❌ Как вы ушли в минус? Очки не могут быть отрицательными."
@@ -100,7 +115,10 @@ def username_label(username: str) -> str:
 
 # Запасной обычный текст общей статистики, если rich-таблица не отправилась.
 def total_stats(stats: StatsLike) -> str:
-    return f"<h2>📊 Статистика всех матчей</h2>\n\n{format_stats(stats)}"
+    return (
+        "<h2>📊 Статистика всех матчей</h2>"
+        f"\n\n{format_stats(stats)}"
+    )
 
 
 # Rich-таблица на экране общей статистики.
@@ -108,7 +126,8 @@ def total_stats_rich_html(stats: StatsLike, user_name: str) -> str:
     safe_user_name = format_rich_user_name(user_name)
 
     return (
-        "<h2>📊 Статистика всех матчей</h2>\n\n"
+        "<h2>📊 Статистика всех матчей</h2>"
+        "\n\n"
         "<table bordered striped>"
         f"<tr><th>Показатель</th><th>🥷 {safe_user_name}</th><th>🏓 Оппоненты</th></tr>"
         f"<tr><td>Победы</td><td align=\"right\">{stats.wins}</td><td align=\"right\">{stats.losses}</td></tr>"
@@ -138,8 +157,8 @@ def rich_to_basic_html(rich_html: str) -> str:
 # Экран приглашения: ссылка, которую можно переслать сопернику.
 def invite(invite_link: str) -> str:
     return (
-        "<h2>🥷 Пригласи соперника</h2>\n\n"
-        "Отправь эту ссылку или перешли сообщение своему сопернику:\n\n"
+        "<h2>🥷 Пригласи соперника</h2>"
+        "\n\nОтправь эту ссылку или перешли сообщение своему сопернику:\n\n"
         f"<code>{html.escape(invite_link)}</code>\n\n"
         "Когда он откроет ссылку и запустит бота, вы появитесь друг у друга в списке соперников."
     )
@@ -154,16 +173,16 @@ def invite_share_url(invite_link: str) -> str:
 # Уведомление автору ссылки, когда новый соперник принял приглашение.
 def invite_new_opponent_notification(opponent_name: str) -> str:
     return (
-        "<h2>💌 Новый соперник</h2>\n\n"
-        f"{html.escape(opponent_name)} открыл твою ссылку, пора сыграть!"
+        "<h2>💌 Новый соперник</h2>"
+        f"\n\n{html.escape(opponent_name)} открыл твою ссылку, пора сыграть!"
     )
 
 
 # Экран ввода результата партии с конкретным соперником.
 def score_prompt(opponent_name: str) -> str:
     return (
-        f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>\n\n"
-        "👀 Напиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника."
+        f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
+        "\n\n👀 Напиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника."
         "Например: <code>11-7</code> или <code>15 13</code>.\n\n"
         "<blockquote>"
         "<cite>Правила</cite><br/>"
@@ -175,8 +194,8 @@ def score_prompt(opponent_name: str) -> str:
 # Меню редактирования статистики с соперником.
 def edit_menu(opponent_name: str, stats: StatsLike) -> str:
     return (
-        f"<h2>✏️ Редактирование стастистики с {html.escape(opponent_name)}</h2>\n\n"
-        f"Общая статистика: {stats.wins}-{stats.losses}\n"
+        f"<h2>✏️ Редактирование стастистики с {html.escape(opponent_name)}</h2>"
+        f"\n\nОбщая статистика: {stats.wins}-{stats.losses}\n"
         f"Всего мячей: {stats.points_for}-{stats.points_against}\n\n"
         "Что хотите изменить?"
     )
@@ -185,37 +204,40 @@ def edit_menu(opponent_name: str, stats: StatsLike) -> str:
 # Подтверждение удаления соперника.
 def delete_opponent_confirm(opponent_name: str) -> str:
     return (
-        f"<h2>🗑️ Удалить соперника {html.escape(opponent_name)}?</h2>\n\n"
-        "Ты удалишь своего соперника и всю вашу статистику."
+        f"<h2>🗑️ Удалить соперника {html.escape(opponent_name)}?</h2>"
+        "\n\nТы удалишь своего соперника и всю вашу статистику."
     )
 
 
 # Сообщение после удаления соперника.
 def delete_opponent_done(opponent_name: str) -> str:
-    return f"<h2>😔 Соперника больше нет</h2>\n\n{html.escape(opponent_name)} удалён вместе со всей вашей историей..."
+    return (
+        "<h2>😔 Соперника больше нет</h2>"
+        f"\n\n{html.escape(opponent_name)} удалён вместе со всей вашей историей..."
+    )
 
 
 # Экран ручного изменения общего счёта партий.
 def edit_games_prompt(opponent_name: str) -> str:
     return (
-        f"<h2>✏️ Редактирование счёта партий с {html.escape(opponent_name)}</h2>\n\n"
-        "Напишите общий счет по партиям: сначала ваши победы, потом поражения. Например: <code>8-5</code>."
+        f"<h2>✏️ Редактирование счёта партий с {html.escape(opponent_name)}</h2>"
+        "\n\nНапишите общий счет по партиям: сначала ваши победы, потом поражения. Например: <code>8-5</code>."
     )
 
 
 # Экран ручного изменения общего счёта по мячам.
 def edit_points_prompt(opponent_name: str) -> str:
     return (
-        f"<h2>✏️ Редактирование количества мячей с {html.escape(opponent_name)}</h2>\n\n"
-        "Напишите общий счет по мячам: сначала ваши мячи, потом мячи соперника. Например: <code>132-118</code>."
+        f"<h2>✏️ Редактирование количества мячей с {html.escape(opponent_name)}</h2>"
+        "\n\nНапишите общий счет по мячам: сначала ваши мячи, потом мячи соперника. Например: <code>132-118</code>."
     )
 
 
 # Ошибка ввода результата партии, остаётся на экране матча.
 def score_input_error(opponent_name: str, error: Exception) -> str:
     return (
-        f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>\n\n"
-        f"{html.escape(str(error))}\n\n"
+        f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
+        f"\n\n{html.escape(str(error))}\n\n"
         "Попробуйте ещё раз: сначала ваш счёт, потом счёт соперника."
     )
 
@@ -230,17 +252,20 @@ def score_saved(opponent_name: str, score: ScoreLike, stats: StatsLike) -> str:
         )
 
     return (
-        f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>\n\n"
-        f"✅ Добавлен счёт: {score.own_score}-{score.opponent_score}.{overtime}\n\n"
-        "<h2>📊 Текущая статистика:</h2>\n\n"
-        f"{format_stats(stats)}\n\n"
+        f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
+        f"\n\n✅ Добавлен счёт: {score.own_score}-{score.opponent_score}.{overtime}\n\n"
+        "<h2>📊 Текущая статистика:</h2>"
+        f"\n\n{format_stats(stats)}\n\n"
         "Можно сразу написать результат следующего матча."
     )
 
 
 # Карточка статистики с одним соперником.
 def opponent_stats(opponent_name: str, stats: StatsLike) -> str:
-    return f"<h2>📊 Статистика матчей с {html.escape(opponent_name)}</h2>\n\n{format_stats(stats)}"
+    return (
+        f"<h2>📊 Статистика матчей с {html.escape(opponent_name)}</h2>"
+        f"\n\n{format_stats(stats)}"
+    )
 
 
 # Простая ошибка без отдельного экрана, например при ручной правке счёта.
