@@ -45,6 +45,20 @@ class StorageTest(unittest.TestCase):
             self.assertEqual((second_stats.wins, second_stats.losses), (0, 1))
             self.assertEqual((second_stats.points_for, second_stats.points_against), (7, 11))
 
+    def test_delete_game_removes_single_saved_score(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(str(Path(directory) / "bot.sqlite3"))
+            db.ensure_user(1, "Игрок", None)
+            opponent = db.add_opponent(1, "Тестовый соперник", None)
+            game_id = db.add_game(1, opponent.id, parse_score("11-7"))
+
+            deleted = db.delete_game(1, opponent.id, game_id)
+
+            stats = db.get_opponent_stats(1, opponent.id)
+            self.assertTrue(deleted)
+            self.assertEqual(stats.games, 0)
+            self.assertEqual((stats.points_for, stats.points_against), (0, 0))
+
     def test_manual_totals_for_linked_opponent_are_visible_for_both_players(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             db = Database(str(Path(directory) / "bot.sqlite3"))

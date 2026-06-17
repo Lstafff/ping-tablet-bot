@@ -20,6 +20,7 @@ from app.keyboards import (
     opponent_daily_stats_keyboard,
     opponent_keyboard,
     opponents_keyboard,
+    score_saved_keyboard,
 )
 from app.scoring import ScoreError, parse_pair, parse_score
 from app.storage import Database
@@ -132,6 +133,35 @@ async def score_add_callback(callback: CallbackQuery, bot: Bot) -> None:
         callback.message.chat.id,
         callback.from_user.id,
         texts.score_prompt(texts.opponent_title(opponent)),
+        back_to_opponent_keyboard(opponent_id),
+    )
+
+
+@router.callback_query(F.data.startswith("score_undo:"))
+async def score_undo_callback(callback: CallbackQuery, bot: Bot) -> None:
+    ensure_user(callback.from_user)
+    _, opponent_id_raw, game_id_raw = callback.data.split(":")
+    opponent_id = int(opponent_id_raw)
+    game_id = int(game_id_raw)
+    deleted = db.delete_game(callback.from_user.id, opponent_id, game_id)
+    opponent = db.get_opponent(callback.from_user.id, opponent_id)
+    if not deleted:
+        await callback.answer("Этот счёт уже отменён.")
+        return
+
+    await callback.answer()
+    db.set_session(callback.from_user.id, "await_score", opponent_id)
+    stats = db.get_opponent_stats(callback.from_user.id, opponent_id)
+    user = db.get_user(callback.from_user.id)
+    await render(
+        bot,
+        callback.message.chat.id,
+        callback.from_user.id,
+        texts.score_undone(
+            texts.opponent_title(opponent),
+            stats,
+            texts.display_user_name(user.first_name, user.username),
+        ),
         back_to_opponent_keyboard(opponent_id),
     )
 
@@ -298,7 +328,7 @@ async def handle_score_input(message: Message, bot: Bot, user_id: int, opponent_
         )
         return
 
-    db.add_game(user_id, opponent_id, score)
+    game_id = db.add_game(user_id, opponent_id, score)
     stats = db.get_opponent_stats(user_id, opponent_id)
     user = db.get_user(user_id)
     await render(
@@ -311,7 +341,7 @@ async def handle_score_input(message: Message, bot: Bot, user_id: int, opponent_
             stats,
             texts.display_user_name(user.first_name, user.username),
         ),
-        back_to_opponent_keyboard(opponent_id),
+        score_saved_keyboard(opponent_id, game_id),
     )
 
 

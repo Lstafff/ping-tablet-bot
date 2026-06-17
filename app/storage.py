@@ -456,7 +456,7 @@ class Database:
         ).fetchone()
         return int(row["referral_count"])
 
-    def add_game(self, owner_id: int, opponent_id: int, score: ParsedScore) -> None:
+    def add_game(self, owner_id: int, opponent_id: int, score: ParsedScore) -> int:
         opponent = self.get_opponent(owner_id, opponent_id)
         now = now_moscow_iso()
         if opponent.opponent_user_id is None:
@@ -468,7 +468,7 @@ class Database:
             opponent_column = None
             player_b_id = opponent.opponent_user_id
 
-        self.connection.execute(
+        cursor = self.connection.execute(
             """
             INSERT INTO games (
                 created_by_id, owner_id, opponent_id, player_a_id, player_b_id,
@@ -493,6 +493,43 @@ class Database:
             ),
         )
         self.connection.commit()
+        return int(cursor.lastrowid)
+
+    def delete_game(self, owner_id: int, opponent_id: int, game_id: int) -> bool:
+        opponent = self.get_opponent(owner_id, opponent_id)
+        if opponent.opponent_user_id is None:
+            cursor = self.connection.execute(
+                """
+                DELETE FROM games
+                WHERE id = ? AND created_by_id = ? AND owner_id = ? AND opponent_id = ?
+                """,
+                (game_id, owner_id, owner_id, opponent_id),
+            )
+        else:
+            cursor = self.connection.execute(
+                """
+                DELETE FROM games
+                WHERE
+                    id = ?
+                    AND created_by_id = ?
+                    AND (
+                        (player_a_id = ? AND player_b_id = ?)
+                        OR
+                        (player_a_id = ? AND player_b_id = ?)
+                    )
+                """,
+                (
+                    game_id,
+                    owner_id,
+                    owner_id,
+                    opponent.opponent_user_id,
+                    opponent.opponent_user_id,
+                    owner_id,
+                ),
+            )
+
+        self.connection.commit()
+        return cursor.rowcount > 0
 
     def get_opponent_stats(self, owner_id: int, opponent_id: int, adjusted: bool = True) -> Stats:
         opponent = self.get_opponent(owner_id, opponent_id)

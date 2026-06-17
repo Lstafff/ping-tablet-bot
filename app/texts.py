@@ -20,6 +20,7 @@ BUTTON_SEND_INVITE = "💌 Отправить"
 BUTTON_HAVE_INVITE_CODE = "✋ У меня есть код"
 BUTTON_TOTAL_STATS = "📊 Статистика"
 BUTTON_ADD_SCORE = "🏓 Добавить счёт"
+BUTTON_UNDO_SCORE = "↩️ Отменить"
 BUTTON_EDIT = "✏️ Изменить"
 BUTTON_OPPONENT_DAILY_STATS = "📊 Статистика"
 BUTTON_DELETE_OPPONENT = "❌ Удалить соперника"
@@ -31,7 +32,7 @@ BUTTON_EDIT_GAMES = "🔢 Счёт партий"
 BUTTON_EDIT_POINTS = "🎯 Количество мячей"
 
 MAIN_MENU_TEXT = (
-    "<h2>🏓 Теннисный счётчик</h2>"
+    "<h2>пинг 🏓 понг 🏓 каунтер</h2>"
     "\nЭто бот для ведения статистики матчей с друзьями.\n\n"
     "Если нашёл ошибку — пиши @lstaff"
 )
@@ -309,10 +310,23 @@ def score_saved(opponent_name: str, score: ScoreLike, stats: StatsLike, user_nam
 
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
-        f"\n✅ Добавлен счёт: {score.own_score}-{score.opponent_score}.{overtime}\n\n"
+        f"\n✅ Добавлен счёт: {score.own_score}-{score.opponent_score}.{overtime}\n"
         "<h2>📊 Текущая статистика:</h2>"
+        "<hr/>"
         f"{format_stats(stats, user_name=user_name, opponent_name=opponent_name)}"
         "\nМожно сразу написать результат следующего матча."
+    )
+
+
+# Сообщение после отмены только что добавленного результата партии.
+def score_undone(opponent_name: str, stats: StatsLike, user_name: str = DEFAULT_USER_NAME) -> str:
+    return (
+        f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
+        "\n↩️ Последний счёт отменён.\n"
+        "<h2>📊 Текущая статистика:</h2>"
+        "<hr/>"
+        f"{format_stats(stats, user_name=user_name, opponent_name=opponent_name)}"
+        "\nМожно сразу написать новый результат."
     )
 
 
