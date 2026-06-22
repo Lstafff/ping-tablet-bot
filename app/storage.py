@@ -251,7 +251,7 @@ class Database:
         )
         self.connection.commit()
 
-    def set_user_rating(self, telegram_id: int, rating: str, rating_is_fnt: bool) -> None:
+    def set_user_rating(self, telegram_id: int, rating: Optional[str], rating_is_fnt: bool) -> None:
         self.connection.execute(
             """
             UPDATE users

@@ -21,6 +21,7 @@ BUTTON_SHARE_PROFILE = "💌 Поделиться"
 BUTTON_HAVE_INVITE_CODE = "✋ У меня есть код"
 BUTTON_TOTAL_STATS = "🥷 Профиль"
 BUTTON_RATING = "🏆 Рейтинг"
+BUTTON_CLEAR_RATING = "🧹 Очистить"
 BUTTON_ADD_SCORE = "🏓 Добавить счёт"
 BUTTON_UNDO_SCORE = "↩️ Отменить"
 BUTTON_EDIT = "✏️ Изменить"
@@ -174,9 +175,9 @@ def profile(user: UserLike, stats: StatsLike) -> str:
     user_name = display_user_name(user.first_name, user.username)
     return (
         f"<h2>🥷 Профиль {html.escape(user_name)}</h2>"
-        f"\nИграет с {format_day(user.created_at[:10])}\n"
-        "Уровень: новичок\n"
-        f"Рейтинг: {format_rating(user.rating, user.rating_is_fnt)}\n\n"
+        f"\n<b>📅 Играет с</b> <code>{format_day(user.created_at[:10])}</code>\n"
+        f"<b>📊 Уровень: новичок</b>\n"
+        f"<b>🏆 Рейтинг: {format_rating(user.rating, user.rating_is_fnt)}</b>\n"
         "<h2>📊 Общая статистика</h2>"
         "<hr/>"
         f"{format_stats(stats, user_name=user_name, opponent_name='Оппоненты')}"
@@ -259,6 +260,14 @@ def rating_prompt() -> str:
         "<blockquote>"
         "😔 Если ты профик с рейтингом, участвовать в любительских турнирах не получится"
         "</blockquote>"
+    )
+
+
+# Ошибка, если пользователь ввёл не число и не ссылку ФНТР.
+def rating_input_error() -> str:
+    return (
+        f"{rating_prompt()}"
+        "\n\nНе получилось найти рейтинг. Введи число или ссылку на профиль ФНТР."
     )
 
 
@@ -436,11 +445,9 @@ def format_stats(stats: StatsLike, user_name: str = DEFAULT_USER_NAME, opponent_
         "<table bordered striped>"
         f"<tr><th>Показатель</th><th>🥷 {safe_user_name}</th><th>🏓 {safe_opponent_name}</th></tr>"
         f"<tr><td>Победы</td><td align=\"right\">{stats.wins}</td><td align=\"right\">{stats.losses}</td></tr>"
-        f"<tr><td>Разница</td><td colspan=\"2\" align=\"right\">{games_difference}</td></tr>"
-        f"<tr><td>Всего сыграно</td><td colspan=\"2\" align=\"right\">{stats.games}</td></tr>"
+        f"<tr><td>Разница</td><td colspan=\"2\" align=\"right\">{games_difference} ({stats.games})</td></tr>"
         f"<tr><td>Мячи</td><td align=\"right\">{stats.points_for}</td><td align=\"right\">{stats.points_against}</td></tr>"
-        f"<tr><td>Разница</td><td colspan=\"2\" align=\"right\">{points_difference}</td></tr>"
-        f"<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">{stats.points_for + stats.points_against}</td></tr>"
+        f"<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">{stats.points_for + stats.points_against} ({points_difference})</td></tr>"
         "</table>"
     )
 
@@ -492,7 +499,7 @@ def format_rating(rating: Optional[str], rating_is_fnt: bool) -> str:
     if not rating:
         return "не выбран"
     if rating_is_fnt:
-        return "выбран (✅ ФНТР)"
+        return f"{html.escape(rating)} (✅ ФНТР)"
     return html.escape(rating)
 
 

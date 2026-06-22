@@ -15,11 +15,20 @@ def main_menu_keyboard(has_opponents: bool) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def profile_keyboard(invite_link: str) -> InlineKeyboardMarkup:
+def profile_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text=texts.BUTTON_RATING, callback_data="rating")
-    builder.button(text=texts.BUTTON_SHARE_PROFILE, url=texts.invite_share_url(invite_link))
+    builder.button(text=texts.BUTTON_SHARE_PROFILE, callback_data="invite")
     builder.button(text=texts.BUTTON_BACK, callback_data="main")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def rating_keyboard(has_rating: bool) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    if has_rating:
+        builder.button(text=texts.BUTTON_CLEAR_RATING, callback_data="rating_clear")
+    builder.button(text=texts.BUTTON_BACK, callback_data="profile")
     builder.adjust(1)
     return builder.as_markup()
 

@@ -245,16 +245,28 @@ class StorageTest(unittest.TestCase):
             self.assertFalse(user.rating_is_fnt)
             self.assertTrue(user.created_at.startswith("20"))
 
-    def test_fnt_rating_link_is_marked(self) -> None:
+    def test_fnt_rating_is_stored_as_number(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             db = Database(str(Path(directory) / "bot.sqlite3"))
             db.ensure_user(1, "Игрок", "player")
 
-            db.set_user_rating(1, "https://ttfr.ru/player/1", True)
+            db.set_user_rating(1, "1500", True)
 
             user = db.get_user(1)
-            self.assertEqual(user.rating, "https://ttfr.ru/player/1")
+            self.assertEqual(user.rating, "1500")
             self.assertTrue(user.rating_is_fnt)
+
+    def test_user_rating_can_be_cleared(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(str(Path(directory) / "bot.sqlite3"))
+            db.ensure_user(1, "Игрок", "player")
+            db.set_user_rating(1, "1500", True)
+
+            db.set_user_rating(1, None, False)
+
+            user = db.get_user(1)
+            self.assertIsNone(user.rating)
+            self.assertFalse(user.rating_is_fnt)
 
     def test_delete_local_opponent_removes_stats(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

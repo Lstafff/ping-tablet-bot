@@ -13,7 +13,6 @@ from app.config import load_config
 from app.keyboards import (
     back_to_opponent_keyboard,
     back_to_main_keyboard,
-    back_to_profile_keyboard,
     delete_opponent_keyboard,
     edit_keyboard,
     invite_keyboard,
@@ -23,8 +22,10 @@ from app.keyboards import (
     opponent_total_stats_keyboard,
     opponents_keyboard,
     profile_keyboard,
+    rating_keyboard,
     score_saved_keyboard,
 )
+from app.rating import fetch_fnt_rating, parse_manual_rating
 from app.scoring import ScoreError, parse_pair, parse_score
 from app.storage import Database
 
@@ -114,14 +115,24 @@ async def invite_code_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def rating_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
+    user = db.get_user(callback.from_user.id)
     db.set_session(callback.from_user.id, "await_rating", None)
     await render(
         bot,
         callback.message.chat.id,
         callback.from_user.id,
         texts.rating_prompt(),
-        back_to_profile_keyboard(),
+        rating_keyboard(user.rating is not None),
     )
+
+
+@router.callback_query(F.data == "rating_clear")
+async def rating_clear_callback(callback: CallbackQuery, bot: Bot) -> None:
+    await callback.answer()
+    ensure_user(callback.from_user)
+    db.set_user_rating(callback.from_user.id, None, False)
+    db.clear_session(callback.from_user.id)
+    await show_profile(bot, callback.message.chat.id, callback.from_user.id)
 
 
 @router.callback_query(F.data == "opponents")
@@ -348,12 +359,29 @@ async def handle_invite_code_input(message: Message, bot: Bot, user_id: int) -> 
 
 
 async def handle_rating_input(message: Message, bot: Bot, user_id: int) -> None:
-    rating = (message.text or "").strip()
-    if not rating:
-        await render(bot, message.chat.id, user_id, texts.rating_prompt(), back_to_profile_keyboard())
+    rating_input = (message.text or "").strip()
+    user = db.get_user(user_id)
+    if not rating_input:
+        await render(bot, message.chat.id, user_id, texts.rating_prompt(), rating_keyboard(user.rating is not None))
         return
 
-    db.set_user_rating(user_id, rating, texts.is_fnt_rating_input(rating))
+    if texts.is_fnt_rating_input(rating_input):
+        try:
+            rating = await asyncio.to_thread(fetch_fnt_rating, rating_input)
+        except Exception:
+            logging.exception("Failed to fetch FNT rating")
+            rating = None
+        if rating is None:
+            await render(bot, message.chat.id, user_id, texts.rating_input_error(), rating_keyboard(user.rating is not None))
+            return
+        db.set_user_rating(user_id, rating, True)
+    else:
+        rating = parse_manual_rating(rating_input)
+        if rating is None:
+            await render(bot, message.chat.id, user_id, texts.rating_input_error(), rating_keyboard(user.rating is not None))
+            return
+        db.set_user_rating(user_id, rating, False)
+
     db.clear_session(user_id)
     await show_profile(bot, message.chat.id, user_id)
 
@@ -479,15 +507,12 @@ async def show_opponent_daily_stats(bot: Bot, chat_id: int, user_id: int, oppone
 async def show_profile(bot: Bot, chat_id: int, user_id: int) -> None:
     user = db.get_user(user_id)
     stats = db.get_total_stats(user_id)
-    invite_code = db.get_or_create_invite_code(user_id)
-    bot_info = await bot.get_me()
-    invite_link = f"https://t.me/{bot_info.username}?start=invite_{invite_code}"
     await render(
         bot,
         chat_id,
         user_id,
         texts.profile(user, stats),
-        profile_keyboard(invite_link),
+        profile_keyboard(),
     )
 
 
