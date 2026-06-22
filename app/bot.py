@@ -630,7 +630,7 @@ async def render(
             return
         except Exception as error:
             logging.exception("Failed to render rich message")
-            if "message is not modified" in str(error).lower():
+            if is_message_not_modified(error):
                 return
             try:
                 await bot.delete_message(chat_id, user.last_message_id)
@@ -661,7 +661,8 @@ async def render_rich_message(
             )
             return message_id_from_result(result, last_message_id)
         except Exception as error:
-            if "message is not modified" in str(error).lower():
+            if is_message_not_modified(error):
+                await update_reply_markup(bot, chat_id, last_message_id, reply_markup)
                 return last_message_id
 
     sent = await bot.send_rich_message(
@@ -678,6 +679,23 @@ async def render_rich_message(
             pass
 
     return new_message_id
+
+
+def is_message_not_modified(error: Exception) -> bool:
+    return "message is not modified" in str(error).lower()
+
+
+async def update_reply_markup(
+    bot: Bot,
+    chat_id: int,
+    message_id: int,
+    reply_markup: InlineKeyboardMarkup,
+) -> None:
+    try:
+        await bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id, reply_markup=reply_markup)
+    except Exception as error:
+        if not is_message_not_modified(error):
+            raise
 
 
 def message_id_from_result(result: Any, fallback: Optional[int]) -> int:

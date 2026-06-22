@@ -20,7 +20,6 @@ ALLOWED_SCHEMA_NAMES = {
     "games_updated_at",
     "invite_code",
     "invite_uses",
-    "invites",
     "opponents",
     "points_updated_at",
     "rating",
@@ -220,7 +219,6 @@ class Database:
         self._ensure_column("users", "rating_is_fnt", "INTEGER NOT NULL DEFAULT 0")
         self._ensure_column("aggregate_adjustments", "games_updated_at", "TEXT")
         self._ensure_column("aggregate_adjustments", "points_updated_at", "TEXT")
-        self._drop_legacy_invites_table()
         self._backfill_adjustment_dates()
         self.connection.execute(
             """
@@ -246,10 +244,6 @@ class Database:
             WHERE points_updated_at IS NULL
             """
         )
-
-    def _drop_legacy_invites_table(self) -> None:
-        table = require_schema_name("invites")
-        self.connection.execute(f"DROP TABLE IF EXISTS {table}")
 
     def _ensure_column(self, table: str, column: str, definition: str) -> None:
         table = require_schema_name(table)
