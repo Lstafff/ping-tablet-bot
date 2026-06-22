@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import html
-import re
 from datetime import datetime
 from typing import Optional, Protocol
 from urllib.parse import urlencode
@@ -193,53 +192,6 @@ def format_rich_user_name(user_name: str) -> str:
     return html.escape(user_name.strip() or DEFAULT_USER_NAME)
 
 
-# Упрощает rich-разметку для запасной обычной отправки.
-def rich_to_basic_html(rich_html: str) -> str:
-    basic_html = re.sub(r"<h[1-6]>", "<b>", rich_html)
-    basic_html = re.sub(r"</h[1-6]>", "</b>", basic_html)
-    basic_html = re.sub(r"<cite>", "<i>", basic_html)
-    basic_html = re.sub(r"</cite>", "</i>", basic_html)
-    basic_html = re.sub(r"<tr>(.*?)</tr>", table_row_to_basic_html, basic_html)
-    basic_html = re.sub(r"<table[^>]*>", "", basic_html)
-    basic_html = re.sub(r"</table>", "", basic_html)
-    basic_html = re.sub(r"<hr\s*/?>", "\n\n", basic_html)
-    basic_html = re.sub(r"<br\s*/?>", "\n", basic_html)
-    return basic_html
-
-
-# Превращает строку rich-таблицы в простой текст для запасного режима.
-def table_row_to_basic_html(match: re.Match[str]) -> str:
-    row_html = match.group(1)
-    cells = re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", row_html)
-    cells = [re.sub(r"<[^>]+>", "", cell).strip() for cell in cells]
-
-    if not cells:
-        return ""
-
-    if cells[0] in {"Показатель", "День", "Дата"}:
-        return ""
-
-    if len(cells) == 3 and cells[0] == "Победы":
-        return f"Победы / Поражения: {cells[1]}-{cells[2]}\n"
-
-    if len(cells) == 3 and cells[0] == "Мячи":
-        return f"Мячи: {cells[1]}-{cells[2]}\n"
-
-    if len(cells) == 2 and cells[0] == "Разница":
-        return f"Разница: {cells[1]}\n"
-
-    if len(cells) == 2 and cells[0] == "Всего сыграно":
-        return f"Партии: {cells[1]}\n"
-
-    if len(cells) == 2:
-        return f"{cells[0]}: {cells[1]}\n"
-
-    if len(cells) == 3:
-        return f"{cells[0]}: {cells[1]}-{cells[2]}\n"
-
-    return f"{cells[0]}: {' / '.join(cells[1:])}\n"
-
-
 # Экран приглашения: ссылка и код, которые можно переслать сопернику.
 def invite(invite_link: str, invite_code: str) -> str:
     return (
@@ -280,7 +232,7 @@ def levels_info() -> str:
         "<tr><td>робот 🦾</td><td>300-499</td></tr>"
         "<tr><td>профик 💀</td><td>500+</td></tr>"
         "</table>"
-        "<blockquote>Если у тебя рейтинг ФНТР, ты профик независимо от количества сыгранных партий</blockquote>"
+        "<blockquote>❗️ Если у тебя рейтинг ФНТР, ты профик независимо от количества сыгранных партий</blockquote>"
     )
 
 
@@ -404,10 +356,10 @@ def score_saved(
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
         f"\n✅ Добавлен счёт: {score.own_score}-{score.opponent_score}.{overtime}\n"
+        "Можешь сразу написать следующий результат!\n"
         "<h2>📊 Последние 5 игр</h2>"
         "<hr/>"
         f"{format_recent_games(recent_games, user_name=user_name, opponent_name=opponent_name)}"
-        "\nМожешь сразу написать следующий результат!"
     )
 
 
@@ -420,10 +372,10 @@ def score_undone(
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
         "\n↩️ Последний счёт отменён.\n"
+        "Можешь сразу написать следующий результат!\n"
         "<h2>📊 Последние 5 игр</h2>"
         "<hr/>"
         f"{format_recent_games(recent_games, user_name=user_name, opponent_name=opponent_name)}"
-        "\nМожешь сразу написать следующий результат!"
     )
 
 

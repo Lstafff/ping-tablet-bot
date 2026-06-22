@@ -15,7 +15,6 @@ from app.texts import (
     opponent_daily_stats,
     opponent_stats,
     profile,
-    rich_to_basic_html,
 )
 
 
@@ -156,7 +155,7 @@ class RichMessagesTest(unittest.TestCase):
         self.assertIn("<tr><td>робот 🦾</td><td>300-499</td></tr>", rich_html)
         self.assertIn("<tr><td>профик 💀</td><td>500+</td></tr>", rich_html)
         self.assertIn(
-            "<blockquote>Если у тебя рейтинг ФНТР, ты профик независимо от количества сыгранных партий</blockquote>",
+            "<blockquote>❗️ Если у тебя рейтинг ФНТР, ты профик независимо от количества сыгранных партий</blockquote>",
             rich_html,
         )
 
@@ -168,24 +167,6 @@ class RichMessagesTest(unittest.TestCase):
     def test_is_fnt_rating_input_detects_rating_links(self) -> None:
         self.assertTrue(is_fnt_rating_input("https://ttfr.ru/player/1"))
         self.assertFalse(is_fnt_rating_input("1500"))
-
-    def test_rich_to_basic_html_downgrades_headings(self) -> None:
-        self.assertEqual(
-            rich_to_basic_html("<h2>Заголовок</h2><hr/>Текст<br>ещё"),
-            "<b>Заголовок</b>\n\nТекст\nещё",
-        )
-
-    def test_rich_to_basic_html_downgrades_tables(self) -> None:
-        self.assertEqual(
-            rich_to_basic_html(format_stats(Stats(wins=3, losses=2, points_for=43, points_against=39))),
-            (
-                "Победы / Поражения: 3 (+1)-2\n"
-                "Всего игр: 5\n"
-                "Мячи: 43 (+4)-39\n"
-                "Всего мячей: 82\n"
-            ),
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,7 +3,6 @@ import logging
 from typing import Any, Optional
 
 from aiogram import Bot, Dispatcher, F, Router
-from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InputRichMessage, Message, User as TelegramUser
@@ -624,20 +623,8 @@ async def render(
             except TelegramBadRequest:
                 pass
 
-    try:
-        message_id = await render_rich_message(bot, chat_id, text, reply_markup, None)
-        db.set_last_message_id(user_id, message_id)
-        return
-    except Exception:
-        logging.exception("Failed to send rich message")
-
-    sent = await bot.send_message(
-        chat_id=chat_id,
-        text=texts.rich_to_basic_html(text),
-        reply_markup=reply_markup,
-        parse_mode=ParseMode.HTML,
-    )
-    db.set_last_message_id(user_id, sent.message_id)
+    message_id = await render_rich_message(bot, chat_id, text, reply_markup, None)
+    db.set_last_message_id(user_id, message_id)
 
 
 async def render_rich_message(
@@ -715,7 +702,7 @@ async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     config = load_config()
     seed_test_opponent = config.seed_test_opponent
-    db = Database(config.database_path)
+    db = Database(config.database_path, config.database_url)
 
     bot = Bot(token=config.bot_token)
     dispatcher = Dispatcher()

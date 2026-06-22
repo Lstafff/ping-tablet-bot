@@ -6,7 +6,7 @@ import string
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 from app import texts
@@ -16,6 +16,49 @@ from app.scoring import ParsedScore
 MOSCOW_TZ = ZoneInfo("Europe/Moscow")
 INVITE_CODE_ALPHABET = string.ascii_uppercase + string.digits
 INVITE_CODE_LENGTH = 8
+SQLITE_IMPORT_TABLES = {
+    "users": (
+        "telegram_id",
+        "first_name",
+        "username",
+        "last_message_id",
+        "created_at",
+        "updated_at",
+        "invite_code",
+        "rating",
+        "rating_is_fnt",
+    ),
+    "opponents": ("id", "owner_id", "opponent_user_id", "name", "created_at"),
+    "games": (
+        "id",
+        "created_by_id",
+        "owner_id",
+        "opponent_id",
+        "player_a_id",
+        "player_b_id",
+        "player_a_score",
+        "player_b_score",
+        "regular_a",
+        "regular_b",
+        "overtime_a",
+        "overtime_b",
+        "played_at",
+    ),
+    "aggregate_adjustments": (
+        "owner_id",
+        "opponent_id",
+        "games_won_delta",
+        "games_lost_delta",
+        "points_for_delta",
+        "points_against_delta",
+        "updated_at",
+        "games_updated_at",
+        "points_updated_at",
+    ),
+    "sessions": ("owner_id", "mode", "opponent_id", "updated_at"),
+    "invites": ("token", "inviter_id", "created_at", "used_by", "used_at"),
+    "invite_uses": ("inviter_id", "invited_user_id", "invite_code", "accepted_at"),
+}
 
 
 @dataclass(frozen=True)
@@ -78,16 +121,66 @@ class InviteAcceptance:
     is_new_opponent: bool
 
 
+class PostgresConnection:
+    def __init__(self, database_url: str) -> None:
+        try:
+            import psycopg
+            from psycopg.rows import dict_row
+        except ImportError as error:
+            raise RuntimeError(
+                "Для подключения к Postgres нужно установить зависимость psycopg[binary]."
+            ) from error
+
+        self._connection = psycopg.connect(database_url, row_factory=dict_row)
+
+    def execute(self, query: str, parameters: tuple[Any, ...] = ()) -> Any:
+        return self._connection.execute(self._prepare_query(query), parameters)
+
+    def executescript(self, script: str) -> None:
+        for statement in script.split(";"):
+            statement = statement.strip()
+            if statement:
+                self.execute(statement)
+
+    def commit(self) -> None:
+        self._connection.commit()
+
+    def __enter__(self) -> PostgresConnection:
+        return self
+
+    def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None:
+        if exc_type is None:
+            self._connection.commit()
+        else:
+            self._connection.rollback()
+
+    @staticmethod
+    def _prepare_query(query: str) -> str:
+        return query.replace("?", "%s")
+
+
 class Database:
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, database_url: Optional[str] = None) -> None:
         self.path = path
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.connection = sqlite3.connect(path, check_same_thread=False)
-        self.connection.row_factory = sqlite3.Row
-        self.connection.execute("PRAGMA foreign_keys = ON")
+        self.database_url = database_url
+        self.is_postgres = database_url is not None
+        if self.is_postgres:
+            self.connection = PostgresConnection(database_url)
+        else:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            connection = sqlite3.connect(path, check_same_thread=False)
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA foreign_keys = ON")
+            self.connection = connection
         self._migrate()
+        if self.is_postgres:
+            self._import_sqlite_if_postgres_is_empty(path)
 
     def _migrate(self) -> None:
+        if self.is_postgres:
+            self._migrate_postgres()
+            return
+
         self.connection.executescript(
             """
             CREATE TABLE IF NOT EXISTS users (
@@ -176,6 +269,121 @@ class Database:
         self._ensure_column("users", "rating_is_fnt", "INTEGER NOT NULL DEFAULT 0")
         self._ensure_column("aggregate_adjustments", "games_updated_at", "TEXT")
         self._ensure_column("aggregate_adjustments", "points_updated_at", "TEXT")
+        self._backfill_adjustment_dates()
+        self.connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite_code
+            ON users(invite_code)
+            WHERE invite_code IS NOT NULL
+            """
+        )
+        self.connection.commit()
+
+    def _migrate_postgres(self) -> None:
+        self.connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                telegram_id BIGINT PRIMARY KEY,
+                first_name TEXT NOT NULL,
+                username TEXT,
+                last_message_id BIGINT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                invite_code TEXT,
+                rating TEXT,
+                rating_is_fnt INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS opponents (
+                id BIGSERIAL PRIMARY KEY,
+                owner_id BIGINT NOT NULL,
+                opponent_user_id BIGINT,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(owner_id, opponent_user_id),
+                UNIQUE(owner_id, name),
+                FOREIGN KEY(owner_id) REFERENCES users(telegram_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS games (
+                id BIGSERIAL PRIMARY KEY,
+                created_by_id BIGINT NOT NULL,
+                owner_id BIGINT,
+                opponent_id BIGINT,
+                player_a_id BIGINT NOT NULL,
+                player_b_id BIGINT,
+                player_a_score INTEGER NOT NULL,
+                player_b_score INTEGER NOT NULL,
+                regular_a INTEGER NOT NULL,
+                regular_b INTEGER NOT NULL,
+                overtime_a INTEGER NOT NULL,
+                overtime_b INTEGER NOT NULL,
+                played_at TEXT NOT NULL,
+                FOREIGN KEY(created_by_id) REFERENCES users(telegram_id) ON DELETE CASCADE,
+                FOREIGN KEY(owner_id) REFERENCES users(telegram_id) ON DELETE CASCADE,
+                FOREIGN KEY(opponent_id) REFERENCES opponents(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS aggregate_adjustments (
+                owner_id BIGINT NOT NULL,
+                opponent_id BIGINT NOT NULL,
+                games_won_delta INTEGER NOT NULL DEFAULT 0,
+                games_lost_delta INTEGER NOT NULL DEFAULT 0,
+                points_for_delta INTEGER NOT NULL DEFAULT 0,
+                points_against_delta INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL,
+                games_updated_at TEXT,
+                points_updated_at TEXT,
+                PRIMARY KEY(owner_id, opponent_id),
+                FOREIGN KEY(owner_id) REFERENCES users(telegram_id) ON DELETE CASCADE,
+                FOREIGN KEY(opponent_id) REFERENCES opponents(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS sessions (
+                owner_id BIGINT PRIMARY KEY,
+                mode TEXT NOT NULL,
+                opponent_id BIGINT,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(owner_id) REFERENCES users(telegram_id) ON DELETE CASCADE,
+                FOREIGN KEY(opponent_id) REFERENCES opponents(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS invites (
+                token TEXT PRIMARY KEY,
+                inviter_id BIGINT NOT NULL,
+                created_at TEXT NOT NULL,
+                used_by BIGINT,
+                used_at TEXT,
+                FOREIGN KEY(inviter_id) REFERENCES users(telegram_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS invite_uses (
+                inviter_id BIGINT NOT NULL,
+                invited_user_id BIGINT NOT NULL,
+                invite_code TEXT NOT NULL,
+                accepted_at TEXT NOT NULL,
+                PRIMARY KEY(inviter_id, invited_user_id),
+                FOREIGN KEY(inviter_id) REFERENCES users(telegram_id) ON DELETE CASCADE,
+                FOREIGN KEY(invited_user_id) REFERENCES users(telegram_id) ON DELETE CASCADE
+            );
+            """
+        )
+        self._ensure_column("users", "invite_code", "TEXT")
+        self._ensure_column("users", "rating", "TEXT")
+        self._ensure_column("users", "rating_is_fnt", "INTEGER NOT NULL DEFAULT 0")
+        self._ensure_column("aggregate_adjustments", "games_updated_at", "TEXT")
+        self._ensure_column("aggregate_adjustments", "points_updated_at", "TEXT")
+        self._backfill_adjustment_dates()
+        self.connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite_code
+            ON users(invite_code)
+            WHERE invite_code IS NOT NULL
+            """
+        )
+        self.connection.commit()
+
+    def _backfill_adjustment_dates(self) -> None:
         self.connection.execute(
             """
             UPDATE aggregate_adjustments
@@ -190,22 +398,94 @@ class Database:
             WHERE points_updated_at IS NULL
             """
         )
-        self.connection.execute(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite_code
-            ON users(invite_code)
-            WHERE invite_code IS NOT NULL
-            """
-        )
-        self.connection.commit()
 
     def _ensure_column(self, table: str, column: str, definition: str) -> None:
-        columns = {
-            row["name"]
-            for row in self.connection.execute(f"PRAGMA table_info({table})").fetchall()
-        }
+        if self.is_postgres:
+            columns = {
+                row["column_name"]
+                for row in self.connection.execute(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = ? AND column_name = ?
+                    """,
+                    (table, column),
+                ).fetchall()
+            }
+        else:
+            columns = {
+                row["name"]
+                for row in self.connection.execute(f"PRAGMA table_info({table})").fetchall()
+            }
         if column not in columns:
             self.connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+    def _import_sqlite_if_postgres_is_empty(self, sqlite_path: str) -> None:
+        if not sqlite_path or not Path(sqlite_path).exists():
+            return
+
+        row = self.connection.execute("SELECT COUNT(*) AS user_count FROM users").fetchone()
+        if int(row["user_count"]) > 0:
+            return
+
+        sqlite_connection = sqlite3.connect(sqlite_path)
+        sqlite_connection.row_factory = sqlite3.Row
+        try:
+            sqlite_tables = {
+                row["name"]
+                for row in sqlite_connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+            }
+            with self.connection:
+                for table, columns in SQLITE_IMPORT_TABLES.items():
+                    if table not in sqlite_tables:
+                        continue
+                    available_columns = self._sqlite_columns(sqlite_connection, table)
+                    selected_columns = [column for column in columns if column in available_columns]
+                    if not selected_columns:
+                        continue
+
+                    quoted_columns = ", ".join(selected_columns)
+                    rows = sqlite_connection.execute(f"SELECT {quoted_columns} FROM {table}").fetchall()
+                    if not rows:
+                        continue
+
+                    placeholders = ", ".join(["?"] * len(selected_columns))
+                    insert_query = (
+                        f"INSERT INTO {table} ({quoted_columns}) "
+                        f"VALUES ({placeholders}) ON CONFLICT DO NOTHING"
+                    )
+                    for sqlite_row in rows:
+                        self.connection.execute(
+                            insert_query,
+                            tuple(sqlite_row[column] for column in selected_columns),
+                        )
+
+                self._backfill_adjustment_dates()
+                self._reset_postgres_sequence("opponents", "id")
+                self._reset_postgres_sequence("games", "id")
+        finally:
+            sqlite_connection.close()
+
+    @staticmethod
+    def _sqlite_columns(connection: sqlite3.Connection, table: str) -> set[str]:
+        return {
+            row["name"]
+            for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+
+    def _reset_postgres_sequence(self, table: str, column: str) -> None:
+        self.connection.execute(
+            """
+            SELECT setval(
+                pg_get_serial_sequence(?, ?),
+                COALESCE((SELECT MAX(id) FROM {table}), 1),
+                (SELECT COUNT(*) FROM {table}) > 0
+            )
+            """.format(table=table),
+            (table, column),
+        )
 
     def ensure_user(self, telegram_id: int, first_name: str, username: Optional[str]) -> User:
         now = now_moscow_iso()
@@ -283,8 +563,9 @@ class Database:
 
         self.connection.execute(
             """
-            INSERT OR IGNORE INTO opponents (owner_id, opponent_user_id, name, created_at)
+            INSERT INTO opponents (owner_id, opponent_user_id, name, created_at)
             VALUES (?, ?, ?, ?)
+            ON CONFLICT DO NOTHING
             """,
             (owner_id, opponent_user_id, name, now),
         )
@@ -446,10 +727,11 @@ class Database:
         with self.connection:
             self.connection.execute(
                 """
-                INSERT OR IGNORE INTO invite_uses (
+                INSERT INTO invite_uses (
                     inviter_id, invited_user_id, invite_code, accepted_at
                 )
                 VALUES (?, ?, ?, ?)
+                ON CONFLICT DO NOTHING
                 """,
                 (inviter_id, invited_user_id, normalized_invite_code or invite_code, now_moscow_iso()),
             )
@@ -482,15 +764,19 @@ class Database:
             opponent_column = None
             player_b_id = opponent.opponent_user_id
 
-        cursor = self.connection.execute(
-            """
+        insert_query = """
             INSERT INTO games (
                 created_by_id, owner_id, opponent_id, player_a_id, player_b_id,
                 player_a_score, player_b_score, regular_a, regular_b,
                 overtime_a, overtime_b, played_at
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
+            """
+        if self.is_postgres:
+            insert_query += " RETURNING id"
+
+        cursor = self.connection.execute(
+            insert_query,
             (
                 owner_id,
                 owner_column,
@@ -507,6 +793,9 @@ class Database:
             ),
         )
         self.connection.commit()
+        if self.is_postgres:
+            row = cursor.fetchone()
+            return int(row["id"])
         return int(cursor.lastrowid)
 
     def delete_game(self, owner_id: int, opponent_id: int, game_id: int) -> bool:
