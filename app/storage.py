@@ -24,6 +24,9 @@ class User:
     first_name: str
     username: Optional[str]
     last_message_id: Optional[int]
+    created_at: str
+    rating: Optional[str]
+    rating_is_fnt: bool
 
 
 @dataclass(frozen=True)
@@ -169,6 +172,8 @@ class Database:
             """
         )
         self._ensure_column("users", "invite_code", "TEXT")
+        self._ensure_column("users", "rating", "TEXT")
+        self._ensure_column("users", "rating_is_fnt", "INTEGER NOT NULL DEFAULT 0")
         self._ensure_column("aggregate_adjustments", "games_updated_at", "TEXT")
         self._ensure_column("aggregate_adjustments", "points_updated_at", "TEXT")
         self.connection.execute(
@@ -220,7 +225,11 @@ class Database:
 
     def get_user(self, telegram_id: int) -> User:
         row = self.connection.execute(
-            "SELECT telegram_id, first_name, username, last_message_id FROM users WHERE telegram_id = ?",
+            """
+            SELECT telegram_id, first_name, username, last_message_id, created_at, rating, rating_is_fnt
+            FROM users
+            WHERE telegram_id = ?
+            """,
             (telegram_id,),
         ).fetchone()
         if row is None:
@@ -230,12 +239,26 @@ class Database:
             first_name=row["first_name"],
             username=row["username"],
             last_message_id=row["last_message_id"],
+            created_at=row["created_at"],
+            rating=row["rating"],
+            rating_is_fnt=bool(row["rating_is_fnt"]),
         )
 
     def set_last_message_id(self, telegram_id: int, message_id: int) -> None:
         self.connection.execute(
             "UPDATE users SET last_message_id = ?, updated_at = ? WHERE telegram_id = ?",
             (message_id, now_moscow_iso(), telegram_id),
+        )
+        self.connection.commit()
+
+    def set_user_rating(self, telegram_id: int, rating: str, rating_is_fnt: bool) -> None:
+        self.connection.execute(
+            """
+            UPDATE users
+            SET rating = ?, rating_is_fnt = ?, updated_at = ?
+            WHERE telegram_id = ?
+            """,
+            (rating, int(rating_is_fnt), now_moscow_iso(), telegram_id),
         )
         self.connection.commit()
 

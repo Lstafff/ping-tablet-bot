@@ -13,6 +13,7 @@ from app.config import load_config
 from app.keyboards import (
     back_to_opponent_keyboard,
     back_to_main_keyboard,
+    back_to_profile_keyboard,
     delete_opponent_keyboard,
     edit_keyboard,
     invite_keyboard,
@@ -21,6 +22,7 @@ from app.keyboards import (
     opponent_keyboard,
     opponent_total_stats_keyboard,
     opponents_keyboard,
+    profile_keyboard,
     score_saved_keyboard,
 )
 from app.scoring import ScoreError, parse_pair, parse_score
@@ -64,11 +66,13 @@ async def main_callback(callback: CallbackQuery, bot: Bot) -> None:
     await show_main_menu(bot, callback.message.chat.id, user_id)
 
 
+@router.callback_query(F.data == "profile")
 @router.callback_query(F.data == "stats_all")
-async def stats_all_callback(callback: CallbackQuery, bot: Bot) -> None:
+async def profile_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    await show_total_stats(bot, callback.message.chat.id, callback.from_user.id)
+    db.clear_session(callback.from_user.id)
+    await show_profile(bot, callback.message.chat.id, callback.from_user.id)
 
 
 @router.callback_query(F.data == "noop")
@@ -103,6 +107,20 @@ async def invite_code_callback(callback: CallbackQuery, bot: Bot) -> None:
         callback.from_user.id,
         texts.invite_code_prompt(),
         back_to_main_keyboard(),
+    )
+
+
+@router.callback_query(F.data == "rating")
+async def rating_callback(callback: CallbackQuery, bot: Bot) -> None:
+    await callback.answer()
+    ensure_user(callback.from_user)
+    db.set_session(callback.from_user.id, "await_rating", None)
+    await render(
+        bot,
+        callback.message.chat.id,
+        callback.from_user.id,
+        texts.rating_prompt(),
+        back_to_profile_keyboard(),
     )
 
 
@@ -288,6 +306,10 @@ async def text_message(message: Message, bot: Bot) -> None:
         await handle_invite_code_input(message, bot, user_id)
         return
 
+    if session.mode == "await_rating":
+        await handle_rating_input(message, bot, user_id)
+        return
+
     if session.opponent_id is None:
         return
 
@@ -323,6 +345,17 @@ async def handle_invite_code_input(message: Message, bot: Bot, user_id: int) -> 
 
     has_opponents = bool(db.list_opponents(user_id))
     await render(bot, message.chat.id, user_id, text, main_menu_keyboard(has_opponents))
+
+
+async def handle_rating_input(message: Message, bot: Bot, user_id: int) -> None:
+    rating = (message.text or "").strip()
+    if not rating:
+        await render(bot, message.chat.id, user_id, texts.rating_prompt(), back_to_profile_keyboard())
+        return
+
+    db.set_user_rating(user_id, rating, texts.is_fnt_rating_input(rating))
+    db.clear_session(user_id)
+    await show_profile(bot, message.chat.id, user_id)
 
 
 async def handle_score_input(message: Message, bot: Bot, user_id: int, opponent_id: int) -> None:
@@ -443,25 +476,19 @@ async def show_opponent_daily_stats(bot: Bot, chat_id: int, user_id: int, oppone
     )
 
 
-async def show_total_stats(bot: Bot, chat_id: int, user_id: int) -> None:
+async def show_profile(bot: Bot, chat_id: int, user_id: int) -> None:
+    user = db.get_user(user_id)
     stats = db.get_total_stats(user_id)
-    keyboard = back_to_main_keyboard()
-    try:
-        user = db.get_user(user_id)
-        message_id = await render_rich_message(
-            bot,
-            chat_id,
-            texts.total_stats_rich_html(
-                stats,
-                texts.display_user_name(user.first_name, user.username),
-            ),
-            keyboard,
-            user.last_message_id,
-        )
-        db.set_last_message_id(user_id, message_id)
-    except Exception:
-        logging.exception("Failed to render rich total stats")
-        await render(bot, chat_id, user_id, texts.total_stats(stats), keyboard)
+    invite_code = db.get_or_create_invite_code(user_id)
+    bot_info = await bot.get_me()
+    invite_link = f"https://t.me/{bot_info.username}?start=invite_{invite_code}"
+    await render(
+        bot,
+        chat_id,
+        user_id,
+        texts.profile(user, stats),
+        profile_keyboard(invite_link),
+    )
 
 
 async def accept_invite_flow(message: Message, token: str, bot: Bot, force_new: bool = False) -> None:

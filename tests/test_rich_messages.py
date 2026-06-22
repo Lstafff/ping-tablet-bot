@@ -5,12 +5,15 @@ from app.texts import (
     format_day,
     format_game_time,
     format_recent_games,
+    format_rating,
     format_rich_user_name,
+    format_signed_difference,
     format_stats,
+    is_fnt_rating_input,
     opponent_daily_stats,
     opponent_stats,
+    profile,
     rich_to_basic_html,
-    total_stats_rich_html,
 )
 
 
@@ -40,21 +43,40 @@ class RecentGame:
     opponent_score: int
 
 
+@dataclass(frozen=True)
+class User:
+    first_name: str
+    username: str | None
+    created_at: str
+    rating: str | None
+    rating_is_fnt: bool
+
+
 class RichMessagesTest(unittest.TestCase):
-    def test_total_stats_rich_html_uses_heading_and_table(self) -> None:
-        rich_html = total_stats_rich_html(
+    def test_profile_uses_user_info_and_stats_table(self) -> None:
+        rich_html = profile(
+            User(
+                first_name="Глеб",
+                username="lstaff",
+                created_at="2026-06-12T18:42:00+03:00",
+                rating=None,
+                rating_is_fnt=False,
+            ),
             Stats(wins=3, losses=2, points_for=43, points_against=39),
-            "<Глеб & Co>",
         )
 
-        self.assertIn("<h2>📊 Статистика всех матчей</h2><hr/><table bordered striped>", rich_html)
+        self.assertIn("<h2>🥷 Профиль @lstaff</h2>", rich_html)
+        self.assertIn("Играет с 12 июня '26", rich_html)
+        self.assertIn("Уровень: новичок", rich_html)
+        self.assertIn("Рейтинг: не выбран", rich_html)
+        self.assertIn("<h2>📊 Общая статистика</h2><hr/><table bordered striped>", rich_html)
         self.assertIn("<table bordered striped>", rich_html)
-        self.assertIn("<th>🥷 &lt;Глеб &amp; Co&gt;</th>", rich_html)
+        self.assertIn("<th>🥷 @lstaff</th>", rich_html)
         self.assertIn("<tr><td>Победы</td><td align=\"right\">3</td><td align=\"right\">2</td></tr>", rich_html)
-        self.assertIn("<tr><td>Разница</td><td colspan=\"2\" align=\"right\">1</td></tr>", rich_html)
+        self.assertIn("<tr><td>Разница</td><td colspan=\"2\" align=\"right\">+1</td></tr>", rich_html)
         self.assertIn("<tr><td>Всего сыграно</td><td colspan=\"2\" align=\"right\">5</td></tr>", rich_html)
         self.assertIn("<tr><td>Мячи</td><td align=\"right\">43</td><td align=\"right\">39</td></tr>", rich_html)
-        self.assertIn("<tr><td>Разница</td><td colspan=\"2\" align=\"right\">4</td></tr>", rich_html)
+        self.assertIn("<tr><td>Разница</td><td colspan=\"2\" align=\"right\">+4</td></tr>", rich_html)
         self.assertIn("<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">82</td></tr>", rich_html)
 
     def test_format_rich_user_name_escapes_html(self) -> None:
@@ -68,10 +90,10 @@ class RichMessagesTest(unittest.TestCase):
         self.assertIn("<th>🥷 Игрок</th>", rich_html)
         self.assertIn("<th>🏓 Соперники</th>", rich_html)
         self.assertIn("<tr><td>Победы</td><td align=\"right\">3</td><td align=\"right\">2</td></tr>", rich_html)
-        self.assertIn("<tr><td>Разница</td><td colspan=\"2\" align=\"right\">1</td></tr>", rich_html)
+        self.assertIn("<tr><td>Разница</td><td colspan=\"2\" align=\"right\">+1</td></tr>", rich_html)
         self.assertIn("<tr><td>Всего сыграно</td><td colspan=\"2\" align=\"right\">5</td></tr>", rich_html)
         self.assertIn("<tr><td>Мячи</td><td align=\"right\">43</td><td align=\"right\">39</td></tr>", rich_html)
-        self.assertIn("<tr><td>Разница</td><td colspan=\"2\" align=\"right\">4</td></tr>", rich_html)
+        self.assertIn("<tr><td>Разница</td><td colspan=\"2\" align=\"right\">+4</td></tr>", rich_html)
         self.assertIn("<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">82</td></tr>", rich_html)
 
     def test_opponent_stats_uses_user_name(self) -> None:
@@ -107,6 +129,20 @@ class RichMessagesTest(unittest.TestCase):
     def test_format_game_time_uses_russian_month_and_time(self) -> None:
         self.assertEqual(format_game_time("2026-06-12T18:42:00+03:00"), "12 июня, 18:42")
 
+    def test_format_signed_difference_adds_plus_only_for_positive_values(self) -> None:
+        self.assertEqual(format_signed_difference(4), "+4")
+        self.assertEqual(format_signed_difference(0), "0")
+        self.assertEqual(format_signed_difference(-2), "-2")
+
+    def test_format_rating(self) -> None:
+        self.assertEqual(format_rating(None, False), "не выбран")
+        self.assertEqual(format_rating("1500", False), "1500")
+        self.assertEqual(format_rating("https://ttfr.ru/player/1", True), "выбран (✅ ФНТР)")
+
+    def test_is_fnt_rating_input_detects_rating_links(self) -> None:
+        self.assertTrue(is_fnt_rating_input("https://ttfr.ru/player/1"))
+        self.assertFalse(is_fnt_rating_input("1500"))
+
     def test_rich_to_basic_html_downgrades_headings(self) -> None:
         self.assertEqual(
             rich_to_basic_html("<h2>Заголовок</h2><hr/>Текст<br>ещё"),
@@ -118,10 +154,10 @@ class RichMessagesTest(unittest.TestCase):
             rich_to_basic_html(format_stats(Stats(wins=3, losses=2, points_for=43, points_against=39))),
             (
                 "Победы / Поражения: 3-2\n"
-                "Разница: 1\n"
+                "Разница: +1\n"
                 "Партии: 5\n"
                 "Мячи: 43-39\n"
-                "Разница: 4\n"
+                "Разница: +4\n"
                 "Всего мячей: 82\n"
             ),
         )

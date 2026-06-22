@@ -17,8 +17,10 @@ TEST_OPPONENT_USERNAME = "test"
 BUTTON_OPPONENTS = "🏓 Соперники"
 BUTTON_INVITE_OPPONENT = "👊 Бросить вызов"
 BUTTON_SEND_INVITE = "💌 Отправить"
+BUTTON_SHARE_PROFILE = "💌 Поделиться"
 BUTTON_HAVE_INVITE_CODE = "✋ У меня есть код"
 BUTTON_TOTAL_STATS = "🥷 Профиль"
+BUTTON_RATING = "🏆 Рейтинг"
 BUTTON_ADD_SCORE = "🏓 Добавить счёт"
 BUTTON_UNDO_SCORE = "↩️ Отменить"
 BUTTON_EDIT = "✏️ Изменить"
@@ -126,6 +128,14 @@ class RecentGameLike(Protocol):
     opponent_score: int
 
 
+class UserLike(Protocol):
+    first_name: str
+    username: Optional[str]
+    created_at: str
+    rating: Optional[str]
+    rating_is_fnt: bool
+
+
 # Имя игрока для таблиц и уведомлений: @username, если есть, иначе имя.
 def display_user_name(first_name: str, username: Optional[str]) -> str:
     if username:
@@ -151,7 +161,7 @@ def username_label(username: str) -> str:
     return f"@{username}"
 
 
-# Запасной обычный текст общей статистики, если rich-таблица не отправилась.
+# Запасной обычный текст профиля, если rich-таблица не отправилась.
 def total_stats(stats: StatsLike) -> str:
     return (
         "<h2>📊 Статистика всех матчей</h2>"
@@ -159,10 +169,15 @@ def total_stats(stats: StatsLike) -> str:
     )
 
 
-# Rich-таблица на экране общей статистики.
-def total_stats_rich_html(stats: StatsLike, user_name: str) -> str:
+# Экран профиля с общей статистикой.
+def profile(user: UserLike, stats: StatsLike) -> str:
+    user_name = display_user_name(user.first_name, user.username)
     return (
-        "<h2>📊 Статистика всех матчей</h2>"
+        f"<h2>🥷 Профиль {html.escape(user_name)}</h2>"
+        f"\nИграет с {format_day(user.created_at[:10])}\n"
+        "Уровень: новичок\n"
+        f"Рейтинг: {format_rating(user.rating, user.rating_is_fnt)}\n\n"
+        "<h2>📊 Общая статистика</h2>"
         "<hr/>"
         f"{format_stats(stats, user_name=user_name, opponent_name='Оппоненты')}"
     )
@@ -234,6 +249,17 @@ def invite(invite_link: str, invite_code: str) -> str:
 def invite_share_url(invite_link: str) -> str:
     share_text = f"тебе бросили вызов\nв пинг 🏓 понг 🏓 каунтер\n\n{invite_link}"
     return f"https://t.me/share/url?{urlencode({'text': share_text})}"
+
+
+# Экран ввода рейтинга в профиле.
+def rating_prompt() -> str:
+    return (
+        "<h2>🏆 Какой у тебя рейтинг?</h2>"
+        "\nВведи число или вставь ссылку на свой профиль в рейтинге ФНТР.\n"
+        "<blockquote>"
+        "😔 Если ты профик с рейтингом, участвовать в любительских турнирах не получится"
+        "</blockquote>"
+    )
 
 
 # Экран ручного ввода кода приглашения.
@@ -335,7 +361,7 @@ def score_saved(
         "<h2>📊 Последние 5 игр</h2>"
         "<hr/>"
         f"{format_recent_games(recent_games, user_name=user_name, opponent_name=opponent_name)}"
-        "\nМожно сразу написать результат следующего матча."
+        "\nМожешь сразу написать следующий результат!"
     )
 
 
@@ -351,7 +377,7 @@ def score_undone(
         "<h2>📊 Последние 5 игр</h2>"
         "<hr/>"
         f"{format_recent_games(recent_games, user_name=user_name, opponent_name=opponent_name)}"
-        "\nМожно сразу написать новый результат."
+        "\nМожешь сразу написать следующий результат!"
     )
 
 
@@ -403,8 +429,8 @@ def pair_needs_two_numbers(example: str) -> str:
 def format_stats(stats: StatsLike, user_name: str = DEFAULT_USER_NAME, opponent_name: str = "Соперники") -> str:
     safe_user_name = format_rich_user_name(user_name)
     safe_opponent_name = format_rich_user_name(opponent_name)
-    games_difference = stats.wins - stats.losses
-    points_difference = stats.points_for - stats.points_against
+    games_difference = format_signed_difference(stats.wins - stats.losses)
+    points_difference = format_signed_difference(stats.points_for - stats.points_against)
 
     return (
         "<table bordered striped>"
@@ -454,3 +480,28 @@ def format_day(played_on: str) -> str:
 def format_game_time(played_at: str) -> str:
     day = datetime.fromisoformat(played_at)
     return f"{day.day} {MONTHS_RU[day.month]}, {day:%H:%M}"
+
+
+def format_signed_difference(value: int) -> str:
+    if value > 0:
+        return f"+{value}"
+    return str(value)
+
+
+def format_rating(rating: Optional[str], rating_is_fnt: bool) -> str:
+    if not rating:
+        return "не выбран"
+    if rating_is_fnt:
+        return "выбран (✅ ФНТР)"
+    return html.escape(rating)
+
+
+def is_fnt_rating_input(raw_text: str) -> bool:
+    normalized = raw_text.lower()
+    return normalized.startswith(("http://", "https://")) and (
+        "фнтр" in normalized
+        or "fntr" in normalized
+        or "fnt" in normalized
+        or "ttfr" in normalized
+        or "rttf" in normalized
+    )
