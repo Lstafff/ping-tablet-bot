@@ -13,6 +13,7 @@ from app.config import load_config
 from app.keyboards import (
     back_to_opponent_keyboard,
     back_to_main_keyboard,
+    back_to_profile_keyboard,
     delete_opponent_keyboard,
     edit_keyboard,
     invite_keyboard,
