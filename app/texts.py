@@ -14,15 +14,19 @@ DEFAULT_USER_NAME = "Игрок"
 TEST_OPPONENT_NAME = "Тестовый соперник"
 TEST_OPPONENT_USERNAME = "test"
 
-BUTTON_OPPONENTS = "🥷 Соперники"
+BUTTON_OPPONENTS = "🏓 Соперники"
 BUTTON_INVITE_OPPONENT = "👊 Бросить вызов"
 BUTTON_SEND_INVITE = "💌 Отправить"
 BUTTON_HAVE_INVITE_CODE = "✋ У меня есть код"
-BUTTON_TOTAL_STATS = "📊 Статистика"
+BUTTON_TOTAL_STATS = "🥷 Профиль"
 BUTTON_ADD_SCORE = "🏓 Добавить счёт"
 BUTTON_UNDO_SCORE = "↩️ Отменить"
 BUTTON_EDIT = "✏️ Изменить"
 BUTTON_OPPONENT_DAILY_STATS = "📊 Статистика"
+BUTTON_STATS_GENERAL_ACTIVE = "✅ Общая"
+BUTTON_STATS_GENERAL = "Общая"
+BUTTON_STATS_DAILY_ACTIVE = "✅ По дням"
+BUTTON_STATS_DAILY = "По дням"
 BUTTON_DELETE_OPPONENT = "❌ Удалить соперника"
 BUTTON_CONFIRM_DELETE_OPPONENT = "✅ Да, удалить"
 BUTTON_CANCEL = "↩️ Отмена"
@@ -116,6 +120,12 @@ class DailyStatsLike(Protocol):
     losses: int
 
 
+class RecentGameLike(Protocol):
+    played_at: str
+    own_score: int
+    opponent_score: int
+
+
 # Имя игрока для таблиц и уведомлений: @username, если есть, иначе имя.
 def display_user_name(first_name: str, username: Optional[str]) -> str:
     if username:
@@ -186,7 +196,7 @@ def table_row_to_basic_html(match: re.Match[str]) -> str:
     if not cells:
         return ""
 
-    if cells[0] in {"Показатель", "День"}:
+    if cells[0] in {"Показатель", "День", "Дата"}:
         return ""
 
     if len(cells) == 3 and cells[0] == "Победы":
@@ -195,11 +205,17 @@ def table_row_to_basic_html(match: re.Match[str]) -> str:
     if len(cells) == 3 and cells[0] == "Мячи":
         return f"Мячи: {cells[1]}-{cells[2]}\n"
 
+    if len(cells) == 2 and cells[0] == "Разница":
+        return f"Разница: {cells[1]}\n"
+
     if len(cells) == 2 and cells[0] == "Всего сыграно":
         return f"Партии: {cells[1]}\n"
 
     if len(cells) == 2:
         return f"{cells[0]}: {cells[1]}\n"
+
+    if len(cells) == 3:
+        return f"{cells[0]}: {cells[1]}-{cells[2]}\n"
 
     return f"{cells[0]}: {' / '.join(cells[1:])}\n"
 
@@ -300,7 +316,12 @@ def score_input_error(opponent_name: str, error: Exception) -> str:
 
 
 # Сообщение после сохранения результата партии.
-def score_saved(opponent_name: str, score: ScoreLike, stats: StatsLike, user_name: str = DEFAULT_USER_NAME) -> str:
+def score_saved(
+    opponent_name: str,
+    score: ScoreLike,
+    recent_games: list[RecentGameLike],
+    user_name: str = DEFAULT_USER_NAME,
+) -> str:
     overtime = ""
     if score.overtime_own or score.overtime_opponent:
         overtime = (
@@ -311,21 +332,25 @@ def score_saved(opponent_name: str, score: ScoreLike, stats: StatsLike, user_nam
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
         f"\n✅ Добавлен счёт: {score.own_score}-{score.opponent_score}.{overtime}\n"
-        "<h2>📊 Текущая статистика:</h2>"
+        "<h2>📊 Последние 5 игр</h2>"
         "<hr/>"
-        f"{format_stats(stats, user_name=user_name, opponent_name=opponent_name)}"
+        f"{format_recent_games(recent_games, user_name=user_name, opponent_name=opponent_name)}"
         "\nМожно сразу написать результат следующего матча."
     )
 
 
 # Сообщение после отмены только что добавленного результата партии.
-def score_undone(opponent_name: str, stats: StatsLike, user_name: str = DEFAULT_USER_NAME) -> str:
+def score_undone(
+    opponent_name: str,
+    recent_games: list[RecentGameLike],
+    user_name: str = DEFAULT_USER_NAME,
+) -> str:
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
         "\n↩️ Последний счёт отменён.\n"
-        "<h2>📊 Текущая статистика:</h2>"
+        "<h2>📊 Последние 5 игр</h2>"
         "<hr/>"
-        f"{format_stats(stats, user_name=user_name, opponent_name=opponent_name)}"
+        f"{format_recent_games(recent_games, user_name=user_name, opponent_name=opponent_name)}"
         "\nМожно сразу написать новый результат."
     )
 
@@ -333,7 +358,7 @@ def score_undone(opponent_name: str, stats: StatsLike, user_name: str = DEFAULT_
 # Карточка статистики с одним соперником.
 def opponent_stats(opponent_name: str, stats: StatsLike, user_name: str = DEFAULT_USER_NAME) -> str:
     return (
-        f"<h2>🏓 Матчи с {html.escape(opponent_name)}</h2>"
+        f"<h2>📊 Статистика с {html.escape(opponent_name)}</h2>"
         "<hr/>"
         f"{format_stats(stats, user_name=user_name, opponent_name=opponent_name)}"
     )
@@ -378,14 +403,45 @@ def pair_needs_two_numbers(example: str) -> str:
 def format_stats(stats: StatsLike, user_name: str = DEFAULT_USER_NAME, opponent_name: str = "Соперники") -> str:
     safe_user_name = format_rich_user_name(user_name)
     safe_opponent_name = format_rich_user_name(opponent_name)
+    games_difference = stats.wins - stats.losses
+    points_difference = stats.points_for - stats.points_against
 
     return (
         "<table bordered striped>"
         f"<tr><th>Показатель</th><th>🥷 {safe_user_name}</th><th>🏓 {safe_opponent_name}</th></tr>"
         f"<tr><td>Победы</td><td align=\"right\">{stats.wins}</td><td align=\"right\">{stats.losses}</td></tr>"
+        f"<tr><td>Разница</td><td colspan=\"2\" align=\"right\">{games_difference}</td></tr>"
         f"<tr><td>Всего сыграно</td><td colspan=\"2\" align=\"right\">{stats.games}</td></tr>"
         f"<tr><td>Мячи</td><td align=\"right\">{stats.points_for}</td><td align=\"right\">{stats.points_against}</td></tr>"
+        f"<tr><td>Разница</td><td colspan=\"2\" align=\"right\">{points_difference}</td></tr>"
         f"<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">{stats.points_for + stats.points_against}</td></tr>"
+        "</table>"
+    )
+
+
+# Таблица последних игр на экране после добавления счёта.
+def format_recent_games(
+    recent_games: list[RecentGameLike],
+    user_name: str = DEFAULT_USER_NAME,
+    opponent_name: str = "Соперник",
+) -> str:
+    safe_user_name = format_rich_user_name(user_name)
+    safe_opponent_name = format_rich_user_name(opponent_name)
+    rows = "".join(
+        (
+            f"<tr><td>{format_game_time(game.played_at)}</td>"
+            f"<td align=\"right\">{game.own_score}</td>"
+            f"<td align=\"right\">{game.opponent_score}</td></tr>"
+        )
+        for game in recent_games
+    )
+    if not rows:
+        rows = "<tr><td colspan=\"3\">Пока нет сыгранных матчей.</td></tr>"
+
+    return (
+        "<table bordered striped>"
+        f"<tr><th>Дата</th><th>{safe_user_name}</th><th>{safe_opponent_name}</th></tr>"
+        f"{rows}"
         "</table>"
     )
 
@@ -393,3 +449,8 @@ def format_stats(stats: StatsLike, user_name: str = DEFAULT_USER_NAME, opponent_
 def format_day(played_on: str) -> str:
     day = datetime.strptime(played_on, "%Y-%m-%d")
     return f"{day.day} {MONTHS_RU[day.month]} '{day.year % 100:02d}"
+
+
+def format_game_time(played_at: str) -> str:
+    day = datetime.fromisoformat(played_at)
+    return f"{day.day} {MONTHS_RU[day.month]}, {day:%H:%M}"

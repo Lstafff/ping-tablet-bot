@@ -59,6 +59,33 @@ class StorageTest(unittest.TestCase):
             self.assertEqual(stats.games, 0)
             self.assertEqual((stats.points_for, stats.points_against), (0, 0))
 
+    def test_recent_games_are_limited_and_ordered(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(str(Path(directory) / "bot.sqlite3"))
+            db.ensure_user(1, "Игрок", None)
+            opponent = db.add_opponent(1, "Тестовый соперник", None)
+            for index, score in enumerate(["11-7", "8-11", "11-5", "11-9", "7-11", "11-6"], start=1):
+                db.add_game(1, opponent.id, parse_score(score))
+                db.connection.execute(
+                    "UPDATE games SET played_at = ? WHERE id = ?",
+                    (f"2026-06-{index:02d}T10:00:00+03:00", index),
+                )
+            db.connection.commit()
+
+            recent_games = db.get_recent_games(1, opponent.id)
+
+            self.assertEqual(len(recent_games), 5)
+            self.assertEqual(
+                [(game.played_at[:10], game.own_score, game.opponent_score) for game in recent_games],
+                [
+                    ("2026-06-06", 11, 6),
+                    ("2026-06-05", 7, 11),
+                    ("2026-06-04", 11, 9),
+                    ("2026-06-03", 11, 5),
+                    ("2026-06-02", 8, 11),
+                ],
+            )
+
     def test_manual_totals_for_linked_opponent_are_visible_for_both_players(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             db = Database(str(Path(directory) / "bot.sqlite3"))
@@ -78,6 +105,22 @@ class StorageTest(unittest.TestCase):
             self.assertEqual((first_stats.points_for, first_stats.points_against), (55, 47))
             self.assertEqual((second_stats.wins, second_stats.losses), (2, 3))
             self.assertEqual((second_stats.points_for, second_stats.points_against), (47, 55))
+
+    def test_recent_games_for_linked_opponent_are_visible_for_both_players(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(str(Path(directory) / "bot.sqlite3"))
+            db.ensure_user(1, "Игрок 1", None)
+            db.ensure_user(2, "Игрок 2", None)
+            first_opponent = db.add_opponent(1, "Игрок 2", 2)
+            second_opponent = db.add_opponent(2, "Игрок 1", 1)
+
+            db.add_game(1, first_opponent.id, parse_score("11-7"))
+
+            first_recent = db.get_recent_games(1, first_opponent.id)
+            second_recent = db.get_recent_games(2, second_opponent.id)
+
+            self.assertEqual((first_recent[0].own_score, first_recent[0].opponent_score), (11, 7))
+            self.assertEqual((second_recent[0].own_score, second_recent[0].opponent_score), (7, 11))
 
     def test_opponent_daily_stats_for_local_opponent(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

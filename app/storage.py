@@ -56,6 +56,13 @@ class DailyStats:
 
 
 @dataclass(frozen=True)
+class RecentGame:
+    played_at: str
+    own_score: int
+    opponent_score: int
+
+
+@dataclass(frozen=True)
 class Session:
     mode: str
     opponent_id: Optional[int]
@@ -608,6 +615,59 @@ class Database:
             DailyStats(played_on=played_on, wins=wins, losses=losses)
             for played_on, (wins, losses) in sorted(daily.items(), reverse=True)
         ]
+
+    def get_recent_games(self, owner_id: int, opponent_id: int, limit: int = 5) -> list[RecentGame]:
+        opponent = self.get_opponent(owner_id, opponent_id)
+
+        if opponent.opponent_user_id is None:
+            rows = self.connection.execute(
+                """
+                SELECT played_at, player_a_score, player_b_score
+                FROM games
+                WHERE owner_id = ? AND opponent_id = ?
+                ORDER BY played_at DESC, id DESC
+                LIMIT ?
+                """,
+                (owner_id, opponent.id, limit),
+            ).fetchall()
+            return [
+                RecentGame(
+                    played_at=row["played_at"],
+                    own_score=int(row["player_a_score"]),
+                    opponent_score=int(row["player_b_score"]),
+                )
+                for row in rows
+            ]
+
+        rows = self.connection.execute(
+            """
+            SELECT player_a_id, player_b_id, player_a_score, player_b_score, played_at
+            FROM games
+            WHERE
+                (player_a_id = ? AND player_b_id = ?)
+                OR
+                (player_a_id = ? AND player_b_id = ?)
+            ORDER BY played_at DESC, id DESC
+            LIMIT ?
+            """,
+            (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id, limit),
+        ).fetchall()
+        recent_games: list[RecentGame] = []
+        for row in rows:
+            if int(row["player_a_id"]) == owner_id:
+                own_score = int(row["player_a_score"])
+                opponent_score = int(row["player_b_score"])
+            else:
+                own_score = int(row["player_b_score"])
+                opponent_score = int(row["player_a_score"])
+            recent_games.append(
+                RecentGame(
+                    played_at=row["played_at"],
+                    own_score=own_score,
+                    opponent_score=opponent_score,
+                )
+            )
+        return recent_games
 
     def set_games_total(self, owner_id: int, opponent_id: int, wins: int, losses: int) -> None:
         with self.connection:

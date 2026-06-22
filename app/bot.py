@@ -19,6 +19,7 @@ from app.keyboards import (
     main_menu_keyboard,
     opponent_daily_stats_keyboard,
     opponent_keyboard,
+    opponent_total_stats_keyboard,
     opponents_keyboard,
     score_saved_keyboard,
 )
@@ -133,7 +134,7 @@ async def score_add_callback(callback: CallbackQuery, bot: Bot) -> None:
         callback.message.chat.id,
         callback.from_user.id,
         texts.score_prompt(texts.opponent_title(opponent)),
-        back_to_opponent_keyboard(opponent_id),
+        opponent_keyboard(opponent_id),
     )
 
 
@@ -151,7 +152,7 @@ async def score_undo_callback(callback: CallbackQuery, bot: Bot) -> None:
 
     await callback.answer()
     db.set_session(callback.from_user.id, "await_score", opponent_id)
-    stats = db.get_opponent_stats(callback.from_user.id, opponent_id)
+    recent_games = db.get_recent_games(callback.from_user.id, opponent_id)
     user = db.get_user(callback.from_user.id)
     await render(
         bot,
@@ -159,10 +160,10 @@ async def score_undo_callback(callback: CallbackQuery, bot: Bot) -> None:
         callback.from_user.id,
         texts.score_undone(
             texts.opponent_title(opponent),
-            stats,
+            recent_games,
             texts.display_user_name(user.first_name, user.username),
         ),
-        back_to_opponent_keyboard(opponent_id),
+        opponent_keyboard(opponent_id),
     )
 
 
@@ -187,6 +188,15 @@ async def edit_callback(callback: CallbackQuery, bot: Bot) -> None:
     )
 
 
+@router.callback_query(F.data.startswith("stats_total:"))
+async def stats_total_callback(callback: CallbackQuery, bot: Bot) -> None:
+    await callback.answer()
+    ensure_user(callback.from_user)
+    opponent_id = int(callback.data.split(":", 1)[1])
+    db.clear_session(callback.from_user.id)
+    await show_opponent_total_stats(bot, callback.message.chat.id, callback.from_user.id, opponent_id)
+
+
 @router.callback_query(F.data.startswith("stats_days:"))
 async def stats_days_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
@@ -194,6 +204,7 @@ async def stats_days_callback(callback: CallbackQuery, bot: Bot) -> None:
     parts = callback.data.split(":")
     opponent_id = int(parts[1])
     page = int(parts[2]) if len(parts) > 2 else 1
+    db.clear_session(callback.from_user.id)
     await show_opponent_daily_stats(bot, callback.message.chat.id, callback.from_user.id, opponent_id, page)
 
 
@@ -324,12 +335,12 @@ async def handle_score_input(message: Message, bot: Bot, user_id: int, opponent_
             message.chat.id,
             user_id,
             texts.score_input_error(texts.opponent_title(opponent), error),
-            back_to_opponent_keyboard(opponent_id),
+            opponent_keyboard(opponent_id),
         )
         return
 
     game_id = db.add_game(user_id, opponent_id, score)
-    stats = db.get_opponent_stats(user_id, opponent_id)
+    recent_games = db.get_recent_games(user_id, opponent_id)
     user = db.get_user(user_id)
     await render(
         bot,
@@ -338,7 +349,7 @@ async def handle_score_input(message: Message, bot: Bot, user_id: int, opponent_
         texts.score_saved(
             texts.opponent_title(opponent),
             score,
-            stats,
+            recent_games,
             texts.display_user_name(user.first_name, user.username),
         ),
         score_saved_keyboard(opponent_id, game_id),
@@ -384,6 +395,18 @@ async def show_opponents(bot: Bot, chat_id: int, user_id: int) -> None:
 
 async def show_opponent(bot: Bot, chat_id: int, user_id: int, opponent_id: int) -> None:
     opponent = db.get_opponent(user_id, opponent_id)
+    db.set_session(user_id, "await_score", opponent_id)
+    await render(
+        bot,
+        chat_id,
+        user_id,
+        texts.score_prompt(texts.opponent_title(opponent)),
+        opponent_keyboard(opponent_id),
+    )
+
+
+async def show_opponent_total_stats(bot: Bot, chat_id: int, user_id: int, opponent_id: int) -> None:
+    opponent = db.get_opponent(user_id, opponent_id)
     stats = db.get_opponent_stats(user_id, opponent_id)
     user = db.get_user(user_id)
     await render(
@@ -395,7 +418,7 @@ async def show_opponent(bot: Bot, chat_id: int, user_id: int, opponent_id: int) 
             stats,
             texts.display_user_name(user.first_name, user.username),
         ),
-        opponent_keyboard(opponent_id),
+        opponent_total_stats_keyboard(opponent_id),
     )
 
 

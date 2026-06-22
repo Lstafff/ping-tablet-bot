@@ -3,6 +3,8 @@ from dataclasses import dataclass
 
 from app.texts import (
     format_day,
+    format_game_time,
+    format_recent_games,
     format_rich_user_name,
     format_stats,
     opponent_daily_stats,
@@ -31,6 +33,13 @@ class DailyStats:
     losses: int
 
 
+@dataclass(frozen=True)
+class RecentGame:
+    played_at: str
+    own_score: int
+    opponent_score: int
+
+
 class RichMessagesTest(unittest.TestCase):
     def test_total_stats_rich_html_uses_heading_and_table(self) -> None:
         rich_html = total_stats_rich_html(
@@ -42,8 +51,10 @@ class RichMessagesTest(unittest.TestCase):
         self.assertIn("<table bordered striped>", rich_html)
         self.assertIn("<th>🥷 &lt;Глеб &amp; Co&gt;</th>", rich_html)
         self.assertIn("<tr><td>Победы</td><td align=\"right\">3</td><td align=\"right\">2</td></tr>", rich_html)
+        self.assertIn("<tr><td>Разница</td><td colspan=\"2\" align=\"right\">1</td></tr>", rich_html)
         self.assertIn("<tr><td>Всего сыграно</td><td colspan=\"2\" align=\"right\">5</td></tr>", rich_html)
         self.assertIn("<tr><td>Мячи</td><td align=\"right\">43</td><td align=\"right\">39</td></tr>", rich_html)
+        self.assertIn("<tr><td>Разница</td><td colspan=\"2\" align=\"right\">4</td></tr>", rich_html)
         self.assertIn("<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">82</td></tr>", rich_html)
 
     def test_format_rich_user_name_escapes_html(self) -> None:
@@ -57,8 +68,10 @@ class RichMessagesTest(unittest.TestCase):
         self.assertIn("<th>🥷 Игрок</th>", rich_html)
         self.assertIn("<th>🏓 Соперники</th>", rich_html)
         self.assertIn("<tr><td>Победы</td><td align=\"right\">3</td><td align=\"right\">2</td></tr>", rich_html)
+        self.assertIn("<tr><td>Разница</td><td colspan=\"2\" align=\"right\">1</td></tr>", rich_html)
         self.assertIn("<tr><td>Всего сыграно</td><td colspan=\"2\" align=\"right\">5</td></tr>", rich_html)
         self.assertIn("<tr><td>Мячи</td><td align=\"right\">43</td><td align=\"right\">39</td></tr>", rich_html)
+        self.assertIn("<tr><td>Разница</td><td colspan=\"2\" align=\"right\">4</td></tr>", rich_html)
         self.assertIn("<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">82</td></tr>", rich_html)
 
     def test_opponent_stats_uses_user_name(self) -> None:
@@ -78,8 +91,21 @@ class RichMessagesTest(unittest.TestCase):
         self.assertIn("<th>День</th><th>@me</th><th>@test</th>", rich_html)
         self.assertIn("<tr><td>12 июня '26</td><td align=\"right\">12</td><td align=\"right\">3</td></tr>", rich_html)
 
+    def test_format_recent_games_uses_time_table(self) -> None:
+        rich_html = format_recent_games(
+            [RecentGame(played_at="2026-06-12T18:42:00+03:00", own_score=11, opponent_score=7)],
+            "@me",
+            "@test",
+        )
+
+        self.assertIn("<th>Дата</th><th>@me</th><th>@test</th>", rich_html)
+        self.assertIn("<tr><td>12 июня, 18:42</td><td align=\"right\">11</td><td align=\"right\">7</td></tr>", rich_html)
+
     def test_format_day_uses_russian_month(self) -> None:
         self.assertEqual(format_day("2026-06-12"), "12 июня '26")
+
+    def test_format_game_time_uses_russian_month_and_time(self) -> None:
+        self.assertEqual(format_game_time("2026-06-12T18:42:00+03:00"), "12 июня, 18:42")
 
     def test_rich_to_basic_html_downgrades_headings(self) -> None:
         self.assertEqual(
@@ -92,8 +118,10 @@ class RichMessagesTest(unittest.TestCase):
             rich_to_basic_html(format_stats(Stats(wins=3, losses=2, points_for=43, points_against=39))),
             (
                 "Победы / Поражения: 3-2\n"
+                "Разница: 1\n"
                 "Партии: 5\n"
                 "Мячи: 43-39\n"
+                "Разница: 4\n"
                 "Всего мячей: 82\n"
             ),
         )
