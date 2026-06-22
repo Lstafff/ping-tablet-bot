@@ -418,7 +418,7 @@ def opponent_daily_stats(opponent_name: str, daily_stats: list[DailyStatsLike], 
         f"<h2>📊 Статистика по дням с {html.escape(opponent_name)}</h2>"
         "<hr/>"
         "<table bordered striped>"
-        f"<tr><th>День</th><th>{safe_user_name}</th><th>{safe_opponent_name}</th></tr>"
+        f"<tr><th>День</th><th>🥷 {safe_user_name}</th><th>🏓 {safe_opponent_name}</th></tr>"
         f"{rows}"
         "</table>"
     )

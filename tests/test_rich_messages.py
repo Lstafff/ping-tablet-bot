@@ -106,7 +106,7 @@ class RichMessagesTest(unittest.TestCase):
             "@me",
         )
 
-        self.assertIn("<th>День</th><th>@me</th><th>@test</th>", rich_html)
+        self.assertIn("<th>День</th><th>🥷 @me</th><th>🏓 @test</th>", rich_html)
         self.assertIn("<tr><td>12 июня '26</td><td align=\"right\">12</td><td align=\"right\">3</td></tr>", rich_html)
 
     def test_format_recent_games_uses_time_table(self) -> None:
