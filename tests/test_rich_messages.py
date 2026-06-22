@@ -11,6 +11,7 @@ from app.texts import (
     format_signed_difference,
     format_stats,
     is_fnt_rating_input,
+    levels_info,
     opponent_daily_stats,
     opponent_stats,
     profile,
@@ -67,9 +68,9 @@ class RichMessagesTest(unittest.TestCase):
         )
 
         self.assertIn("<h2>🥷 Профиль @lstaff</h2>", rich_html)
-        self.assertIn("<b>･ Играет с </b><code>12 июня '26</code>", rich_html)
-        self.assertIn("<b>･ Уровень: </b><i>новичок 👶</i>", rich_html)
-        self.assertIn("<b>･ Рейтинг: </b>не выбран", rich_html)
+        self.assertIn("<b>･ Играет с </b>12 июня '26", rich_html)
+        self.assertIn("<b>･ Уровень: </b>👶 новичок", rich_html)
+        self.assertIn("<b>･ Рейтинг: </b>пока нет", rich_html)
         self.assertIn("<h2>📊 Общая статистика</h2><hr/><table bordered striped>", rich_html)
         self.assertIn("<table bordered striped>", rich_html)
         self.assertIn("<th>🥷 @lstaff</th>", rich_html)
@@ -132,20 +133,34 @@ class RichMessagesTest(unittest.TestCase):
         self.assertEqual(format_signed_difference(-2), "-2")
 
     def test_format_player_level_uses_game_boundaries(self) -> None:
-        self.assertEqual(format_player_level(49, False), "новичок 👶")
-        self.assertEqual(format_player_level(50, False), "любитель 🏓")
-        self.assertEqual(format_player_level(149, False), "любитель 🏓")
-        self.assertEqual(format_player_level(150, False), "бывалый 🤘😎")
-        self.assertEqual(format_player_level(299, False), "бывалый 🤘😎")
-        self.assertEqual(format_player_level(300, False), "робот 🦾")
-        self.assertEqual(format_player_level(499, False), "робот 🦾")
-        self.assertEqual(format_player_level(500, False), "профик 💀")
+        self.assertEqual(format_player_level(49, False), "👶 новичок")
+        self.assertEqual(format_player_level(50, False), "🏓 любитель")
+        self.assertEqual(format_player_level(149, False), "🏓 любитель")
+        self.assertEqual(format_player_level(150, False), "🤘 бывалый")
+        self.assertEqual(format_player_level(299, False), "🤘 бывалый")
+        self.assertEqual(format_player_level(300, False), "🦾 робот")
+        self.assertEqual(format_player_level(499, False), "🦾 робот")
+        self.assertEqual(format_player_level(500, False), "💀 профик")
 
     def test_format_player_level_uses_fnt_rating(self) -> None:
-        self.assertEqual(format_player_level(0, True), "профик 💀")
+        self.assertEqual(format_player_level(0, True), "💀 профик")
+
+    def test_levels_info_lists_player_levels(self) -> None:
+        rich_html = levels_info()
+
+        self.assertIn("<h2>🎯 Уровни игроков</h2>", rich_html)
+        self.assertIn("<tr><td>новичок 👶</td><td>меньше 50 игр</td></tr>", rich_html)
+        self.assertIn("<tr><td>любитель 🏓</td><td>50-149 игр</td></tr>", rich_html)
+        self.assertIn("<tr><td>бывалый 🤘😎</td><td>150-299 игр</td></tr>", rich_html)
+        self.assertIn("<tr><td>робот 🦾</td><td>300-499 игр</td></tr>", rich_html)
+        self.assertIn("<tr><td>профик 💀</td><td>500+ игр</td></tr>", rich_html)
+        self.assertIn(
+            "<quote>Если у тебя рейтинг ФНТР, ты профик независимо от количества сыгранных партий</quote>",
+            rich_html,
+        )
 
     def test_format_rating(self) -> None:
-        self.assertEqual(format_rating(None, False), "не выбран")
+        self.assertEqual(format_rating(None, False), "пока нет")
         self.assertEqual(format_rating("1500", False), "1500")
         self.assertEqual(format_rating("1500", True), "1500 (✅ ФНТР)")
 

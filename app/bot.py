@@ -126,6 +126,20 @@ async def rating_callback(callback: CallbackQuery, bot: Bot) -> None:
     )
 
 
+@router.callback_query(F.data == "levels")
+async def levels_callback(callback: CallbackQuery, bot: Bot) -> None:
+    await callback.answer()
+    ensure_user(callback.from_user)
+    db.clear_session(callback.from_user.id)
+    await render(
+        bot,
+        callback.message.chat.id,
+        callback.from_user.id,
+        texts.levels_info(),
+        back_to_profile_keyboard(),
+    )
+
+
 @router.callback_query(F.data == "rating_clear")
 async def rating_clear_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()

@@ -21,6 +21,7 @@ BUTTON_SHARE_PROFILE = "💌 Поделиться"
 BUTTON_HAVE_INVITE_CODE = "✋ У меня есть код"
 BUTTON_TOTAL_STATS = "🥷 Профиль"
 BUTTON_RATING = "🏆 Рейтинг"
+BUTTON_LEVELS = "🎯 Уровни"
 BUTTON_CLEAR_RATING = "🧹 Очистить"
 BUTTON_ADD_SCORE = "🏓 Добавить счёт"
 BUTTON_UNDO_SCORE = "↩️ Отменить"
@@ -176,8 +177,8 @@ def profile(user: UserLike, stats: StatsLike) -> str:
     level = format_player_level(stats.games, user.rating_is_fnt)
     return (
         f"<h2>🥷 Профиль {html.escape(user_name)}</h2>"
-        f"\n<b>･ Играет с </b><code>{format_day(user.created_at[:10])}</code>\n"
-        f"<b>･ Уровень: </b><i>{level}</i>\n"
+        f"\n<b>･ Играет с </b>{format_day(user.created_at[:10])}\n"
+        f"<b>･ Уровень: </b>{level}\n"
         f"<b>･ Рейтинг: </b>{format_rating(user.rating, user.rating_is_fnt)}\n"
         "<h2>📊 Общая статистика</h2>"
         "<hr/>"
@@ -257,10 +258,26 @@ def invite_share_url(invite_link: str) -> str:
 def rating_prompt() -> str:
     return (
         "<h2>🏆 Какой у тебя рейтинг?</h2>"
-        "\nВведи число или вставь ссылку на свой профиль в рейтинге ФНТР.\n"
+        "\nВставь ссылку на свой профиль в рейтинге ФНТР или RTTF\n"
         "<blockquote>"
         "😔 Если ты профик с рейтингом, участвовать в любительских турнирах не получится"
         "</blockquote>"
+    )
+
+
+# Экран с правилами уровней игроков в профиле.
+def levels_info() -> str:
+    return (
+        "<h2>🎯 Уровни игроков</h2>"
+        "\n<table bordered striped>"
+        "<tr><th>Уровень</th><th>Сыграно</th></tr>"
+        "<tr><td>новичок 👶</td><td>меньше 50 игр</td></tr>"
+        "<tr><td>любитель 🏓</td><td>50-149 игр</td></tr>"
+        "<tr><td>бывалый 🤘😎</td><td>150-299 игр</td></tr>"
+        "<tr><td>робот 🦾</td><td>300-499 игр</td></tr>"
+        "<tr><td>профик 💀</td><td>500+ игр</td></tr>"
+        "</table>"
+        "<quote>Если у тебя рейтинг ФНТР, ты профик независимо от количества сыгранных партий</quote>"
     )
 
 
@@ -498,19 +515,19 @@ def format_signed_difference(value: int) -> str:
 
 def format_player_level(games: int, rating_is_fnt: bool) -> str:
     if rating_is_fnt or games >= 500:
-        return "профик 💀"
+        return "💀 профик"
     if games >= 300:
-        return "робот 🦾"
+        return "🦾 робот"
     if games >= 150:
-        return "бывалый 🤘😎"
+        return "🤘 бывалый"
     if games >= 50:
-        return "любитель 🏓"
-    return "новичок 👶"
+        return "🏓 любитель"
+    return "👶 новичок"
 
 
 def format_rating(rating: Optional[str], rating_is_fnt: bool) -> str:
     if not rating:
-        return "не выбран"
+        return "пока нет"
     if rating_is_fnt:
         return f"{html.escape(rating)} (✅ ФНТР)"
     return html.escape(rating)

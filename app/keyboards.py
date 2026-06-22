@@ -18,9 +18,10 @@ def main_menu_keyboard(has_opponents: bool) -> InlineKeyboardMarkup:
 def profile_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text=texts.BUTTON_RATING, callback_data="rating")
+    builder.button(text=texts.BUTTON_LEVELS, callback_data="levels")
     builder.button(text=texts.BUTTON_SHARE_PROFILE, callback_data="invite")
     builder.button(text=texts.BUTTON_BACK, callback_data="main")
-    builder.adjust(1)
+    builder.adjust(2, 1, 1)
     return builder.as_markup()
 
 
