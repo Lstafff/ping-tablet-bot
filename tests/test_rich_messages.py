@@ -149,11 +149,12 @@ class RichMessagesTest(unittest.TestCase):
         rich_html = levels_info()
 
         self.assertIn("<h2>🎯 Уровни игроков</h2>", rich_html)
-        self.assertIn("<tr><td>новичок 👶</td><td>меньше 50 игр</td></tr>", rich_html)
-        self.assertIn("<tr><td>любитель 🏓</td><td>50-149 игр</td></tr>", rich_html)
-        self.assertIn("<tr><td>бывалый 🤘😎</td><td>150-299 игр</td></tr>", rich_html)
-        self.assertIn("<tr><td>робот 🦾</td><td>300-499 игр</td></tr>", rich_html)
-        self.assertIn("<tr><td>профик 💀</td><td>500+ игр</td></tr>", rich_html)
+        self.assertIn("<tr><th>Уровень</th><th>Всего матчей</th></tr>", rich_html)
+        self.assertIn("<tr><td>новичок 👶</td><td>меньше 50</td></tr>", rich_html)
+        self.assertIn("<tr><td>любитель 🏓</td><td>50-149</td></tr>", rich_html)
+        self.assertIn("<tr><td>бывалый 🤘😎</td><td>150-299</td></tr>", rich_html)
+        self.assertIn("<tr><td>робот 🦾</td><td>300-499</td></tr>", rich_html)
+        self.assertIn("<tr><td>профик 💀</td><td>500+</td></tr>", rich_html)
         self.assertIn(
             "<blockquote>Если у тебя рейтинг ФНТР, ты профик независимо от количества сыгранных партий</blockquote>",
             rich_html,

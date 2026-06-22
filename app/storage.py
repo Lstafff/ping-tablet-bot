@@ -368,29 +368,7 @@ class Database:
         opponent = self.get_opponent(owner_id, opponent_id)
         linked_opponent = self._get_linked_opponent(owner_id, opponent_id)
         with self.connection:
-            if opponent.opponent_user_id is None:
-                self.connection.execute(
-                    """
-                    DELETE FROM games
-                    WHERE owner_id = ? AND opponent_id = ?
-                    """,
-                    (owner_id, opponent_id),
-                )
-            else:
-                self.connection.execute(
-                    """
-                    DELETE FROM games
-                    WHERE
-                        (player_a_id = ? AND player_b_id = ?)
-                        OR
-                        (player_a_id = ? AND player_b_id = ?)
-                    """,
-                    (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id),
-                )
-
-            self._delete_adjustment(owner_id, opponent_id)
-            if linked_opponent is not None:
-                self._delete_adjustment(linked_opponent.owner_id, linked_opponent.id)
+            self._reset_stats_for_opponent(owner_id, opponent_id, opponent, linked_opponent)
 
             self.connection.execute(
                 """
@@ -399,6 +377,12 @@ class Database:
                 """,
                 (owner_id, opponent_id),
             )
+
+    def reset_opponent_stats(self, owner_id: int, opponent_id: int) -> None:
+        opponent = self.get_opponent(owner_id, opponent_id)
+        linked_opponent = self._get_linked_opponent(owner_id, opponent_id)
+        with self.connection:
+            self._reset_stats_for_opponent(owner_id, opponent_id, opponent, linked_opponent)
 
     def create_invite(self, inviter_id: int) -> str:
         return self.get_or_create_invite_code(inviter_id)
@@ -856,6 +840,37 @@ class Database:
             """,
             (owner_id, opponent_id),
         )
+
+    def _reset_stats_for_opponent(
+        self,
+        owner_id: int,
+        opponent_id: int,
+        opponent: Opponent,
+        linked_opponent: Optional[Opponent],
+    ) -> None:
+        if opponent.opponent_user_id is None:
+            self.connection.execute(
+                """
+                DELETE FROM games
+                WHERE owner_id = ? AND opponent_id = ?
+                """,
+                (owner_id, opponent_id),
+            )
+        else:
+            self.connection.execute(
+                """
+                DELETE FROM games
+                WHERE
+                    (player_a_id = ? AND player_b_id = ?)
+                    OR
+                    (player_a_id = ? AND player_b_id = ?)
+                """,
+                (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id),
+            )
+
+        self._delete_adjustment(owner_id, opponent_id)
+        if linked_opponent is not None:
+            self._delete_adjustment(linked_opponent.owner_id, linked_opponent.id)
 
     def _get_linked_opponent(self, owner_id: int, opponent_id: int) -> Optional[Opponent]:
         opponent = self.get_opponent(owner_id, opponent_id)

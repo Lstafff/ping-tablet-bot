@@ -47,6 +47,10 @@ class BotFormattingTest(unittest.TestCase):
         self.assertIn("@test", texts.delete_opponent_confirm("@test"))
         self.assertIn("@test", texts.delete_opponent_done("@test"))
 
+    def test_reset_stats_texts_are_available(self) -> None:
+        self.assertIn("@test", texts.reset_stats_confirm("@test"))
+        self.assertIn("@test", texts.reset_stats_done("@test"))
+
     def test_invite_share_url_contains_invite_link(self) -> None:
         invite_link = "https://t.me/ping_tablet_bot?start=invite_test"
         share_url = texts.invite_share_url(invite_link)

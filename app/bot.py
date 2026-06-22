@@ -24,6 +24,7 @@ from app.keyboards import (
     opponents_keyboard,
     profile_keyboard,
     rating_keyboard,
+    reset_stats_keyboard,
     score_saved_keyboard,
 )
 from app.rating import fetch_fnt_rating, parse_manual_rating
@@ -296,6 +297,39 @@ async def delete_callback(callback: CallbackQuery, bot: Bot) -> None:
         callback.from_user.id,
         texts.delete_opponent_confirm(texts.opponent_title(opponent)),
         delete_opponent_keyboard(opponent_id),
+    )
+
+
+@router.callback_query(F.data.startswith("reset:"))
+async def reset_stats_callback(callback: CallbackQuery, bot: Bot) -> None:
+    await callback.answer()
+    ensure_user(callback.from_user)
+    opponent_id = int(callback.data.split(":", 1)[1])
+    opponent = db.get_opponent(callback.from_user.id, opponent_id)
+    await render(
+        bot,
+        callback.message.chat.id,
+        callback.from_user.id,
+        texts.reset_stats_confirm(texts.opponent_title(opponent)),
+        reset_stats_keyboard(opponent_id),
+    )
+
+
+@router.callback_query(F.data.startswith("reset_confirm:"))
+async def reset_stats_confirm_callback(callback: CallbackQuery, bot: Bot) -> None:
+    await callback.answer()
+    ensure_user(callback.from_user)
+    opponent_id = int(callback.data.split(":", 1)[1])
+    opponent = db.get_opponent(callback.from_user.id, opponent_id)
+    opponent_name = texts.opponent_title(opponent)
+    db.reset_opponent_stats(callback.from_user.id, opponent_id)
+    db.clear_session(callback.from_user.id)
+    await render(
+        bot,
+        callback.message.chat.id,
+        callback.from_user.id,
+        texts.reset_stats_done(opponent_name),
+        opponent_keyboard(opponent_id),
     )
 
 

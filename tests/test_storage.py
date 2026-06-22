@@ -280,6 +280,22 @@ class StorageTest(unittest.TestCase):
             self.assertEqual(db.list_opponents(1), [])
             self.assertEqual(db.get_total_stats(1).games, 0)
 
+    def test_reset_local_opponent_stats_keeps_opponent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(str(Path(directory) / "bot.sqlite3"))
+            db.ensure_user(1, "Игрок", None)
+            opponent = db.add_opponent(1, "Тестовый соперник", None)
+            db.add_game(1, opponent.id, parse_score("11-7"))
+            db.set_games_total(1, opponent.id, 5, 4)
+            db.set_points_total(1, opponent.id, 50, 44)
+
+            db.reset_opponent_stats(1, opponent.id)
+
+            stats = db.get_opponent_stats(1, opponent.id)
+            self.assertEqual(len(db.list_opponents(1)), 1)
+            self.assertEqual(stats.games, 0)
+            self.assertEqual((stats.points_for, stats.points_against), (0, 0))
+
     def test_delete_linked_opponent_removes_shared_stats_for_both_players(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             db = Database(str(Path(directory) / "bot.sqlite3"))
@@ -296,6 +312,28 @@ class StorageTest(unittest.TestCase):
             second_stats = db.get_opponent_stats(2, second_opponent.id)
             self.assertEqual(db.list_opponents(1), [])
             self.assertEqual(second_stats.games, 0)
+            self.assertEqual((second_stats.points_for, second_stats.points_against), (0, 0))
+
+    def test_reset_linked_opponent_stats_keeps_opponents_for_both_players(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(str(Path(directory) / "bot.sqlite3"))
+            db.ensure_user(1, "Игрок 1", None)
+            db.ensure_user(2, "Игрок 2", None)
+            first_opponent = db.add_opponent(1, "Игрок 2", 2)
+            second_opponent = db.add_opponent(2, "Игрок 1", 1)
+            db.add_game(1, first_opponent.id, parse_score("11-7"))
+            db.set_games_total(1, first_opponent.id, 123, 4)
+            db.set_points_total(1, first_opponent.id, 55, 47)
+
+            db.reset_opponent_stats(1, first_opponent.id)
+
+            first_stats = db.get_opponent_stats(1, first_opponent.id)
+            second_stats = db.get_opponent_stats(2, second_opponent.id)
+            self.assertEqual(len(db.list_opponents(1)), 1)
+            self.assertEqual(len(db.list_opponents(2)), 1)
+            self.assertEqual(first_stats.games, 0)
+            self.assertEqual(second_stats.games, 0)
+            self.assertEqual((first_stats.points_for, first_stats.points_against), (0, 0))
             self.assertEqual((second_stats.points_for, second_stats.points_against), (0, 0))
 
 

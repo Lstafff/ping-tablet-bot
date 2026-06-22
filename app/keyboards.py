@@ -101,6 +101,14 @@ def delete_opponent_keyboard(opponent_id: int) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def reset_stats_keyboard(opponent_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text=texts.BUTTON_CONFIRM_RESET_STATS, callback_data=f"reset_confirm:{opponent_id}")
+    builder.button(text=texts.BUTTON_CANCEL, callback_data=f"opponent:{opponent_id}")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
 def back_to_opponent_keyboard(opponent_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text=texts.BUTTON_BACK, callback_data=f"opponent:{opponent_id}")
@@ -121,9 +129,10 @@ def edit_keyboard(opponent_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text=texts.BUTTON_EDIT_GAMES, callback_data=f"edit_games:{opponent_id}")
     builder.button(text=texts.BUTTON_EDIT_POINTS, callback_data=f"edit_points:{opponent_id}")
+    builder.button(text=texts.BUTTON_RESET_STATS, callback_data=f"reset:{opponent_id}")
     builder.button(text=texts.BUTTON_DELETE_OPPONENT, callback_data=f"delete:{opponent_id}")
     builder.button(text=texts.BUTTON_BACK, callback_data=f"opponent:{opponent_id}")
-    builder.adjust(1)
+    builder.adjust(2, 2, 1)
     return builder.as_markup()
 
 

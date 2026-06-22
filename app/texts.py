@@ -31,7 +31,9 @@ BUTTON_STATS_GENERAL_ACTIVE = "✅ Общая"
 BUTTON_STATS_GENERAL = "Общая"
 BUTTON_STATS_DAILY_ACTIVE = "✅ По дням"
 BUTTON_STATS_DAILY = "По дням"
+BUTTON_RESET_STATS = "🔄 Сбросить статистику"
 BUTTON_DELETE_OPPONENT = "❌ Удалить соперника"
+BUTTON_CONFIRM_RESET_STATS = "✅ Да, сбросить"
 BUTTON_CONFIRM_DELETE_OPPONENT = "✅ Да, удалить"
 BUTTON_CANCEL = "↩️ Отмена"
 BUTTON_BACK = "⬅️ Назад"
@@ -269,13 +271,14 @@ def rating_prompt() -> str:
 def levels_info() -> str:
     return (
         "<h2>🎯 Уровни игроков</h2>"
-        "\n<table bordered striped>"
-        "<tr><th>Уровень</th><th>Сыграно</th></tr>"
-        "<tr><td>новичок 👶</td><td>меньше 50 игр</td></tr>"
-        "<tr><td>любитель 🏓</td><td>50-149 игр</td></tr>"
-        "<tr><td>бывалый 🤘😎</td><td>150-299 игр</td></tr>"
-        "<tr><td>робот 🦾</td><td>300-499 игр</td></tr>"
-        "<tr><td>профик 💀</td><td>500+ игр</td></tr>"
+        "<hr/>"
+        "<table bordered striped>"
+        "<tr><th>Уровень</th><th>Всего матчей</th></tr>"
+        "<tr><td>новичок 👶</td><td>меньше 50</td></tr>"
+        "<tr><td>любитель 🏓</td><td>50-149</td></tr>"
+        "<tr><td>бывалый 🤘😎</td><td>150-299</td></tr>"
+        "<tr><td>робот 🦾</td><td>300-499</td></tr>"
+        "<tr><td>профик 💀</td><td>500+</td></tr>"
         "</table>"
         "<blockquote>Если у тебя рейтинг ФНТР, ты профик независимо от количества сыгранных партий</blockquote>"
     )
@@ -332,6 +335,22 @@ def delete_opponent_confirm(opponent_name: str) -> str:
     return (
         f"<h2>🗑️ Удалить соперника {html.escape(opponent_name)}?</h2>"
         "\nТы удалишь своего соперника и всю вашу статистику."
+    )
+
+
+# Подтверждение сброса статистики с соперником.
+def reset_stats_confirm(opponent_name: str) -> str:
+    return (
+        f"<h2>🔄 Сбросить статистику с {html.escape(opponent_name)}?</h2>"
+        "\nСоперник останется в списке, но ваши партии и мячи сбросятся."
+    )
+
+
+# Сообщение после сброса статистики с соперником.
+def reset_stats_done(opponent_name: str) -> str:
+    return (
+        "<h2>🔄 Статистика сброшена</h2>"
+        f"\nИстория матчей с {html.escape(opponent_name)} очищена."
     )
 
 
