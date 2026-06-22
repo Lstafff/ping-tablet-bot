@@ -173,11 +173,12 @@ def total_stats(stats: StatsLike) -> str:
 # Экран профиля с общей статистикой.
 def profile(user: UserLike, stats: StatsLike) -> str:
     user_name = display_user_name(user.first_name, user.username)
+    level = format_player_level(stats.games, user.rating_is_fnt)
     return (
         f"<h2>🥷 Профиль {html.escape(user_name)}</h2>"
-        f"\n<b>📅 Играет с </b><code>{format_day(user.created_at[:10])}</code>\n"
-        f"<b>📊 Уровень: </b><i>новичок</i>\n"
-        f"<b>🏆 Рейтинг: </b>{format_rating(user.rating, user.rating_is_fnt)}\n"
+        f"\n<b>･ Играет с </b><code>{format_day(user.created_at[:10])}</code>\n"
+        f"<b>･ Уровень: </b><i>{level}</i>\n"
+        f"<b>･ Рейтинг: </b>{format_rating(user.rating, user.rating_is_fnt)}\n"
         "<h2>📊 Общая статистика</h2>"
         "<hr/>"
         f"{format_stats(stats, user_name=user_name, opponent_name='Оппоненты')}"
@@ -493,6 +494,18 @@ def format_signed_difference(value: int) -> str:
     if value > 0:
         return f"+{value}"
     return str(value)
+
+
+def format_player_level(games: int, rating_is_fnt: bool) -> str:
+    if rating_is_fnt or games >= 500:
+        return "профик 💀"
+    if games >= 300:
+        return "робот 🦾"
+    if games >= 150:
+        return "бывалый 🤘😎"
+    if games >= 50:
+        return "любитель 🏓"
+    return "новичок 👶"
 
 
 def format_rating(rating: Optional[str], rating_is_fnt: bool) -> str:

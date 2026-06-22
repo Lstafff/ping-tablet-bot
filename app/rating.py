@@ -29,6 +29,32 @@ def fetch_fnt_rating(profile_url: str) -> Optional[str]:
 
 def parse_fnt_rating(page_html: str) -> Optional[str]:
     normalized_html = html.unescape(page_html)
+    points_match = re.search(
+        r"Количество\s+очков\s*:\s*(\d+(?:[.,]\d+)?)",
+        normalized_html,
+        flags=re.IGNORECASE,
+    )
+    if points_match:
+        return points_match.group(1).replace(",", ".")
+
+    active_fnt_tab_match = re.search(
+        r"<li[^>]*(?:class=['\"][^'\"]*\bact\b[^'\"]*['\"][^>]*data-tab=['\"]rat_f['\"]|"
+        r"data-tab=['\"]rat_f['\"][^>]*class=['\"][^'\"]*\bact\b[^'\"]*['\"])[^>]*>"
+        r".*?<dfn>\s*(\d+(?:[.,]\d+)?)\s*</dfn>",
+        normalized_html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if active_fnt_tab_match:
+        return active_fnt_tab_match.group(1).replace(",", ".")
+
+    fnt_tab_match = re.search(
+        r"<li[^>]*data-tab=['\"]rat_f['\"][^>]*>.*?<dfn>\s*(\d+(?:[.,]\d+)?)\s*</dfn>",
+        normalized_html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if fnt_tab_match:
+        return fnt_tab_match.group(1).replace(",", ".")
+
     json_match = re.search(
         r"['\"](?:rating|rate|reit|ratingValue)['\"]\s*:\s*['\"]?(\d+(?:[.,]\d+)?)",
         normalized_html,

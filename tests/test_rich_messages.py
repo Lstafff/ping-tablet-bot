@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from app.texts import (
     format_day,
     format_game_time,
+    format_player_level,
     format_recent_games,
     format_rating,
     format_rich_user_name,
@@ -66,9 +67,9 @@ class RichMessagesTest(unittest.TestCase):
         )
 
         self.assertIn("<h2>🥷 Профиль @lstaff</h2>", rich_html)
-        self.assertIn("<b>📅 Играет с </b><code>12 июня '26</code>", rich_html)
-        self.assertIn("<b>📊 Уровень: </b><i>новичок</i>", rich_html)
-        self.assertIn("<b>🏆 Рейтинг: </b>не выбран", rich_html)
+        self.assertIn("<b>･ Играет с </b><code>12 июня '26</code>", rich_html)
+        self.assertIn("<b>･ Уровень: </b><i>новичок 👶</i>", rich_html)
+        self.assertIn("<b>･ Рейтинг: </b>не выбран", rich_html)
         self.assertIn("<h2>📊 Общая статистика</h2><hr/><table bordered striped>", rich_html)
         self.assertIn("<table bordered striped>", rich_html)
         self.assertIn("<th>🥷 @lstaff</th>", rich_html)
@@ -129,6 +130,19 @@ class RichMessagesTest(unittest.TestCase):
         self.assertEqual(format_signed_difference(4), "+4")
         self.assertEqual(format_signed_difference(0), "0")
         self.assertEqual(format_signed_difference(-2), "-2")
+
+    def test_format_player_level_uses_game_boundaries(self) -> None:
+        self.assertEqual(format_player_level(49, False), "новичок 👶")
+        self.assertEqual(format_player_level(50, False), "любитель 🏓")
+        self.assertEqual(format_player_level(149, False), "любитель 🏓")
+        self.assertEqual(format_player_level(150, False), "бывалый 🤘😎")
+        self.assertEqual(format_player_level(299, False), "бывалый 🤘😎")
+        self.assertEqual(format_player_level(300, False), "робот 🦾")
+        self.assertEqual(format_player_level(499, False), "робот 🦾")
+        self.assertEqual(format_player_level(500, False), "профик 💀")
+
+    def test_format_player_level_uses_fnt_rating(self) -> None:
+        self.assertEqual(format_player_level(0, True), "профик 💀")
 
     def test_format_rating(self) -> None:
         self.assertEqual(format_rating(None, False), "не выбран")

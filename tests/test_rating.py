@@ -16,6 +16,23 @@ class RatingTest(unittest.TestCase):
 
         self.assertEqual(parse_fnt_rating(page_html), "1342")
 
+    def test_parse_ttfr_rating_from_points_meta(self) -> None:
+        page_html = '<meta name="description" content="Санкт-Петербург. Количество очков: 2219">'
+
+        self.assertEqual(parse_fnt_rating(page_html), "2219")
+
+    def test_parse_rttf_rating_from_active_fnt_tab(self) -> None:
+        page_html = (
+            '<h3><dfn>1409</dfn></h3>'
+            '<ul id="tabs">'
+            '<li data-tab="rat_s">rttf <dfn>1409</dfn></li>'
+            '<li class="act" data-tab="rat_f">фнтр <dfn>2233</dfn></li>'
+            '</ul>'
+            '<section class="player-stats"><table><tr><td>Место в рейтинге:</td><td>1</td></tr></table></section>'
+        )
+
+        self.assertEqual(parse_fnt_rating(page_html), "2233")
+
     def test_parse_fnt_rating_from_json(self) -> None:
         page_html = "<script>{\"rating\": 1577}</script>"
 
