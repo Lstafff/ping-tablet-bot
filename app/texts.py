@@ -175,9 +175,9 @@ def profile(user: UserLike, stats: StatsLike) -> str:
     user_name = display_user_name(user.first_name, user.username)
     return (
         f"<h2>🥷 Профиль {html.escape(user_name)}</h2>"
-        f"\n<b>📅 Играет с</b> <code>{format_day(user.created_at[:10])}</code>\n"
-        f"<b>📊 Уровень: новичок</b>\n"
-        f"<b>🏆 Рейтинг: {format_rating(user.rating, user.rating_is_fnt)}</b>\n"
+        f"\n<b>📅 Играет с </b><code>{format_day(user.created_at[:10])}</code>\n"
+        f"<b>📊 Уровень: </b><i>новичок</i>\n"
+        f"<b>🏆 Рейтинг: </b>{format_rating(user.rating, user.rating_is_fnt)}\n"
         "<h2>📊 Общая статистика</h2>"
         "<hr/>"
         f"{format_stats(stats, user_name=user_name, opponent_name='Оппоненты')}"
@@ -444,10 +444,10 @@ def format_stats(stats: StatsLike, user_name: str = DEFAULT_USER_NAME, opponent_
     return (
         "<table bordered striped>"
         f"<tr><th>Показатель</th><th>🥷 {safe_user_name}</th><th>🏓 {safe_opponent_name}</th></tr>"
-        f"<tr><td>Победы</td><td align=\"right\">{stats.wins}</td><td align=\"right\">{stats.losses}</td></tr>"
-        f"<tr><td>Разница</td><td colspan=\"2\" align=\"right\">{games_difference} ({stats.games})</td></tr>"
-        f"<tr><td>Мячи</td><td align=\"right\">{stats.points_for}</td><td align=\"right\">{stats.points_against}</td></tr>"
-        f"<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">{stats.points_for + stats.points_against} ({points_difference})</td></tr>"
+        f"<tr><td>Победы</td><td align=\"right\">{stats.wins} ({games_difference})</td><td align=\"right\">{stats.losses}</td></tr>"
+        f"<tr><td>Всего игр</td><td colspan=\"2\" align=\"right\">{stats.games}</td></tr>"
+        f"<tr><td>Мячи</td><td align=\"right\">{stats.points_for} ({points_difference})</td><td align=\"right\">{stats.points_against}</td></tr>"
+        f"<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">{stats.points_for + stats.points_against}</td></tr>"
         "</table>"
     )
 

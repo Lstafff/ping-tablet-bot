@@ -66,16 +66,16 @@ class RichMessagesTest(unittest.TestCase):
         )
 
         self.assertIn("<h2>🥷 Профиль @lstaff</h2>", rich_html)
-        self.assertIn("<b>📅 Играет с</b> <code>12 июня '26</code>", rich_html)
-        self.assertIn("Уровень: новичок", rich_html)
-        self.assertIn("Рейтинг: не выбран", rich_html)
+        self.assertIn("<b>📅 Играет с </b><code>12 июня '26</code>", rich_html)
+        self.assertIn("<b>📊 Уровень: </b><i>новичок</i>", rich_html)
+        self.assertIn("<b>🏆 Рейтинг: </b>не выбран", rich_html)
         self.assertIn("<h2>📊 Общая статистика</h2><hr/><table bordered striped>", rich_html)
         self.assertIn("<table bordered striped>", rich_html)
         self.assertIn("<th>🥷 @lstaff</th>", rich_html)
-        self.assertIn("<tr><td>Победы</td><td align=\"right\">3</td><td align=\"right\">2</td></tr>", rich_html)
-        self.assertIn("<tr><td>Разница</td><td colspan=\"2\" align=\"right\">+1 (5)</td></tr>", rich_html)
-        self.assertIn("<tr><td>Мячи</td><td align=\"right\">43</td><td align=\"right\">39</td></tr>", rich_html)
-        self.assertIn("<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">82 (+4)</td></tr>", rich_html)
+        self.assertIn("<tr><td>Победы</td><td align=\"right\">3 (+1)</td><td align=\"right\">2</td></tr>", rich_html)
+        self.assertIn("<tr><td>Всего игр</td><td colspan=\"2\" align=\"right\">5</td></tr>", rich_html)
+        self.assertIn("<tr><td>Мячи</td><td align=\"right\">43 (+4)</td><td align=\"right\">39</td></tr>", rich_html)
+        self.assertIn("<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">82</td></tr>", rich_html)
 
     def test_format_rich_user_name_escapes_html(self) -> None:
         self.assertEqual(format_rich_user_name(" <test&user> "), "&lt;test&amp;user&gt;")
@@ -87,10 +87,10 @@ class RichMessagesTest(unittest.TestCase):
         self.assertIn("<table bordered striped>", rich_html)
         self.assertIn("<th>🥷 Игрок</th>", rich_html)
         self.assertIn("<th>🏓 Соперники</th>", rich_html)
-        self.assertIn("<tr><td>Победы</td><td align=\"right\">3</td><td align=\"right\">2</td></tr>", rich_html)
-        self.assertIn("<tr><td>Разница</td><td colspan=\"2\" align=\"right\">+1 (5)</td></tr>", rich_html)
-        self.assertIn("<tr><td>Мячи</td><td align=\"right\">43</td><td align=\"right\">39</td></tr>", rich_html)
-        self.assertIn("<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">82 (+4)</td></tr>", rich_html)
+        self.assertIn("<tr><td>Победы</td><td align=\"right\">3 (+1)</td><td align=\"right\">2</td></tr>", rich_html)
+        self.assertIn("<tr><td>Всего игр</td><td colspan=\"2\" align=\"right\">5</td></tr>", rich_html)
+        self.assertIn("<tr><td>Мячи</td><td align=\"right\">43 (+4)</td><td align=\"right\">39</td></tr>", rich_html)
+        self.assertIn("<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">82</td></tr>", rich_html)
 
     def test_opponent_stats_uses_user_name(self) -> None:
         rich_html = opponent_stats("@test", Stats(wins=3, losses=2, points_for=43, points_against=39), "@me")
@@ -149,10 +149,10 @@ class RichMessagesTest(unittest.TestCase):
         self.assertEqual(
             rich_to_basic_html(format_stats(Stats(wins=3, losses=2, points_for=43, points_against=39))),
             (
-                "Победы / Поражения: 3-2\n"
-                "Разница: +1 (5)\n"
-                "Мячи: 43-39\n"
-                "Всего мячей: 82 (+4)\n"
+                "Победы / Поражения: 3 (+1)-2\n"
+                "Всего игр: 5\n"
+                "Мячи: 43 (+4)-39\n"
+                "Всего мячей: 82\n"
             ),
         )
 
