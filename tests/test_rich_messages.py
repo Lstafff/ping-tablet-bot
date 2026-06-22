@@ -155,7 +155,7 @@ class RichMessagesTest(unittest.TestCase):
         self.assertIn("<tr><td>робот 🦾</td><td>300-499 игр</td></tr>", rich_html)
         self.assertIn("<tr><td>профик 💀</td><td>500+ игр</td></tr>", rich_html)
         self.assertIn(
-            "<quote>Если у тебя рейтинг ФНТР, ты профик независимо от количества сыгранных партий</quote>",
+            "<blockquote>Если у тебя рейтинг ФНТР, ты профик независимо от количества сыгранных партий</blockquote>",
             rich_html,
         )
 
