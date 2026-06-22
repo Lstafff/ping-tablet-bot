@@ -22,7 +22,6 @@ BUTTON_TOTAL_STATS = "🥷 Профиль"
 BUTTON_RATING = "🏆 Рейтинг"
 BUTTON_LEVELS = "🎯 Уровни"
 BUTTON_CLEAR_RATING = "🧹 Очистить"
-BUTTON_ADD_SCORE = "🏓 Добавить счёт"
 BUTTON_UNDO_SCORE = "↩️ Отменить"
 BUTTON_EDIT = "✏️ Изменить"
 BUTTON_OPPONENT_DAILY_STATS = "📊 Статистика"
@@ -162,14 +161,6 @@ def username_label(username: str) -> str:
     if username.startswith("@"):
         return username
     return f"@{username}"
-
-
-# Запасной обычный текст профиля, если rich-таблица не отправилась.
-def total_stats(stats: StatsLike) -> str:
-    return (
-        "<h2>📊 Статистика всех матчей</h2>"
-        f"{format_stats(stats)}"
-    )
 
 
 # Экран профиля с общей статистикой.

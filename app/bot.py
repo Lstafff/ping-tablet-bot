@@ -8,6 +8,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InputRichMessage, Message, User as TelegramUser
 
 from app import texts
+from app.callbacks import parse_callback_id, parse_score_undo_callback, parse_stats_days_callback
 from app.config import load_config
 from app.keyboards import (
     back_to_opponent_keyboard,
@@ -35,10 +36,17 @@ router = Router()
 db: Optional[Database] = None
 seed_test_opponent = True
 DAILY_STATS_PAGE_SIZE = 14
+SESSION_INVITE_CODE = "await_invite_code"
+SESSION_RATING = "await_rating"
+SESSION_SCORE = "await_score"
+SESSION_EDIT_GAMES = "await_edit_games"
+SESSION_EDIT_POINTS = "await_edit_points"
 
 
 @router.message(CommandStart())
 async def start(message: Message, bot: Bot) -> None:
+    if message.from_user is None:
+        return
     user_id = message.from_user.id
     ensure_user(message.from_user)
     await delete_message(bot, message)
@@ -53,6 +61,8 @@ async def start(message: Message, bot: Bot) -> None:
 
 @router.message(Command("menu"))
 async def menu(message: Message, bot: Bot) -> None:
+    if message.from_user is None:
+        return
     user_id = message.from_user.id
     ensure_user(message.from_user)
     await delete_message(bot, message)
@@ -69,7 +79,6 @@ async def main_callback(callback: CallbackQuery, bot: Bot) -> None:
 
 
 @router.callback_query(F.data == "profile")
-@router.callback_query(F.data == "stats_all")
 async def profile_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
@@ -102,7 +111,7 @@ async def invite_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def invite_code_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    db.set_session(callback.from_user.id, "await_invite_code", None)
+    db.set_session(callback.from_user.id, SESSION_INVITE_CODE, None)
     await render(
         bot,
         callback.message.chat.id,
@@ -117,7 +126,7 @@ async def rating_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
     user = db.get_user(callback.from_user.id)
-    db.set_session(callback.from_user.id, "await_rating", None)
+    db.set_session(callback.from_user.id, SESSION_RATING, None)
     await render(
         bot,
         callback.message.chat.id,
@@ -161,33 +170,21 @@ async def opponents_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def opponent_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    opponent_id = int(callback.data.split(":", 1)[1])
+    opponent_id = parse_callback_id(callback.data, "opponent:")
+    if opponent_id is None:
+        return
     db.clear_session(callback.from_user.id)
     await show_opponent(bot, callback.message.chat.id, callback.from_user.id, opponent_id)
-
-
-@router.callback_query(F.data.startswith("score_add:"))
-async def score_add_callback(callback: CallbackQuery, bot: Bot) -> None:
-    await callback.answer()
-    ensure_user(callback.from_user)
-    opponent_id = int(callback.data.split(":", 1)[1])
-    opponent = db.get_opponent(callback.from_user.id, opponent_id)
-    db.set_session(callback.from_user.id, "await_score", opponent_id)
-    await render(
-        bot,
-        callback.message.chat.id,
-        callback.from_user.id,
-        texts.score_prompt(texts.opponent_title(opponent)),
-        opponent_keyboard(opponent_id),
-    )
 
 
 @router.callback_query(F.data.startswith("score_undo:"))
 async def score_undo_callback(callback: CallbackQuery, bot: Bot) -> None:
     ensure_user(callback.from_user)
-    _, opponent_id_raw, game_id_raw = callback.data.split(":")
-    opponent_id = int(opponent_id_raw)
-    game_id = int(game_id_raw)
+    parsed_callback = parse_score_undo_callback(callback.data)
+    if parsed_callback is None:
+        await callback.answer("Кнопка устарела.")
+        return
+    opponent_id, game_id = parsed_callback
     deleted = db.delete_game(callback.from_user.id, opponent_id, game_id)
     opponent = db.get_opponent(callback.from_user.id, opponent_id)
     if not deleted:
@@ -195,7 +192,7 @@ async def score_undo_callback(callback: CallbackQuery, bot: Bot) -> None:
         return
 
     await callback.answer()
-    db.set_session(callback.from_user.id, "await_score", opponent_id)
+    db.set_session(callback.from_user.id, SESSION_SCORE, opponent_id)
     recent_games = db.get_recent_games(callback.from_user.id, opponent_id)
     user = db.get_user(callback.from_user.id)
     await render(
@@ -215,7 +212,9 @@ async def score_undo_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def edit_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    opponent_id = int(callback.data.split(":", 1)[1])
+    opponent_id = parse_callback_id(callback.data, "edit:")
+    if opponent_id is None:
+        return
     opponent = db.get_opponent(callback.from_user.id, opponent_id)
     stats = db.get_opponent_stats(callback.from_user.id, opponent_id)
     user = db.get_user(callback.from_user.id)
@@ -236,7 +235,9 @@ async def edit_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def stats_total_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    opponent_id = int(callback.data.split(":", 1)[1])
+    opponent_id = parse_callback_id(callback.data, "stats_total:")
+    if opponent_id is None:
+        return
     db.clear_session(callback.from_user.id)
     await show_opponent_total_stats(bot, callback.message.chat.id, callback.from_user.id, opponent_id)
 
@@ -245,9 +246,10 @@ async def stats_total_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def stats_days_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    parts = callback.data.split(":")
-    opponent_id = int(parts[1])
-    page = int(parts[2]) if len(parts) > 2 else 1
+    parsed_callback = parse_stats_days_callback(callback.data)
+    if parsed_callback is None:
+        return
+    opponent_id, page = parsed_callback
     db.clear_session(callback.from_user.id)
     await show_opponent_daily_stats(bot, callback.message.chat.id, callback.from_user.id, opponent_id, page)
 
@@ -256,9 +258,11 @@ async def stats_days_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def edit_games_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    opponent_id = int(callback.data.split(":", 1)[1])
+    opponent_id = parse_callback_id(callback.data, "edit_games:")
+    if opponent_id is None:
+        return
     opponent = db.get_opponent(callback.from_user.id, opponent_id)
-    db.set_session(callback.from_user.id, "await_edit_games", opponent_id)
+    db.set_session(callback.from_user.id, SESSION_EDIT_GAMES, opponent_id)
     await render(
         bot,
         callback.message.chat.id,
@@ -272,9 +276,11 @@ async def edit_games_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def edit_points_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    opponent_id = int(callback.data.split(":", 1)[1])
+    opponent_id = parse_callback_id(callback.data, "edit_points:")
+    if opponent_id is None:
+        return
     opponent = db.get_opponent(callback.from_user.id, opponent_id)
-    db.set_session(callback.from_user.id, "await_edit_points", opponent_id)
+    db.set_session(callback.from_user.id, SESSION_EDIT_POINTS, opponent_id)
     await render(
         bot,
         callback.message.chat.id,
@@ -288,7 +294,9 @@ async def edit_points_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def delete_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    opponent_id = int(callback.data.split(":", 1)[1])
+    opponent_id = parse_callback_id(callback.data, "delete:")
+    if opponent_id is None:
+        return
     opponent = db.get_opponent(callback.from_user.id, opponent_id)
     await render(
         bot,
@@ -303,7 +311,9 @@ async def delete_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def reset_stats_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    opponent_id = int(callback.data.split(":", 1)[1])
+    opponent_id = parse_callback_id(callback.data, "reset:")
+    if opponent_id is None:
+        return
     opponent = db.get_opponent(callback.from_user.id, opponent_id)
     await render(
         bot,
@@ -318,7 +328,9 @@ async def reset_stats_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def reset_stats_confirm_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    opponent_id = int(callback.data.split(":", 1)[1])
+    opponent_id = parse_callback_id(callback.data, "reset_confirm:")
+    if opponent_id is None:
+        return
     opponent = db.get_opponent(callback.from_user.id, opponent_id)
     opponent_name = texts.opponent_title(opponent)
     db.reset_opponent_stats(callback.from_user.id, opponent_id)
@@ -336,7 +348,9 @@ async def reset_stats_confirm_callback(callback: CallbackQuery, bot: Bot) -> Non
 async def delete_confirm_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    opponent_id = int(callback.data.split(":", 1)[1])
+    opponent_id = parse_callback_id(callback.data, "delete_confirm:")
+    if opponent_id is None:
+        return
     opponent = db.get_opponent(callback.from_user.id, opponent_id)
     opponent_name = texts.opponent_title(opponent)
     db.delete_opponent(callback.from_user.id, opponent_id)
@@ -361,26 +375,26 @@ async def text_message(message: Message, bot: Bot) -> None:
     if session is None:
         return
 
-    if session.mode == "await_invite_code":
+    if session.mode == SESSION_INVITE_CODE:
         await handle_invite_code_input(message, bot, user_id)
         return
 
-    if session.mode == "await_rating":
+    if session.mode == SESSION_RATING:
         await handle_rating_input(message, bot, user_id)
         return
 
     if session.opponent_id is None:
         return
 
-    if session.mode == "await_score":
+    if session.mode == SESSION_SCORE:
         await handle_score_input(message, bot, user_id, session.opponent_id)
         return
 
-    if session.mode == "await_edit_games":
+    if session.mode == SESSION_EDIT_GAMES:
         await handle_edit_games_input(message, bot, user_id, session.opponent_id)
         return
 
-    if session.mode == "await_edit_points":
+    if session.mode == SESSION_EDIT_POINTS:
         await handle_edit_points_input(message, bot, user_id, session.opponent_id)
         return
 
@@ -504,7 +518,7 @@ async def show_opponents(bot: Bot, chat_id: int, user_id: int) -> None:
 
 async def show_opponent(bot: Bot, chat_id: int, user_id: int, opponent_id: int) -> None:
     opponent = db.get_opponent(user_id, opponent_id)
-    db.set_session(user_id, "await_score", opponent_id)
+    db.set_session(user_id, SESSION_SCORE, opponent_id)
     await render(
         bot,
         chat_id,
@@ -702,7 +716,7 @@ async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     config = load_config()
     seed_test_opponent = config.seed_test_opponent
-    db = Database(config.database_path, config.database_url)
+    db = Database(config.database_url)
 
     bot = Bot(token=config.bot_token)
     dispatcher = Dispatcher()
