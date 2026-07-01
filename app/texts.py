@@ -283,8 +283,7 @@ def score_prompt(opponent_name: str) -> str:
 def score_prompt_caption(opponent_name: str) -> str:
     return (
         f"<b>🏓 Матч с {html.escape(opponent_name)}</b>\n\n"
-        "Напиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника.\n"
-        "Например: <code>11-7</code> или <code>15 13</code>."
+        "Напиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника. Например: <code>11-7</code> или <code>15 13</code>."
     )
 
 

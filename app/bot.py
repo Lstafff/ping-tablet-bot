@@ -35,6 +35,8 @@ from app.storage import Database
 
 router = Router()
 db: Optional[Database] = None
+match_score_file_ids: dict[tuple[int, int], str] = {}
+MATCH_SCORE_FILE_ID_CACHE_LIMIT = 256
 seed_test_opponent = True
 DAILY_STATS_PAGE_SIZE = 14
 SESSION_INVITE_CODE = "await_invite_code"
@@ -522,16 +524,40 @@ async def show_opponent(bot: Bot, chat_id: int, user_id: int, opponent_id: int) 
     stats = db.get_opponent_stats(user_id, opponent_id)
     db.set_session(user_id, SESSION_SCORE, opponent_id)
     opponent_name = texts.opponent_title(opponent)
+    score_key = (stats.wins, stats.losses)
     try:
-        await render_photo(
+        image = match_score_file_ids.get(score_key)
+        if image is None:
+            image = await asyncio.to_thread(render_match_score_image, stats.wins, stats.losses)
+
+        file_id = await render_photo(
             bot,
             chat_id,
             user_id,
-            render_match_score_image(stats.wins, stats.losses),
+            image,
             texts.score_prompt_caption(opponent_name),
             opponent_keyboard(opponent_id),
         )
+        if file_id is not None:
+            cache_match_score_file_id(score_key, file_id)
     except Exception:
+        if score_key in match_score_file_ids:
+            match_score_file_ids.pop(score_key, None)
+            try:
+                image = await asyncio.to_thread(render_match_score_image, stats.wins, stats.losses)
+                file_id = await render_photo(
+                    bot,
+                    chat_id,
+                    user_id,
+                    image,
+                    texts.score_prompt_caption(opponent_name),
+                    opponent_keyboard(opponent_id),
+                )
+                if file_id is not None:
+                    cache_match_score_file_id(score_key, file_id)
+                return
+            except Exception:
+                logging.exception("Failed to render match score image after cache reset")
         logging.exception("Failed to render match score image")
         await render(
             bot,
@@ -662,10 +688,10 @@ async def render_photo(
     bot: Bot,
     chat_id: int,
     user_id: int,
-    image: bytes,
+    image: Any,
     caption: str,
     reply_markup: InlineKeyboardMarkup,
-) -> None:
+) -> Optional[str]:
     user = db.get_user(user_id)
     if user.last_message_id is not None:
         try:
@@ -675,12 +701,21 @@ async def render_photo(
 
     message = await bot.send_photo(
         chat_id=chat_id,
-        photo=BufferedInputFile(image, filename="match-score.png"),
+        photo=image if isinstance(image, str) else BufferedInputFile(image, filename="match-score.png"),
         caption=caption,
         parse_mode="HTML",
         reply_markup=reply_markup,
     )
     db.set_last_message_id(user_id, message.message_id)
+    if message.photo:
+        return message.photo[-1].file_id
+    return None
+
+
+def cache_match_score_file_id(score_key: tuple[int, int], file_id: str) -> None:
+    if len(match_score_file_ids) >= MATCH_SCORE_FILE_ID_CACHE_LIMIT:
+        match_score_file_ids.pop(next(iter(match_score_file_ids)))
+    match_score_file_ids[score_key] = file_id
 
 
 async def render_rich_message(

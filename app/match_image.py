@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 
@@ -14,6 +15,7 @@ WHITE = "#FFFFFF"
 FONT_PATH = Path(__file__).resolve().parent.parent / "assets" / "fonts" / "DIN2014-Bold.ttf"
 
 
+@lru_cache(maxsize=256)
 def render_match_score_image(user_score: int, opponent_score: int) -> bytes:
     try:
         from PIL import Image, ImageDraw, ImageFont
@@ -31,7 +33,7 @@ def render_match_score_image(user_score: int, opponent_score: int) -> bytes:
     draw_score_circle(draw, (960, 360), str(opponent_score), ImageFont)
 
     output = BytesIO()
-    image.save(output, format="PNG", optimize=True)
+    image.save(output, format="PNG")
     return output.getvalue()
 
 
@@ -50,13 +52,18 @@ def draw_score_circle(draw: object, center: tuple[int, int], score: str, image_f
     )
 
     font_size = score_font_size(score)
-    font = image_font.truetype(str(FONT_PATH), font_size)
+    font = load_score_font(image_font, font_size)
     text_bbox = draw.textbbox((0, 0), score, font=font)
     text_width = text_bbox[2] - text_bbox[0]
     text_height = text_bbox[3] - text_bbox[1]
     text_x = center_x - text_width / 2 - text_bbox[0]
     text_y = center_y - text_height / 2 - text_bbox[1] - 4
     draw.text((text_x, text_y), score, fill=TEXT_COLOR, font=font)
+
+
+@lru_cache(maxsize=8)
+def load_score_font(image_font: object, font_size: int) -> object:
+    return image_font.truetype(str(FONT_PATH), font_size)
 
 
 def score_font_size(score: str) -> int:
