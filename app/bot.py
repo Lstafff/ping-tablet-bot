@@ -531,6 +531,7 @@ async def show_opponent(bot: Bot, chat_id: int, user_id: int, opponent_id: int) 
 async def show_opponent_total_stats(bot: Bot, chat_id: int, user_id: int, opponent_id: int) -> None:
     opponent = db.get_opponent(user_id, opponent_id)
     stats = db.get_opponent_stats(user_id, opponent_id)
+    extended_stats = db.get_opponent_extended_stats(user_id, opponent_id)
     user = db.get_user(user_id)
     await render(
         bot,
@@ -540,6 +541,7 @@ async def show_opponent_total_stats(bot: Bot, chat_id: int, user_id: int, oppone
             texts.opponent_title(opponent),
             stats,
             texts.display_user_name(user.first_name, user.username),
+            extended_stats,
         ),
         opponent_total_stats_keyboard(opponent_id),
     )
@@ -569,11 +571,12 @@ async def show_opponent_daily_stats(bot: Bot, chat_id: int, user_id: int, oppone
 async def show_profile(bot: Bot, chat_id: int, user_id: int) -> None:
     user = db.get_user(user_id)
     stats = db.get_total_stats(user_id)
+    extended_stats = db.get_total_extended_stats(user_id)
     await render(
         bot,
         chat_id,
         user_id,
-        texts.profile(user, stats),
+        texts.profile(user, stats, extended_stats),
         profile_keyboard(),
     )
 

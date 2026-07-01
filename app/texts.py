@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import random
 from datetime import datetime
 from typing import Optional, Protocol
 from urllib.parse import urlencode
@@ -102,6 +103,21 @@ class StatsLike(Protocol):
     points_against: int
 
 
+class ExtendedStatsLike(Protocol):
+    games: int
+    overtime_wins: int
+    overtime_losses: int
+    overtime_games: int
+    longest_own_score: Optional[int]
+    longest_opponent_score: Optional[int]
+    longest_points: int
+    win_streak: int
+    large_margin_games: int
+    close_margin_games: int
+    most_common_score: Optional[str]
+    most_common_score_count: int
+
+
 class ScoreLike(Protocol):
     own_score: int
     opponent_score: int
@@ -164,7 +180,7 @@ def username_label(username: str) -> str:
 
 
 # Экран профиля с общей статистикой.
-def profile(user: UserLike, stats: StatsLike) -> str:
+def profile(user: UserLike, stats: StatsLike, extended_stats: Optional[ExtendedStatsLike] = None) -> str:
     user_name = display_user_name(user.first_name, user.username)
     level = format_player_level(stats.games, user.rating_is_fnt)
     return (
@@ -174,7 +190,7 @@ def profile(user: UserLike, stats: StatsLike) -> str:
         f"<b>･ Рейтинг: </b>{format_rating(user.rating, user.rating_is_fnt)}\n"
         "<h2>📊 Общая статистика</h2>"
         "<hr/>"
-        f"{format_stats(stats, user_name=user_name, opponent_name='Оппоненты')}"
+        f"{format_stats(stats, user_name=user_name, opponent_name='Оппоненты', extended_stats=extended_stats)}"
     )
 
 
@@ -340,13 +356,13 @@ def score_saved(
     overtime = ""
     if score.overtime_own or score.overtime_opponent:
         overtime = (
-            f"\n({score.regular_own}-{score.regular_opponent} в основное время, "
-            f"{score.overtime_own}-{score.overtime_opponent} в овертайме.)"
+            f"\n(<code>{score.regular_own}-{score.regular_opponent}</code> в основное время, "
+            f"<code>{score.overtime_own}-{score.overtime_opponent}</code> в овертайме)"
         )
 
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
-        f"\n✅ Добавлен счёт: {score.own_score}-{score.opponent_score}.{overtime}\n"
+        f"\n✅ Добавлен счёт: <code>{score.own_score}-{score.opponent_score}</code>{overtime}\n\n"
         "Можешь сразу написать следующий результат!\n"
         "<h2>📊 Последние 5 игр</h2>"
         "<hr/>"
@@ -371,11 +387,16 @@ def score_undone(
 
 
 # Карточка статистики с одним соперником.
-def opponent_stats(opponent_name: str, stats: StatsLike, user_name: str = DEFAULT_USER_NAME) -> str:
+def opponent_stats(
+    opponent_name: str,
+    stats: StatsLike,
+    user_name: str = DEFAULT_USER_NAME,
+    extended_stats: Optional[ExtendedStatsLike] = None,
+) -> str:
     return (
         f"<h2>📊 Статистика с {html.escape(opponent_name)}</h2>"
         "<hr/>"
-        f"{format_stats(stats, user_name=user_name, opponent_name=opponent_name)}"
+        f"{format_stats(stats, user_name=user_name, opponent_name=opponent_name, extended_stats=extended_stats)}"
     )
 
 
@@ -415,11 +436,19 @@ def pair_needs_two_numbers(example: str) -> str:
 
 
 # Общая таблица статистики для экранов со счётом.
-def format_stats(stats: StatsLike, user_name: str = DEFAULT_USER_NAME, opponent_name: str = "Соперники") -> str:
+def format_stats(
+    stats: StatsLike,
+    user_name: str = DEFAULT_USER_NAME,
+    opponent_name: str = "Соперники",
+    extended_stats: Optional[ExtendedStatsLike] = None,
+) -> str:
     safe_user_name = format_rich_user_name(user_name)
     safe_opponent_name = format_rich_user_name(opponent_name)
     games_difference = format_signed_difference(stats.wins - stats.losses)
     points_difference = format_signed_difference(stats.points_for - stats.points_against)
+    extended_rows = format_extended_stats_rows(extended_stats)
+    fact = format_stats_fact(extended_stats)
+    fact_block = f"<hr/><blockquote>{fact}</blockquote>" if fact else ""
 
     return (
         "<table bordered striped>"
@@ -428,8 +457,98 @@ def format_stats(stats: StatsLike, user_name: str = DEFAULT_USER_NAME, opponent_
         f"<tr><td>Всего игр</td><td colspan=\"2\" align=\"right\">{stats.games}</td></tr>"
         f"<tr><td>Мячи</td><td align=\"right\">{stats.points_for} ({points_difference})</td><td align=\"right\">{stats.points_against}</td></tr>"
         f"<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">{stats.points_for + stats.points_against}</td></tr>"
+        f"{extended_rows}"
         "</table>"
+        f"{fact_block}"
     )
+
+
+def format_extended_stats_rows(extended_stats: Optional[ExtendedStatsLike]) -> str:
+    if extended_stats is None:
+        return ""
+
+    longest_own_score = "—" if extended_stats.longest_own_score is None else str(extended_stats.longest_own_score)
+    longest_opponent_score = (
+        "—" if extended_stats.longest_opponent_score is None else str(extended_stats.longest_opponent_score)
+    )
+    return (
+        f"<tr><td>Овертаймы</td><td align=\"right\">{extended_stats.overtime_wins}</td>"
+        f"<td align=\"right\">{extended_stats.overtime_losses}</td></tr>"
+        f"<tr><td>Всего овертаймов</td><td colspan=\"2\" align=\"right\">{extended_stats.overtime_games}</td></tr>"
+        f"<tr><td>Самая долгая партия</td><td align=\"right\">{longest_own_score}</td>"
+        f"<td align=\"right\">{longest_opponent_score}</td></tr>"
+    )
+
+
+def format_stats_fact(extended_stats: Optional[ExtendedStatsLike]) -> str:
+    facts = stats_fact_candidates(extended_stats)
+    if not facts:
+        return ""
+    return random.choice(facts)
+
+
+def stats_fact_candidates(extended_stats: Optional[ExtendedStatsLike]) -> list[str]:
+    if extended_stats is None or extended_stats.games == 0:
+        return []
+
+    facts: list[str] = []
+    if extended_stats.overtime_games:
+        overtime_win_percent = round(extended_stats.overtime_wins / extended_stats.overtime_games * 100)
+        if overtime_win_percent > 50:
+            facts.append(
+                "🥶🥶🥶<br/>"
+                f"С тобой лучше не доводить до ничьей! Ты выигрываешь {overtime_win_percent}% овертаймов"
+            )
+        elif overtime_win_percent < 50:
+            facts.append(
+                "💀💀💀<br/>"
+                "Бро, тебе надо тренироваться... "
+                f"Большинство овертаймов уходят сопернику: {extended_stats.overtime_wins}-{extended_stats.overtime_losses}"
+            )
+
+    if (
+        extended_stats.longest_points > 25
+        and extended_stats.longest_own_score is not None
+        and extended_stats.longest_opponent_score is not None
+    ):
+        facts.append(
+            "👶🏻🏁👵🏻<br/>"
+            "Мы состарились, пока смотрели на твою самую долгую партию: "
+            f"{extended_stats.longest_own_score}-{extended_stats.longest_opponent_score}. "
+            f"Это целых {extended_stats.longest_points} мячей..."
+        )
+
+    if extended_stats.win_streak > 3:
+        facts.append(
+            "🔥🏓<br/>"
+            f"Уже {extended_stats.win_streak} побед подряд! Оставь хоть какие-то шансы..."
+        )
+
+    if is_frequent_stat(extended_stats.large_margin_games, extended_stats.games):
+        facts.append(
+            "🫢🫢🫢<br/>"
+            "Да ты уже профик! Может пора найти соперников посильнее?"
+        )
+
+    if is_frequent_stat(extended_stats.close_margin_games, extended_stats.games):
+        facts.append(
+            "🥵🥵🥵<br/>"
+            "Каждый раз так близко... У тебя серьёзный соперник!"
+        )
+
+    if extended_stats.most_common_score is not None and extended_stats.most_common_score_count > 1:
+        most_common_percent = round(extended_stats.most_common_score_count / extended_stats.games * 100)
+        facts.append(
+            "😪😪😪<br/>"
+            f"В следующем матче счёт будет: {extended_stats.most_common_score}. "
+            f"Кстати, так заканчиваются {most_common_percent}% твоих матчей!"
+        )
+
+    return facts
+
+
+def is_frequent_stat(count: int, total: int) -> bool:
+    return total >= 3 and count / total > 0.5
 
 
 # Таблица последних игр на экране после добавления счёта.

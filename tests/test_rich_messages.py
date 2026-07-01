@@ -1,5 +1,6 @@
 import unittest
 from dataclasses import dataclass
+from typing import Optional
 
 from app.texts import (
     format_day,
@@ -15,6 +16,7 @@ from app.texts import (
     opponent_daily_stats,
     opponent_stats,
     profile,
+    stats_fact_candidates,
 )
 
 
@@ -28,6 +30,25 @@ class Stats:
     @property
     def games(self) -> int:
         return self.wins + self.losses
+
+
+@dataclass(frozen=True)
+class ExtendedStats:
+    games: int
+    overtime_wins: int
+    overtime_losses: int
+    longest_own_score: Optional[int]
+    longest_opponent_score: Optional[int]
+    longest_points: int
+    win_streak: int
+    large_margin_games: int
+    close_margin_games: int
+    most_common_score: Optional[str]
+    most_common_score_count: int
+
+    @property
+    def overtime_games(self) -> int:
+        return self.overtime_wins + self.overtime_losses
 
 
 @dataclass(frozen=True)
@@ -47,9 +68,9 @@ class RecentGame:
 @dataclass(frozen=True)
 class User:
     first_name: str
-    username: str | None
+    username: Optional[str]
     created_at: str
-    rating: str | None
+    rating: Optional[str]
     rating_is_fnt: bool
 
 
@@ -92,6 +113,55 @@ class RichMessagesTest(unittest.TestCase):
         self.assertIn("<tr><td>Всего игр</td><td colspan=\"2\" align=\"right\">5</td></tr>", rich_html)
         self.assertIn("<tr><td>Мячи</td><td align=\"right\">43 (+4)</td><td align=\"right\">39</td></tr>", rich_html)
         self.assertIn("<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">82</td></tr>", rich_html)
+
+    def test_format_stats_uses_extended_rows_and_fact_block(self) -> None:
+        rich_html = format_stats(
+            Stats(wins=4, losses=1, points_for=75, points_against=60),
+            extended_stats=ExtendedStats(
+                games=5,
+                overtime_wins=2,
+                overtime_losses=1,
+                longest_own_score=17,
+                longest_opponent_score=15,
+                longest_points=32,
+                win_streak=4,
+                large_margin_games=0,
+                close_margin_games=4,
+                most_common_score="11-9",
+                most_common_score_count=2,
+            ),
+        )
+
+        self.assertIn("<tr><td>Овертаймы</td><td align=\"right\">2</td><td align=\"right\">1</td></tr>", rich_html)
+        self.assertIn("<tr><td>Всего овертаймов</td><td colspan=\"2\" align=\"right\">3</td></tr>", rich_html)
+        self.assertIn(
+            "<tr><td>Самая долгая партия</td><td align=\"right\">17</td><td align=\"right\">15</td></tr>",
+            rich_html,
+        )
+        self.assertIn("<hr/><blockquote>", rich_html)
+
+    def test_stats_fact_candidates_use_available_data(self) -> None:
+        facts = stats_fact_candidates(
+            ExtendedStats(
+                games=5,
+                overtime_wins=4,
+                overtime_losses=1,
+                longest_own_score=17,
+                longest_opponent_score=15,
+                longest_points=32,
+                win_streak=4,
+                large_margin_games=3,
+                close_margin_games=0,
+                most_common_score="11-9",
+                most_common_score_count=2,
+            )
+        )
+
+        self.assertTrue(any("80% овертаймов" in fact for fact in facts))
+        self.assertTrue(any("17-15" in fact for fact in facts))
+        self.assertTrue(any("4 побед подряд" in fact for fact in facts))
+        self.assertTrue(any("соперников посильнее" in fact for fact in facts))
+        self.assertTrue(any("11-9" in fact for fact in facts))
 
     def test_opponent_stats_uses_user_name(self) -> None:
         rich_html = opponent_stats("@test", Stats(wins=3, losses=2, points_for=43, points_against=39), "@me")

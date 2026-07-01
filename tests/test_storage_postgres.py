@@ -2,10 +2,28 @@ import os
 import unittest
 
 from app.scoring import parse_score
-from app.storage import Database
+from app.storage import Database, build_extended_stats
 
 
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "").strip()
+
+
+class ExtendedStatsTest(unittest.TestCase):
+    def test_build_extended_stats_counts_overtimes_and_facts_data(self) -> None:
+        stats = build_extended_stats(
+            [
+                {"id": 3, "played_at": "2026-06-12T18:42:00+03:00", "own_score": 17, "opponent_score": 15, "is_overtime": True},
+                {"id": 2, "played_at": "2026-06-11T18:42:00+03:00", "own_score": 11, "opponent_score": 7, "is_overtime": False},
+                {"id": 1, "played_at": "2026-06-10T18:42:00+03:00", "own_score": 9, "opponent_score": 11, "is_overtime": False},
+            ]
+        )
+
+        self.assertEqual(stats.games, 3)
+        self.assertEqual((stats.overtime_wins, stats.overtime_losses), (1, 0))
+        self.assertEqual((stats.longest_own_score, stats.longest_opponent_score), (17, 15))
+        self.assertEqual(stats.longest_points, 32)
+        self.assertEqual(stats.win_streak, 2)
+        self.assertEqual(stats.close_margin_games, 2)
 
 
 @unittest.skipUnless(TEST_DATABASE_URL, "Storage integration tests require TEST_DATABASE_URL.")

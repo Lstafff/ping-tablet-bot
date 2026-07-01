@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import secrets
 import string
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
@@ -59,6 +60,25 @@ class Stats:
     @property
     def games(self) -> int:
         return self.wins + self.losses
+
+
+@dataclass(frozen=True)
+class ExtendedStats:
+    games: int
+    overtime_wins: int
+    overtime_losses: int
+    longest_own_score: Optional[int]
+    longest_opponent_score: Optional[int]
+    longest_points: int
+    win_streak: int
+    large_margin_games: int
+    close_margin_games: int
+    most_common_score: Optional[str]
+    most_common_score_count: int
+
+    @property
+    def overtime_games(self) -> int:
+        return self.overtime_wins + self.overtime_losses
 
 
 @dataclass(frozen=True)
@@ -611,6 +631,17 @@ class Database:
             )
         return total
 
+    def get_opponent_extended_stats(self, owner_id: int, opponent_id: int) -> ExtendedStats:
+        opponent = self.get_opponent(owner_id, opponent_id)
+        return build_extended_stats(self._game_rows_for_opponent(owner_id, opponent))
+
+    def get_total_extended_stats(self, owner_id: int) -> ExtendedStats:
+        rows: list[dict[str, Any]] = []
+        for opponent in self.list_opponents(owner_id):
+            rows.extend(self._game_rows_for_opponent(owner_id, opponent))
+        rows.sort(key=lambda row: (row["played_at"], row["id"]), reverse=True)
+        return build_extended_stats(rows)
+
     def get_opponent_daily_stats(self, owner_id: int, opponent_id: int) -> list[DailyStats]:
         opponent = self.get_opponent(owner_id, opponent_id)
         daily: dict[str, tuple[int, int]] = {}
@@ -840,6 +871,78 @@ class Database:
 
         return Stats(wins=wins, losses=losses, points_for=points_for, points_against=points_against)
 
+    def _game_rows_for_opponent(self, owner_id: int, opponent: Opponent) -> list[dict[str, Any]]:
+        if opponent.opponent_user_id is None:
+            rows = self.connection.execute(
+                """
+                SELECT
+                    id,
+                    played_at,
+                    player_a_score,
+                    player_b_score,
+                    overtime_a,
+                    overtime_b
+                FROM games
+                WHERE owner_id = ? AND opponent_id = ?
+                ORDER BY played_at DESC, id DESC
+                """,
+                (owner_id, opponent.id),
+            ).fetchall()
+            return [
+                {
+                    "id": int(row["id"]),
+                    "played_at": row["played_at"],
+                    "own_score": int(row["player_a_score"]),
+                    "opponent_score": int(row["player_b_score"]),
+                    "is_overtime": bool(int(row["overtime_a"]) or int(row["overtime_b"])),
+                }
+                for row in rows
+            ]
+
+        rows = self.connection.execute(
+            """
+            SELECT
+                id,
+                player_a_id,
+                player_b_id,
+                player_a_score,
+                player_b_score,
+                overtime_a,
+                overtime_b,
+                played_at
+            FROM games
+            WHERE
+                (player_a_id = ? AND player_b_id = ?)
+                OR
+                (player_a_id = ? AND player_b_id = ?)
+            ORDER BY played_at DESC, id DESC
+            """,
+            (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id),
+        ).fetchall()
+        game_rows: list[dict[str, Any]] = []
+        for row in rows:
+            if int(row["player_a_id"]) == owner_id:
+                own_score = int(row["player_a_score"])
+                opponent_score = int(row["player_b_score"])
+                overtime_own = int(row["overtime_a"])
+                overtime_opponent = int(row["overtime_b"])
+            else:
+                own_score = int(row["player_b_score"])
+                opponent_score = int(row["player_a_score"])
+                overtime_own = int(row["overtime_b"])
+                overtime_opponent = int(row["overtime_a"])
+
+            game_rows.append(
+                {
+                    "id": int(row["id"]),
+                    "played_at": row["played_at"],
+                    "own_score": own_score,
+                    "opponent_score": opponent_score,
+                    "is_overtime": bool(overtime_own or overtime_opponent),
+                }
+            )
+        return game_rows
+
     def _get_adjustment(self, owner_id: int, opponent_id: int) -> dict[str, int]:
         row = self.connection.execute(
             """
@@ -1007,6 +1110,63 @@ class Database:
 
 def now_moscow_iso() -> str:
     return datetime.now(MOSCOW_TZ).isoformat(timespec="seconds")
+
+
+def build_extended_stats(game_rows: list[dict[str, Any]]) -> ExtendedStats:
+    overtime_wins = 0
+    overtime_losses = 0
+    longest_own_score: Optional[int] = None
+    longest_opponent_score: Optional[int] = None
+    longest_points = 0
+    win_streak = 0
+    large_margin_games = 0
+    close_margin_games = 0
+    score_counter: Counter[str] = Counter()
+
+    for index, row in enumerate(game_rows):
+        own_score = int(row["own_score"])
+        opponent_score = int(row["opponent_score"])
+        score_counter[f"{own_score}-{opponent_score}"] += 1
+
+        if row["is_overtime"]:
+            if own_score > opponent_score:
+                overtime_wins += 1
+            else:
+                overtime_losses += 1
+
+        points = own_score + opponent_score
+        if points > longest_points:
+            longest_points = points
+            longest_own_score = own_score
+            longest_opponent_score = opponent_score
+
+        score_difference = abs(own_score - opponent_score)
+        if score_difference > 6:
+            large_margin_games += 1
+        if score_difference == 2:
+            close_margin_games += 1
+
+        if index == win_streak and own_score > opponent_score:
+            win_streak += 1
+
+    most_common_score = None
+    most_common_score_count = 0
+    if score_counter:
+        most_common_score, most_common_score_count = score_counter.most_common(1)[0]
+
+    return ExtendedStats(
+        games=len(game_rows),
+        overtime_wins=overtime_wins,
+        overtime_losses=overtime_losses,
+        longest_own_score=longest_own_score,
+        longest_opponent_score=longest_opponent_score,
+        longest_points=longest_points,
+        win_streak=win_streak,
+        large_margin_games=large_margin_games,
+        close_margin_games=close_margin_games,
+        most_common_score=most_common_score,
+        most_common_score_count=most_common_score_count,
+    )
 
 
 def normalize_invite_code(invite_code: str) -> str:
