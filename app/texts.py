@@ -279,6 +279,15 @@ def score_prompt(opponent_name: str) -> str:
     )
 
 
+# Подпись к картинке счёта на экране матча.
+def score_prompt_caption(opponent_name: str) -> str:
+    return (
+        f"<b>🏓 Матч с {html.escape(opponent_name)}</b>\n\n"
+        "Напиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника.\n"
+        "Например: <code>11-7</code> или <code>15 13</code>."
+    )
+
+
 # Меню редактирования статистики с соперником.
 def edit_menu(opponent_name: str, stats: StatsLike, user_name: str = DEFAULT_USER_NAME) -> str:
     return (
@@ -475,7 +484,7 @@ def format_extended_stats_rows(extended_stats: Optional[ExtendedStatsLike]) -> s
         f"<tr><td>Овертаймы</td><td align=\"right\">{extended_stats.overtime_wins}</td>"
         f"<td align=\"right\">{extended_stats.overtime_losses}</td></tr>"
         f"<tr><td>Всего овертаймов</td><td colspan=\"2\" align=\"right\">{extended_stats.overtime_games}</td></tr>"
-        f"<tr><td>Самая долгая партия</td><td align=\"right\">{longest_own_score}</td>"
+        f"<tr><td>Самая долгая игра</td><td align=\"right\">{longest_own_score}</td>"
         f"<td align=\"right\">{longest_opponent_score}</td></tr>"
     )
 
@@ -513,7 +522,7 @@ def stats_fact_candidates(extended_stats: Optional[ExtendedStatsLike]) -> list[s
     ):
         facts.append(
             "👶🏻🏁👵🏻<br/>"
-            "Мы состарились, пока смотрели на твою самую долгую партию: "
+            "Все состарились, пока смотрели на твою самую долгую партию: "
             f"{extended_stats.longest_own_score}-{extended_stats.longest_opponent_score}. "
             f"Это целых {extended_stats.longest_points} мячей..."
         )

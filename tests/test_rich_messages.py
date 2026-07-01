@@ -135,7 +135,7 @@ class RichMessagesTest(unittest.TestCase):
         self.assertIn("<tr><td>Овертаймы</td><td align=\"right\">2</td><td align=\"right\">1</td></tr>", rich_html)
         self.assertIn("<tr><td>Всего овертаймов</td><td colspan=\"2\" align=\"right\">3</td></tr>", rich_html)
         self.assertIn(
-            "<tr><td>Самая долгая партия</td><td align=\"right\">17</td><td align=\"right\">15</td></tr>",
+            "<tr><td>Самая долгая игра</td><td align=\"right\">17</td><td align=\"right\">15</td></tr>",
             rich_html,
         )
         self.assertIn("<hr/><blockquote>", rich_html)

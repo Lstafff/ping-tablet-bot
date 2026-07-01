@@ -5,7 +5,7 @@ from typing import Any, Optional
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InputRichMessage, Message, User as TelegramUser
+from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardMarkup, InputRichMessage, Message, User as TelegramUser
 
 from app import texts
 from app.callbacks import parse_callback_id, parse_score_undo_callback, parse_stats_days_callback
@@ -27,6 +27,7 @@ from app.keyboards import (
     reset_stats_keyboard,
     score_saved_keyboard,
 )
+from app.match_image import render_match_score_image
 from app.rating import fetch_fnt_rating, parse_manual_rating
 from app.scoring import ScoreError, parse_pair, parse_score
 from app.storage import Database
@@ -518,14 +519,27 @@ async def show_opponents(bot: Bot, chat_id: int, user_id: int) -> None:
 
 async def show_opponent(bot: Bot, chat_id: int, user_id: int, opponent_id: int) -> None:
     opponent = db.get_opponent(user_id, opponent_id)
+    stats = db.get_opponent_stats(user_id, opponent_id)
     db.set_session(user_id, SESSION_SCORE, opponent_id)
-    await render(
-        bot,
-        chat_id,
-        user_id,
-        texts.score_prompt(texts.opponent_title(opponent)),
-        opponent_keyboard(opponent_id),
-    )
+    opponent_name = texts.opponent_title(opponent)
+    try:
+        await render_photo(
+            bot,
+            chat_id,
+            user_id,
+            render_match_score_image(stats.wins, stats.losses),
+            texts.score_prompt_caption(opponent_name),
+            opponent_keyboard(opponent_id),
+        )
+    except Exception:
+        logging.exception("Failed to render match score image")
+        await render(
+            bot,
+            chat_id,
+            user_id,
+            texts.score_prompt(opponent_name),
+            opponent_keyboard(opponent_id),
+        )
 
 
 async def show_opponent_total_stats(bot: Bot, chat_id: int, user_id: int, opponent_id: int) -> None:
@@ -642,6 +656,31 @@ async def render(
 
     message_id = await render_rich_message(bot, chat_id, text, reply_markup, None)
     db.set_last_message_id(user_id, message_id)
+
+
+async def render_photo(
+    bot: Bot,
+    chat_id: int,
+    user_id: int,
+    image: bytes,
+    caption: str,
+    reply_markup: InlineKeyboardMarkup,
+) -> None:
+    user = db.get_user(user_id)
+    if user.last_message_id is not None:
+        try:
+            await bot.delete_message(chat_id, user.last_message_id)
+        except TelegramBadRequest:
+            pass
+
+    message = await bot.send_photo(
+        chat_id=chat_id,
+        photo=BufferedInputFile(image, filename="match-score.png"),
+        caption=caption,
+        parse_mode="HTML",
+        reply_markup=reply_markup,
+    )
+    db.set_last_message_id(user_id, message.message_id)
 
 
 async def render_rich_message(
