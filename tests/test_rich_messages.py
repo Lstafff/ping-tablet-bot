@@ -16,6 +16,9 @@ from app.texts import (
     opponent_daily_stats,
     opponent_stats,
     profile,
+    score_input_error,
+    score_saved,
+    score_undone,
     stats_fact_candidates,
 )
 
@@ -63,6 +66,16 @@ class RecentGame:
     played_at: str
     own_score: int
     opponent_score: int
+
+
+@dataclass(frozen=True)
+class Score:
+    own_score: int
+    opponent_score: int
+    regular_own: int
+    regular_opponent: int
+    overtime_own: int
+    overtime_opponent: int
 
 
 @dataclass(frozen=True)
@@ -189,6 +202,33 @@ class RichMessagesTest(unittest.TestCase):
 
         self.assertIn("<th>Дата</th><th>@me</th><th>@test</th>", rich_html)
         self.assertIn("<tr><td>12 июня, 18:42</td><td align=\"right\">11</td><td align=\"right\">7</td></tr>", rich_html)
+
+    def test_score_result_screens_show_next_score_hint_after_recent_games(self) -> None:
+        recent_games = [RecentGame(played_at="2026-06-12T18:42:00+03:00", own_score=11, opponent_score=7)]
+        score = Score(
+            own_score=11,
+            opponent_score=7,
+            regular_own=11,
+            regular_opponent=7,
+            overtime_own=0,
+            overtime_opponent=0,
+        )
+
+        for rich_html in (
+            score_saved("@test", score, recent_games, "@me"),
+            score_undone("@test", recent_games, "@me"),
+        ):
+            self.assertIn("<h2>📊 Последние 5 игр</h2>", rich_html)
+            self.assertIn("<table bordered striped>", rich_html)
+            self.assertIn("<hr/><blockquote>Напиши следующий счёт в чат! ⬇️</blockquote>", rich_html)
+
+    def test_score_error_shows_next_score_hint_without_recent_games(self) -> None:
+        rich_html = score_input_error("@test", ValueError("Ошибка"))
+
+        self.assertNotIn("<h2>📊 Последние 5 игр</h2>", rich_html)
+        self.assertNotIn("<table bordered striped>", rich_html)
+        self.assertNotIn("<hr/><blockquote>Напиши следующий счёт в чат! ⬇️</blockquote>", rich_html)
+        self.assertIn("<blockquote>Напиши следующий счёт в чат! ⬇️</blockquote>", rich_html)
 
     def test_format_day_uses_russian_month(self) -> None:
         self.assertEqual(format_day("2026-06-12"), "12 июня '26")

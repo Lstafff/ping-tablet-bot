@@ -279,14 +279,6 @@ def score_prompt(opponent_name: str) -> str:
     )
 
 
-# Подпись к картинке счёта на экране матча.
-def score_prompt_caption(opponent_name: str) -> str:
-    return (
-        f"<b>🏓 Матч с {html.escape(opponent_name)}</b>\n\n"
-        "Напиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника. Например: <code>11-7</code> или <code>15 13</code>."
-    )
-
-
 # Меню редактирования статистики с соперником.
 def edit_menu(opponent_name: str, stats: StatsLike, user_name: str = DEFAULT_USER_NAME) -> str:
     return (
@@ -350,7 +342,7 @@ def score_input_error(opponent_name: str, error: Exception) -> str:
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
         f"\n{html.escape(str(error))}\n\n"
-        "Попробуйте ещё раз: сначала ваш счёт, потом счёт соперника."
+        f"{next_score_hint_without_separator()}"
     )
 
 
@@ -371,10 +363,10 @@ def score_saved(
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
         f"\n✅ Добавлен счёт: <code>{score.own_score}-{score.opponent_score}</code>{overtime}\n\n"
-        "Можешь сразу написать следующий результат!\n"
         "<h2>📊 Последние 5 игр</h2>"
         "<hr/>"
         f"{format_recent_games(recent_games, user_name=user_name, opponent_name=opponent_name)}"
+        f"{next_score_hint()}"
     )
 
 
@@ -387,11 +379,19 @@ def score_undone(
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
         "\n↩️ Последний счёт отменён.\n"
-        "Можешь сразу написать следующий результат!\n"
         "<h2>📊 Последние 5 игр</h2>"
         "<hr/>"
         f"{format_recent_games(recent_games, user_name=user_name, opponent_name=opponent_name)}"
+        f"{next_score_hint()}"
     )
+
+
+def next_score_hint() -> str:
+    return "<hr/><blockquote>Напиши следующий счёт в чат! ⬇️</blockquote>"
+
+
+def next_score_hint_without_separator() -> str:
+    return "<blockquote>Напиши следующий счёт в чат! ⬇️</blockquote>"
 
 
 # Карточка статистики с одним соперником.
