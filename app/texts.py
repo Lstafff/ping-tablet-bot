@@ -273,11 +273,13 @@ def invite_new_opponent_notification(opponent_name: str) -> str:
 def score_prompt(opponent_name: str) -> str:
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
-        "<blockquote>"
+        "<hr/>"
         "<h4>Правила</h4>"
         "Партия заканчивается после 11 очков у победителя. При счёте 10-10 начинаются овертаймы (по одной подаче) до разницы в 2 очка."
-        "</blockquote>"
+        "<hr/>"
+        "<blockquote>"
         "Напиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника. Например: <code>11-7</code> или <code>15 13</code>."
+        "</blockquote>"
     )
 
 
