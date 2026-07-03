@@ -30,6 +30,8 @@ BUTTON_STATS_GENERAL_ACTIVE = "✅ Общая"
 BUTTON_STATS_GENERAL = "Общая"
 BUTTON_STATS_DAILY_ACTIVE = "✅ По дням"
 BUTTON_STATS_DAILY = "По дням"
+BUTTON_STATS_GAMES_ACTIVE = "✅ По играм"
+BUTTON_STATS_GAMES = "По играм"
 BUTTON_RESET_STATS = "🔄 Сбросить статистику"
 BUTTON_DELETE_OPPONENT = "❌ Удалить соперника"
 BUTTON_CONFIRM_RESET_STATS = "✅ Да, сбросить"
@@ -232,12 +234,12 @@ def levels_info() -> str:
         "<h2>🎯 Уровни игроков</h2>"
         "<hr/>"
         "<table bordered striped>"
-        "<tr><th>Уровень</th><th>Всего матчей</th></tr>"
-        "<tr><td>новичок 👶</td><td>меньше 50</td></tr>"
-        "<tr><td>любитель 🏓</td><td>50-149</td></tr>"
-        "<tr><td>бывалый 🤘😎</td><td>150-299</td></tr>"
-        "<tr><td>робот 🦾</td><td>300-499</td></tr>"
-        "<tr><td>профик 💀</td><td>500+</td></tr>"
+        "<tr><th align=\"center\">Уровень</th><th align=\"center\">Всего матчей</th></tr>"
+        "<tr><td align=\"center\">новичок 👶</td><td align=\"center\">меньше 50</td></tr>"
+        "<tr><td align=\"center\">любитель 🏓</td><td align=\"center\">50-149</td></tr>"
+        "<tr><td align=\"center\">бывалый 🤘😎</td><td align=\"center\">150-299</td></tr>"
+        "<tr><td align=\"center\">робот 🦾</td><td align=\"center\">300-499</td></tr>"
+        "<tr><td align=\"center\">профик 💀</td><td align=\"center\">500+</td></tr>"
         "</table>"
         "<blockquote>❗️ Если у тебя рейтинг ФНТР, ты профик независимо от количества сыгранных партий</blockquote>"
     )
@@ -271,11 +273,11 @@ def invite_new_opponent_notification(opponent_name: str) -> str:
 def score_prompt(opponent_name: str) -> str:
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
-        "\nНапиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника. Например: <code>11-7</code> или <code>15 13</code>.\n"
         "<blockquote>"
         "<h4>Правила</h4>"
         "Партия заканчивается после 11 очков у победителя. При счёте 10-10 начинаются овертаймы (по одной подаче) до разницы в 2 очка."
         "</blockquote>"
+        "Напиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника. Например: <code>11-7</code> или <code>15 13</code>."
     )
 
 
@@ -362,7 +364,7 @@ def score_saved(
 
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
-        f"\n✅ Добавлен счёт: <code>{score.own_score}-{score.opponent_score}</code>{overtime}\n\n"
+        f"\n✅ Добавлен счёт: <code>{score.own_score}-{score.opponent_score}</code>{overtime}\n"
         "<h2>📊 Последние 5 игр</h2>"
         "<hr/>"
         f"{format_recent_games(recent_games, user_name=user_name, opponent_name=opponent_name)}"
@@ -387,11 +389,11 @@ def score_undone(
 
 
 def next_score_hint() -> str:
-    return "<hr/><blockquote>Напиши следующий счёт в чат! ⬇️</blockquote>"
+    return "<hr/><blockquote>⬇️ Напиши следующий счёт в чат!</blockquote>"
 
 
 def next_score_hint_without_separator() -> str:
-    return "<blockquote>Напиши следующий счёт в чат! ⬇️</blockquote>"
+    return "<blockquote>⬇️ Напиши следующий счёт в чат!</blockquote>"
 
 
 # Карточка статистики с одним соперником.
@@ -414,22 +416,32 @@ def opponent_daily_stats(opponent_name: str, daily_stats: list[DailyStatsLike], 
     safe_opponent_name = format_rich_user_name(opponent_name)
     rows = "".join(
         (
-            f"<tr><td>{format_day(daily_stat.played_on)}</td>"
-            f"<td align=\"right\">{daily_stat.wins}</td>"
-            f"<td align=\"right\">{daily_stat.losses}</td></tr>"
+            f"<tr><td align=\"left\">{format_day(daily_stat.played_on)}</td>"
+            f"<td align=\"left\">{daily_stat.wins}</td>"
+            f"<td align=\"left\">{daily_stat.losses}</td></tr>"
         )
         for daily_stat in daily_stats
     )
     if not rows:
-        rows = "<tr><td colspan=\"3\">Пока нет сыгранных матчей.</td></tr>"
+        rows = "<tr><td colspan=\"3\" align=\"left\">Пока нет сыгранных матчей.</td></tr>"
 
     return (
-        f"<h2>📊 Статистика по дням с {html.escape(opponent_name)}</h2>"
+        f"<h2>📊 Статистика с {html.escape(opponent_name)}</h2>"
         "<hr/>"
         "<table bordered striped>"
-        f"<tr><th>День</th><th>🥷 {safe_user_name}</th><th>🏓 {safe_opponent_name}</th></tr>"
+        f"<tr><th align=\"left\">День</th><th align=\"left\">🥷 {safe_user_name}</th>"
+        f"<th align=\"left\">🏓 {safe_opponent_name}</th></tr>"
         f"{rows}"
         "</table>"
+    )
+
+
+# Таблица статистики с конкретным соперником по всем сыгранным играм.
+def opponent_games_stats(opponent_name: str, games: list[RecentGameLike], user_name: str = DEFAULT_USER_NAME) -> str:
+    return (
+        f"<h2>📊 Статистика с {html.escape(opponent_name)}</h2>"
+        "<hr/>"
+        f"{format_recent_games(games, user_name=user_name, opponent_name=opponent_name)}"
     )
 
 
@@ -460,11 +472,15 @@ def format_stats(
 
     return (
         "<table bordered striped>"
-        f"<tr><th>Показатель</th><th>🥷 {safe_user_name}</th><th>🏓 {safe_opponent_name}</th></tr>"
-        f"<tr><td>Победы</td><td align=\"right\">{stats.wins} ({games_difference})</td><td align=\"right\">{stats.losses}</td></tr>"
-        f"<tr><td>Всего игр</td><td colspan=\"2\" align=\"right\">{stats.games}</td></tr>"
-        f"<tr><td>Мячи</td><td align=\"right\">{stats.points_for} ({points_difference})</td><td align=\"right\">{stats.points_against}</td></tr>"
-        f"<tr><td>Всего мячей</td><td colspan=\"2\" align=\"right\">{stats.points_for + stats.points_against}</td></tr>"
+        f"<tr><th align=\"left\">Показатель</th><th align=\"left\">🥷 {safe_user_name}</th>"
+        f"<th align=\"left\">🏓 {safe_opponent_name}</th></tr>"
+        f"<tr><td align=\"left\">Победы</td><td align=\"left\">{stats.wins} ({games_difference})</td>"
+        f"<td align=\"left\">{stats.losses}</td></tr>"
+        f"<tr><td align=\"left\">Всего игр</td><td colspan=\"2\" align=\"center\">{stats.games}</td></tr>"
+        f"<tr><td align=\"left\">Мячи</td><td align=\"left\">{stats.points_for} ({points_difference})</td>"
+        f"<td align=\"left\">{stats.points_against}</td></tr>"
+        f"<tr><td align=\"left\">Всего мячей</td><td colspan=\"2\" align=\"center\">"
+        f"{stats.points_for + stats.points_against}</td></tr>"
         f"{extended_rows}"
         "</table>"
         f"{fact_block}"
@@ -480,11 +496,12 @@ def format_extended_stats_rows(extended_stats: Optional[ExtendedStatsLike]) -> s
         "—" if extended_stats.longest_opponent_score is None else str(extended_stats.longest_opponent_score)
     )
     return (
-        f"<tr><td>Овертаймы</td><td align=\"right\">{extended_stats.overtime_wins}</td>"
-        f"<td align=\"right\">{extended_stats.overtime_losses}</td></tr>"
-        f"<tr><td>Всего овертаймов</td><td colspan=\"2\" align=\"right\">{extended_stats.overtime_games}</td></tr>"
-        f"<tr><td>Самая долгая игра</td><td align=\"right\">{longest_own_score}</td>"
-        f"<td align=\"right\">{longest_opponent_score}</td></tr>"
+        f"<tr><td align=\"left\">Овертаймы</td><td align=\"left\">{extended_stats.overtime_wins}</td>"
+        f"<td align=\"left\">{extended_stats.overtime_losses}</td></tr>"
+        f"<tr><td align=\"left\">Всего овертаймов</td><td colspan=\"2\" align=\"center\">"
+        f"{extended_stats.overtime_games}</td></tr>"
+        f"<tr><td align=\"left\">Самая долгая игра</td><td align=\"left\">{longest_own_score}</td>"
+        f"<td align=\"left\">{longest_opponent_score}</td></tr>"
     )
 
 
@@ -569,18 +586,19 @@ def format_recent_games(
     safe_opponent_name = format_rich_user_name(opponent_name)
     rows = "".join(
         (
-            f"<tr><td>{format_game_time(game.played_at)}</td>"
-            f"<td align=\"right\">{game.own_score}</td>"
-            f"<td align=\"right\">{game.opponent_score}</td></tr>"
+            f"<tr><td align=\"left\">{format_game_time(game.played_at)}</td>"
+            f"<td align=\"left\">{game.own_score}</td>"
+            f"<td align=\"left\">{game.opponent_score}</td></tr>"
         )
         for game in recent_games
     )
     if not rows:
-        rows = "<tr><td colspan=\"3\">Пока нет сыгранных матчей.</td></tr>"
+        rows = "<tr><td colspan=\"3\" align=\"left\">Пока нет сыгранных матчей.</td></tr>"
 
     return (
         "<table bordered striped>"
-        f"<tr><th>Дата</th><th>{safe_user_name}</th><th>{safe_opponent_name}</th></tr>"
+        f"<tr><th align=\"left\">Дата</th><th align=\"left\">{safe_user_name}</th>"
+        f"<th align=\"left\">{safe_opponent_name}</th></tr>"
         f"{rows}"
         "</table>"
     )

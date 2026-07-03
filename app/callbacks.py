@@ -24,10 +24,18 @@ def parse_score_undo_callback(data: Optional[str]) -> Optional[tuple[int, int]]:
 
 
 def parse_stats_days_callback(data: Optional[str]) -> Optional[tuple[int, int]]:
+    return parse_paginated_stats_callback(data, "stats_days")
+
+
+def parse_stats_games_callback(data: Optional[str]) -> Optional[tuple[int, int]]:
+    return parse_paginated_stats_callback(data, "stats_games")
+
+
+def parse_paginated_stats_callback(data: Optional[str], name: str) -> Optional[tuple[int, int]]:
     if data is None:
         return None
     parts = data.split(":")
-    if len(parts) not in {2, 3} or parts[0] != "stats_days":
+    if len(parts) not in {2, 3} or parts[0] != name:
         return None
     if not parts[1].isdecimal():
         return None

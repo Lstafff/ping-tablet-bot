@@ -8,7 +8,12 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InputRichMessage, Message, User as TelegramUser
 
 from app import texts
-from app.callbacks import parse_callback_id, parse_score_undo_callback, parse_stats_days_callback
+from app.callbacks import (
+    parse_callback_id,
+    parse_score_undo_callback,
+    parse_stats_days_callback,
+    parse_stats_games_callback,
+)
 from app.config import load_config
 from app.keyboards import (
     back_to_opponent_keyboard,
@@ -19,6 +24,7 @@ from app.keyboards import (
     invite_keyboard,
     main_menu_keyboard,
     opponent_daily_stats_keyboard,
+    opponent_games_stats_keyboard,
     opponent_keyboard,
     opponent_total_stats_keyboard,
     opponents_keyboard,
@@ -252,6 +258,18 @@ async def stats_days_callback(callback: CallbackQuery, bot: Bot) -> None:
     opponent_id, page = parsed_callback
     db.clear_session(callback.from_user.id)
     await show_opponent_daily_stats(bot, callback.message.chat.id, callback.from_user.id, opponent_id, page)
+
+
+@router.callback_query(F.data.startswith("stats_games:"))
+async def stats_games_callback(callback: CallbackQuery, bot: Bot) -> None:
+    await callback.answer()
+    ensure_user(callback.from_user)
+    parsed_callback = parse_stats_games_callback(callback.data)
+    if parsed_callback is None:
+        return
+    opponent_id, page = parsed_callback
+    db.clear_session(callback.from_user.id)
+    await show_opponent_games_stats(bot, callback.message.chat.id, callback.from_user.id, opponent_id, page)
 
 
 @router.callback_query(F.data.startswith("edit_games:"))
@@ -565,6 +583,27 @@ async def show_opponent_daily_stats(bot: Bot, chat_id: int, user_id: int, oppone
             texts.display_user_name(user.first_name, user.username),
         ),
         opponent_daily_stats_keyboard(opponent_id, page, total_pages),
+    )
+
+
+async def show_opponent_games_stats(bot: Bot, chat_id: int, user_id: int, opponent_id: int, page: int = 1) -> None:
+    opponent = db.get_opponent(user_id, opponent_id)
+    user = db.get_user(user_id)
+    games_count = db.count_opponent_games(user_id, opponent_id)
+    total_pages = max(1, (games_count + DAILY_STATS_PAGE_SIZE - 1) // DAILY_STATS_PAGE_SIZE)
+    page = min(max(page, 1), total_pages)
+    offset = (page - 1) * DAILY_STATS_PAGE_SIZE
+    games = db.get_recent_games(user_id, opponent_id, limit=DAILY_STATS_PAGE_SIZE, offset=offset)
+    await render(
+        bot,
+        chat_id,
+        user_id,
+        texts.opponent_games_stats(
+            texts.opponent_title(opponent),
+            games,
+            texts.display_user_name(user.first_name, user.username),
+        ),
+        opponent_games_stats_keyboard(opponent_id, page, total_pages),
     )
 
 

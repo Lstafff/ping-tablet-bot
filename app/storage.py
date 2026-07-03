@@ -695,7 +695,34 @@ class Database:
             for played_on, (wins, losses) in sorted(daily.items(), reverse=True)
         ]
 
-    def get_recent_games(self, owner_id: int, opponent_id: int, limit: int = 5) -> list[RecentGame]:
+    def count_opponent_games(self, owner_id: int, opponent_id: int) -> int:
+        opponent = self.get_opponent(owner_id, opponent_id)
+
+        if opponent.opponent_user_id is None:
+            row = self.connection.execute(
+                """
+                SELECT COUNT(*) AS games_count
+                FROM games
+                WHERE owner_id = ? AND opponent_id = ?
+                """,
+                (owner_id, opponent.id),
+            ).fetchone()
+            return int(row["games_count"])
+
+        row = self.connection.execute(
+            """
+            SELECT COUNT(*) AS games_count
+            FROM games
+            WHERE
+                (player_a_id = ? AND player_b_id = ?)
+                OR
+                (player_a_id = ? AND player_b_id = ?)
+            """,
+            (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id),
+        ).fetchone()
+        return int(row["games_count"])
+
+    def get_recent_games(self, owner_id: int, opponent_id: int, limit: int = 5, offset: int = 0) -> list[RecentGame]:
         opponent = self.get_opponent(owner_id, opponent_id)
 
         if opponent.opponent_user_id is None:
@@ -706,8 +733,9 @@ class Database:
                 WHERE owner_id = ? AND opponent_id = ?
                 ORDER BY played_at DESC, id DESC
                 LIMIT ?
+                OFFSET ?
                 """,
-                (owner_id, opponent.id, limit),
+                (owner_id, opponent.id, limit, offset),
             ).fetchall()
             return [
                 RecentGame(
@@ -728,8 +756,9 @@ class Database:
                 (player_a_id = ? AND player_b_id = ?)
             ORDER BY played_at DESC, id DESC
             LIMIT ?
+            OFFSET ?
             """,
-            (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id, limit),
+            (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id, limit, offset),
         ).fetchall()
         recent_games: list[RecentGame] = []
         for row in rows:
