@@ -1,6 +1,22 @@
 import unittest
 
-from app.rating import parse_fnt_rating, parse_manual_rating
+from app.rating import (
+    MAX_RATING_RESPONSE_BYTES,
+    is_allowed_rating_url,
+    parse_fnt_rating,
+    parse_manual_rating,
+    read_limited_response,
+)
+
+
+class FakeResponse:
+    def __init__(self, content: bytes) -> None:
+        self.content = content
+
+    def read(self, size: int = -1) -> bytes:
+        if size < 0:
+            return self.content
+        return self.content[:size]
 
 
 class RatingTest(unittest.TestCase):
@@ -37,6 +53,25 @@ class RatingTest(unittest.TestCase):
         page_html = "<script>{\"rating\": 1577}</script>"
 
         self.assertEqual(parse_fnt_rating(page_html), "1577")
+
+    def test_is_allowed_rating_url_accepts_known_https_hosts(self) -> None:
+        self.assertTrue(is_allowed_rating_url("https://ttfr.ru/sportsman/9"))
+        self.assertTrue(is_allowed_rating_url("https://www.rttf.ru/players/70524?type=f"))
+
+    def test_is_allowed_rating_url_rejects_unsafe_or_unknown_hosts(self) -> None:
+        self.assertFalse(is_allowed_rating_url("http://ttfr.ru/sportsman/9"))
+        self.assertFalse(is_allowed_rating_url("https://evil.example/?next=ttfr.ru"))
+        self.assertFalse(is_allowed_rating_url("https://ttfr.ru.evil.example/sportsman/9"))
+        self.assertFalse(is_allowed_rating_url("https://127.0.0.1/?site=ttfr"))
+
+    def test_read_limited_response_rejects_large_pages(self) -> None:
+        response = FakeResponse(b"x" * (MAX_RATING_RESPONSE_BYTES + 1))
+
+        with self.assertRaisesRegex(ValueError, "слишком большая"):
+            read_limited_response(response)
+
+    def test_read_limited_response_accepts_small_pages(self) -> None:
+        self.assertEqual(read_limited_response(FakeResponse(b"rating")), b"rating")
 
 
 if __name__ == "__main__":

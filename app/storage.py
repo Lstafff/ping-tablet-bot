@@ -2,14 +2,26 @@ from __future__ import annotations
 
 import secrets
 import string
-from collections import Counter
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
-from app import texts
+from app.domain import (
+    DEFAULT_USER_NAME,
+    TEST_OPPONENT_NAME,
+    DailyStats,
+    ExtendedStats,
+    InviteAcceptance,
+    Opponent,
+    RecentGame,
+    Session,
+    Stats,
+    User,
+    build_extended_stats,
+    display_user_name,
+)
 from app.scoring import ParsedScore
+from app.states import KNOWN_SESSION_MODES
 
 
 MOSCOW_TZ = ZoneInfo("Europe/Moscow")
@@ -29,85 +41,6 @@ ALLOWED_SCHEMA_NAMES = {
 }
 
 
-@dataclass(frozen=True)
-class User:
-    telegram_id: int
-    first_name: str
-    username: Optional[str]
-    last_message_id: Optional[int]
-    created_at: str
-    rating: Optional[str]
-    rating_is_fnt: bool
-
-
-@dataclass(frozen=True)
-class Opponent:
-    id: int
-    owner_id: int
-    name: str
-    opponent_user_id: Optional[int]
-    first_name: Optional[str] = None
-    username: Optional[str] = None
-
-
-@dataclass(frozen=True)
-class Stats:
-    wins: int
-    losses: int
-    points_for: int
-    points_against: int
-
-    @property
-    def games(self) -> int:
-        return self.wins + self.losses
-
-
-@dataclass(frozen=True)
-class ExtendedStats:
-    games: int
-    overtime_wins: int
-    overtime_losses: int
-    longest_own_score: Optional[int]
-    longest_opponent_score: Optional[int]
-    longest_points: int
-    win_streak: int
-    large_margin_games: int
-    close_margin_games: int
-    most_common_score: Optional[str]
-    most_common_score_count: int
-
-    @property
-    def overtime_games(self) -> int:
-        return self.overtime_wins + self.overtime_losses
-
-
-@dataclass(frozen=True)
-class DailyStats:
-    played_on: str
-    wins: int
-    losses: int
-
-
-@dataclass(frozen=True)
-class RecentGame:
-    played_at: str
-    own_score: int
-    opponent_score: int
-
-
-@dataclass(frozen=True)
-class Session:
-    mode: str
-    opponent_id: Optional[int]
-
-
-@dataclass(frozen=True)
-class InviteAcceptance:
-    inviter_id: int
-    is_self_invite: bool
-    is_new_opponent: bool
-
-
 class PostgresConnection:
     def __init__(self, database_url: str) -> None:
         try:
@@ -118,7 +51,7 @@ class PostgresConnection:
                 "Для подключения к Postgres нужно установить зависимость psycopg[binary]."
             ) from error
 
-        self._connection = psycopg.connect(database_url, row_factory=dict_row)
+        self._connection = psycopg.connect(database_url, row_factory=dict_row, connect_timeout=10)
 
     def execute(self, query: str, parameters: tuple[Any, ...] = ()) -> Any:
         return self._connection.execute(self._prepare_query(query), parameters)
@@ -131,6 +64,9 @@ class PostgresConnection:
 
     def commit(self) -> None:
         self._connection.commit()
+
+    def close(self) -> None:
+        self._connection.close()
 
     def __enter__(self) -> PostgresConnection:
         return self
@@ -240,6 +176,7 @@ class Database:
         self._ensure_column("aggregate_adjustments", "games_updated_at", "TEXT")
         self._ensure_column("aggregate_adjustments", "points_updated_at", "TEXT")
         self._backfill_adjustment_dates()
+        self._ensure_indexes()
         self.connection.execute(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite_code
@@ -248,6 +185,40 @@ class Database:
             """
         )
         self.connection.commit()
+
+    def close(self) -> None:
+        self.connection.close()
+
+    def _ensure_indexes(self) -> None:
+        for statement in (
+            """
+            CREATE INDEX IF NOT EXISTS idx_opponents_owner_name
+            ON opponents(owner_id, lower(name))
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_opponents_owner_user
+            ON opponents(owner_id, opponent_user_id)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_games_unlinked_opponent_history
+            ON games(owner_id, opponent_id, played_at DESC, id DESC)
+            WHERE owner_id IS NOT NULL AND opponent_id IS NOT NULL
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_games_linked_players_history
+            ON games(player_a_id, player_b_id, played_at DESC, id DESC)
+            WHERE player_b_id IS NOT NULL
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_invite_uses_inviter
+            ON invite_uses(inviter_id)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_sessions_updated_at
+            ON sessions(updated_at)
+            """,
+        ):
+            self.connection.execute(statement)
 
     def _backfill_adjustment_dates(self) -> None:
         self.connection.execute(
@@ -293,7 +264,7 @@ class Database:
                 username = excluded.username,
                 updated_at = excluded.updated_at
             """,
-            (telegram_id, first_name or texts.DEFAULT_USER_NAME, username, now, now),
+            (telegram_id, first_name or DEFAULT_USER_NAME, username, now, now),
         )
         self.connection.commit()
         return self.get_user(telegram_id)
@@ -326,6 +297,15 @@ class Database:
         )
         self.connection.commit()
 
+    def get_last_message_id(self, telegram_id: int) -> Optional[int]:
+        row = self.connection.execute(
+            "SELECT last_message_id FROM users WHERE telegram_id = ?",
+            (telegram_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return row["last_message_id"]
+
     def set_user_rating(self, telegram_id: int, rating: Optional[str], rating_is_fnt: bool) -> None:
         self.connection.execute(
             """
@@ -340,7 +320,7 @@ class Database:
     def ensure_test_opponent(self, owner_id: int) -> None:
         if self.list_opponents(owner_id):
             return
-        self.add_opponent(owner_id=owner_id, name=texts.TEST_OPPONENT_NAME, opponent_user_id=None)
+        self.add_opponent(owner_id=owner_id, name=TEST_OPPONENT_NAME, opponent_user_id=None)
 
     def add_opponent(self, owner_id: int, name: str, opponent_user_id: Optional[int]) -> Opponent:
         now = now_moscow_iso()
@@ -501,8 +481,8 @@ class Database:
 
         inviter = self.get_user(inviter_id)
         invited = self.get_user(invited_user_id)
-        invited_name = texts.display_user_name(invited.first_name, invited.username)
-        inviter_name = texts.display_user_name(inviter.first_name, inviter.username)
+        invited_name = display_user_name(invited.first_name, invited.username)
+        inviter_name = display_user_name(inviter.first_name, inviter.username)
         already_linked = self._has_linked_opponent(inviter_id, invited_user_id)
 
         self.add_opponent(inviter_id, invited_name, invited_user_id)
@@ -723,6 +703,8 @@ class Database:
         return int(row["games_count"])
 
     def get_recent_games(self, owner_id: int, opponent_id: int, limit: int = 5, offset: int = 0) -> list[RecentGame]:
+        limit = require_positive_limit(limit, maximum=100)
+        offset = require_non_negative_offset(offset)
         opponent = self.get_opponent(owner_id, opponent_id)
 
         if opponent.opponent_user_id is None:
@@ -820,6 +802,8 @@ class Database:
         )
 
     def set_session(self, owner_id: int, mode: str, opponent_id: Optional[int]) -> None:
+        if mode not in KNOWN_SESSION_MODES:
+            raise ValueError("Недопустимый режим сессии.")
         self.connection.execute(
             """
             INSERT INTO sessions (owner_id, mode, opponent_id, updated_at)
@@ -1141,63 +1125,6 @@ def now_moscow_iso() -> str:
     return datetime.now(MOSCOW_TZ).isoformat(timespec="seconds")
 
 
-def build_extended_stats(game_rows: list[dict[str, Any]]) -> ExtendedStats:
-    overtime_wins = 0
-    overtime_losses = 0
-    longest_own_score: Optional[int] = None
-    longest_opponent_score: Optional[int] = None
-    longest_points = 0
-    win_streak = 0
-    large_margin_games = 0
-    close_margin_games = 0
-    score_counter: Counter[str] = Counter()
-
-    for index, row in enumerate(game_rows):
-        own_score = int(row["own_score"])
-        opponent_score = int(row["opponent_score"])
-        score_counter[f"{own_score}-{opponent_score}"] += 1
-
-        if row["is_overtime"]:
-            if own_score > opponent_score:
-                overtime_wins += 1
-            else:
-                overtime_losses += 1
-
-        points = own_score + opponent_score
-        if points > longest_points:
-            longest_points = points
-            longest_own_score = own_score
-            longest_opponent_score = opponent_score
-
-        score_difference = abs(own_score - opponent_score)
-        if score_difference > 6:
-            large_margin_games += 1
-        if score_difference == 2:
-            close_margin_games += 1
-
-        if index == win_streak and own_score > opponent_score:
-            win_streak += 1
-
-    most_common_score = None
-    most_common_score_count = 0
-    if score_counter:
-        most_common_score, most_common_score_count = score_counter.most_common(1)[0]
-
-    return ExtendedStats(
-        games=len(game_rows),
-        overtime_wins=overtime_wins,
-        overtime_losses=overtime_losses,
-        longest_own_score=longest_own_score,
-        longest_opponent_score=longest_opponent_score,
-        longest_points=longest_points,
-        win_streak=win_streak,
-        large_margin_games=large_margin_games,
-        close_margin_games=close_margin_games,
-        most_common_score=most_common_score,
-        most_common_score_count=most_common_score_count,
-    )
-
-
 def normalize_invite_code(invite_code: str) -> str:
     return invite_code.strip().replace(" ", "").upper()
 
@@ -1206,6 +1133,18 @@ def require_schema_name(name: str) -> str:
     if name not in ALLOWED_SCHEMA_NAMES:
         raise ValueError("Недопустимое имя таблицы или колонки.")
     return name
+
+
+def require_positive_limit(limit: int, maximum: int) -> int:
+    if limit < 1:
+        raise ValueError("Лимит должен быть положительным.")
+    return min(limit, maximum)
+
+
+def require_non_negative_offset(offset: int) -> int:
+    if offset < 0:
+        raise ValueError("Смещение не может быть отрицательным.")
+    return offset
 
 
 def add_daily_result(daily: dict[str, tuple[int, int]], played_at: str, own_score: int, opponent_score: int) -> None:

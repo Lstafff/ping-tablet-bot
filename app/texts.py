@@ -6,14 +6,21 @@ from datetime import datetime
 from typing import Optional, Protocol
 from urllib.parse import urlencode
 
+from app.domain import (
+    DEFAULT_USER_NAME,
+    TEST_OPPONENT_NAME,
+    TEST_OPPONENT_USERNAME,
+    display_user_name,
+    opponent_title,
+    username_label,
+)
+from app.rating import is_allowed_rating_url
+
 
 # Здесь собраны тексты, которые видит пользователь.
 # Можно менять фразы справа от знака =, не меняя названия переменных и функций.
 
-DEFAULT_USER_NAME = "Игрок"
-TEST_OPPONENT_NAME = "Тестовый соперник"
-TEST_OPPONENT_USERNAME = "test"
-
+# Тексты кнопок во всех меню бота.
 BUTTON_OPPONENTS = "🏓 Соперники"
 BUTTON_INVITE_OPPONENT = "👊 Бросить вызов"
 BUTTON_SEND_INVITE = "💌 Отправить"
@@ -42,6 +49,7 @@ BUTTON_MAIN_MENU = "🏠 Меню"
 BUTTON_EDIT_GAMES = "🔢 Счёт партий"
 BUTTON_EDIT_POINTS = "🎯 Количество мячей"
 
+# Главное меню и список соперников.
 MAIN_MENU_TEXT = (
     "<h2>пинг 🏓 понг 🏓 каунтер</h2>"
     "\nЭто бот для ведения статистики матчей с друзьями.\n\n"
@@ -52,6 +60,7 @@ OPPONENTS_MENU_TEXT = (
     "\nКто твой соперник сегодня?"
 )
 
+# Сообщения после открытия ссылки или ввода кода приглашения.
 INVITE_INVALID_TEXT = (
     "<h2>😔 Ссылка не работает...</h2>"
     "\nКажется с ней что-то не так. Попроси новую ссылку у твоего соперника"
@@ -73,6 +82,7 @@ INVITE_ALREADY_CONNECTED_TEXT = (
     "\nЭтот соперник уже есть в твоём списке"
 )
 
+# Ошибки ввода счёта партии.
 ERROR_SCORE_NEEDS_TWO_NUMBERS = "👀 Напиши два числа в одном сообщении: сначала свой счёт, потом счёт соперника. Например: 11-7.\n\nПартия заканчиается после 11 очков у победителя. При счёте 10-10 начинаются овертаймы (по одной подаче) до разницы в 2 очка."
 ERROR_VALUES_CANNOT_BE_NEGATIVE = "❌ Как вы ушли в минус? Очки не могут быть отрицательными."
 ERROR_GAME_CANNOT_BE_DRAW = "❌ Точно всё? В завершенной партии не может быть ничьей."
@@ -81,6 +91,8 @@ ERROR_DEUCE_NEEDS_TWO_POINT_LEAD = "❌ Ещё не всё! При счёте 10
 ERROR_OVERTIME_ONLY_AFTER_DEUCE = "❌ Ещё играем! Счёт больше 11 возможен только после 10:10."
 ERROR_WIN_REQUIRES_TWO_POINT_LEAD = "❌ Кажется, что-то не так... Победа в партии должна быть с разницей минимум в 2 очка."
 PAIR_DEFAULT_EXAMPLE = "11-7"
+
+# Названия месяцев для дат в таблицах.
 MONTHS_RU = {
     1: "января",
     2: "февраля",
@@ -97,6 +109,7 @@ MONTHS_RU = {
 }
 
 
+# Минимальная форма статистики, которую принимают функции текста.
 class StatsLike(Protocol):
     games: int
     wins: int
@@ -105,6 +118,7 @@ class StatsLike(Protocol):
     points_against: int
 
 
+# Расширенная статистика для овертаймов, серий и случайных фактов.
 class ExtendedStatsLike(Protocol):
     games: int
     overtime_wins: int
@@ -120,6 +134,7 @@ class ExtendedStatsLike(Protocol):
     most_common_score_count: int
 
 
+# Результат одной партии после парсинга счёта.
 class ScoreLike(Protocol):
     own_score: int
     opponent_score: int
@@ -129,6 +144,7 @@ class ScoreLike(Protocol):
     overtime_opponent: int
 
 
+# Соперник для заголовков, кнопок и таблиц.
 class OpponentLike(Protocol):
     name: str
     opponent_user_id: Optional[int]
@@ -136,49 +152,27 @@ class OpponentLike(Protocol):
     username: Optional[str]
 
 
+# Строка статистики по одному дню.
 class DailyStatsLike(Protocol):
     played_on: str
     wins: int
     losses: int
 
 
+# Строка истории одной сыгранной партии.
 class RecentGameLike(Protocol):
     played_at: str
     own_score: int
     opponent_score: int
 
 
+# Пользователь для экрана профиля.
 class UserLike(Protocol):
     first_name: str
     username: Optional[str]
     created_at: str
     rating: Optional[str]
     rating_is_fnt: bool
-
-
-# Имя игрока для таблиц и уведомлений: @username, если есть, иначе имя.
-def display_user_name(first_name: str, username: Optional[str]) -> str:
-    if username:
-        return username_label(username)
-    return first_name or DEFAULT_USER_NAME
-
-
-# Название соперника в списке, карточке соперника и кнопках.
-def opponent_title(opponent: OpponentLike) -> str:
-    if opponent.username:
-        return username_label(opponent.username)
-
-    if opponent.opponent_user_id is None and opponent.name == TEST_OPPONENT_NAME:
-        return username_label(TEST_OPPONENT_USERNAME)
-
-    return opponent.first_name or opponent.name
-
-
-# Приводит username к виду @name.
-def username_label(username: str) -> str:
-    if username.startswith("@"):
-        return username
-    return f"@{username}"
 
 
 # Экран профиля с общей статистикой.
@@ -390,10 +384,12 @@ def score_undone(
     )
 
 
+# Подсказка под таблицей последних игр после успешного ввода или отмены.
 def next_score_hint() -> str:
     return "<hr/><blockquote>⬇️ Напиши следующий счёт в чат!</blockquote>"
 
 
+# Подсказка на экране ошибки ввода, где таблицы нет.
 def next_score_hint_without_separator() -> str:
     return "<blockquote>⬇️ Напиши следующий счёт в чат!</blockquote>"
 
@@ -489,6 +485,7 @@ def format_stats(
     )
 
 
+# Дополнительные строки общей таблицы: овертаймы и самая длинная партия.
 def format_extended_stats_rows(extended_stats: Optional[ExtendedStatsLike]) -> str:
     if extended_stats is None:
         return ""
@@ -507,6 +504,7 @@ def format_extended_stats_rows(extended_stats: Optional[ExtendedStatsLike]) -> s
     )
 
 
+# Случайный факт под таблицей статистики.
 def format_stats_fact(extended_stats: Optional[ExtendedStatsLike]) -> str:
     facts = stats_fact_candidates(extended_stats)
     if not facts:
@@ -514,6 +512,7 @@ def format_stats_fact(extended_stats: Optional[ExtendedStatsLike]) -> str:
     return random.choice(facts)
 
 
+# Список фактов, которые подходят под текущую статистику.
 def stats_fact_candidates(extended_stats: Optional[ExtendedStatsLike]) -> list[str]:
     if extended_stats is None or extended_stats.games == 0:
         return []
@@ -574,6 +573,7 @@ def stats_fact_candidates(extended_stats: Optional[ExtendedStatsLike]) -> list[s
     return facts
 
 
+# Проверяет, что событие встречается достаточно часто для факта.
 def is_frequent_stat(count: int, total: int) -> bool:
     return total >= 3 and count / total > 0.5
 
@@ -606,22 +606,26 @@ def format_recent_games(
     )
 
 
+# Дата для таблиц по дням: 12 июня '26.
 def format_day(played_on: str) -> str:
     day = datetime.strptime(played_on, "%Y-%m-%d")
     return f"{day.day} {MONTHS_RU[day.month]} '{day.year % 100:02d}"
 
 
+# Дата и время для истории игр: 12 июня, 18:42.
 def format_game_time(played_at: str) -> str:
     day = datetime.fromisoformat(played_at)
     return f"{day.day} {MONTHS_RU[day.month]}, {day:%H:%M}"
 
 
+# Разница счёта с плюсом, если пользователь впереди.
 def format_signed_difference(value: int) -> str:
     if value > 0:
         return f"+{value}"
     return str(value)
 
 
+# Уровень игрока в профиле по количеству игр и рейтингу ФНТР.
 def format_player_level(games: int, rating_is_fnt: bool) -> str:
     if rating_is_fnt or games >= 500:
         return "💀 профик"
@@ -634,6 +638,7 @@ def format_player_level(games: int, rating_is_fnt: bool) -> str:
     return "👶 новичок"
 
 
+# Рейтинг в профиле, включая отметку подтверждения ФНТР.
 def format_rating(rating: Optional[str], rating_is_fnt: bool) -> str:
     if not rating:
         return "пока нет"
@@ -642,12 +647,6 @@ def format_rating(rating: Optional[str], rating_is_fnt: bool) -> str:
     return html.escape(rating)
 
 
+# Проверка, что пользователь прислал ссылку на поддерживаемый рейтинг.
 def is_fnt_rating_input(raw_text: str) -> bool:
-    normalized = raw_text.lower()
-    return normalized.startswith(("http://", "https://")) and (
-        "фнтр" in normalized
-        or "fntr" in normalized
-        or "fnt" in normalized
-        or "ttfr" in normalized
-        or "rttf" in normalized
-    )
+    return is_allowed_rating_url(raw_text)

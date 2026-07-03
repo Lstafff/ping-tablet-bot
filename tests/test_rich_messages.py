@@ -348,6 +348,8 @@ class RichMessagesTest(unittest.TestCase):
 
     def test_is_fnt_rating_input_detects_rating_links(self) -> None:
         self.assertTrue(is_fnt_rating_input("https://ttfr.ru/player/1"))
+        self.assertFalse(is_fnt_rating_input("http://ttfr.ru/player/1"))
+        self.assertFalse(is_fnt_rating_input("https://example.com/?next=ttfr.ru"))
         self.assertFalse(is_fnt_rating_input("1500"))
 
 if __name__ == "__main__":

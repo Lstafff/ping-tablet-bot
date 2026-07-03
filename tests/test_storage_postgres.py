@@ -2,7 +2,8 @@ import os
 import unittest
 
 from app.scoring import parse_score
-from app.storage import Database, build_extended_stats
+from app.domain import build_extended_stats
+from app.storage import Database
 
 
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "").strip()

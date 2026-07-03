@@ -2,11 +2,29 @@ from __future__ import annotations
 
 import html
 import re
+import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Optional
 
 
 RATING_TIMEOUT_SECONDS = 8
+MAX_RATING_URL_LENGTH = 2048
+MAX_RATING_RESPONSE_BYTES = 2 * 1024 * 1024
+ALLOWED_RATING_HOSTS = frozenset({"ttfr.ru", "www.ttfr.ru", "rttf.ru", "www.rttf.ru"})
+
+
+class RatingRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not is_allowed_rating_url(newurl):
+            raise urllib.error.HTTPError(
+                req.full_url,
+                code,
+                "Rating redirect target is not allowed",
+                headers,
+                fp,
+            )
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 def parse_manual_rating(raw_text: str) -> Optional[str]:
@@ -16,15 +34,35 @@ def parse_manual_rating(raw_text: str) -> Optional[str]:
     return None
 
 
+def is_allowed_rating_url(raw_url: str) -> bool:
+    if len(raw_url) > MAX_RATING_URL_LENGTH:
+        return False
+
+    parsed_url = urllib.parse.urlparse(raw_url.strip())
+    hostname = parsed_url.hostname.lower() if parsed_url.hostname else ""
+    return parsed_url.scheme == "https" and hostname in ALLOWED_RATING_HOSTS
+
+
 def fetch_fnt_rating(profile_url: str) -> Optional[str]:
+    if not is_allowed_rating_url(profile_url):
+        raise ValueError("Недопустимая ссылка на рейтинг.")
+
     request = urllib.request.Request(
         profile_url,
         headers={"User-Agent": "Mozilla/5.0 PingTabletBot/1.0"},
     )
-    with urllib.request.urlopen(request, timeout=RATING_TIMEOUT_SECONDS) as response:
+    opener = urllib.request.build_opener(RatingRedirectHandler)
+    with opener.open(request, timeout=RATING_TIMEOUT_SECONDS) as response:
         content_type = response.headers.get_content_charset() or "utf-8"
-        page_html = response.read().decode(content_type, errors="ignore")
+        page_html = read_limited_response(response).decode(content_type, errors="ignore")
     return parse_fnt_rating(page_html)
+
+
+def read_limited_response(response) -> bytes:
+    content = response.read(MAX_RATING_RESPONSE_BYTES + 1)
+    if len(content) > MAX_RATING_RESPONSE_BYTES:
+        raise ValueError("Страница рейтинга слишком большая.")
+    return content
 
 
 def parse_fnt_rating(page_html: str) -> Optional[str]:

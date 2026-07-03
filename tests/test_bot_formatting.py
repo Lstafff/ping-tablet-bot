@@ -2,7 +2,7 @@ import unittest
 from urllib.parse import parse_qs, urlparse
 
 from app import texts
-from app.storage import Opponent
+from app.domain import Opponent
 
 
 class BotFormattingTest(unittest.TestCase):

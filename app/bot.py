@@ -1,11 +1,11 @@
 import asyncio
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 from aiogram import Bot, Dispatcher, F, Router
-from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InputRichMessage, Message, User as TelegramUser
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, User as TelegramUser
 
 from app import texts
 from app.callbacks import (
@@ -15,6 +15,7 @@ from app.callbacks import (
     parse_stats_games_callback,
 )
 from app.config import load_config
+from app.domain import DEFAULT_USER_NAME, display_user_name, opponent_title
 from app.keyboards import (
     back_to_opponent_keyboard,
     back_to_main_keyboard,
@@ -33,20 +34,24 @@ from app.keyboards import (
     reset_stats_keyboard,
     score_saved_keyboard,
 )
-from app.rating import fetch_fnt_rating, parse_manual_rating
+from app.rating import fetch_fnt_rating, is_allowed_rating_url, parse_manual_rating
+from app.rendering import RichRenderer, delete_message
 from app.scoring import ScoreError, parse_pair, parse_score
+from app.states import (
+    DAILY_STATS_PAGE_SIZE,
+    SESSION_EDIT_GAMES,
+    SESSION_EDIT_POINTS,
+    SESSION_INVITE_CODE,
+    SESSION_RATING,
+    SESSION_SCORE,
+)
 from app.storage import Database
 
 
 router = Router()
 db: Optional[Database] = None
+renderer: Optional[RichRenderer] = None
 seed_test_opponent = True
-DAILY_STATS_PAGE_SIZE = 14
-SESSION_INVITE_CODE = "await_invite_code"
-SESSION_RATING = "await_rating"
-SESSION_SCORE = "await_score"
-SESSION_EDIT_GAMES = "await_edit_games"
-SESSION_EDIT_POINTS = "await_edit_points"
 
 
 @router.message(CommandStart())
@@ -206,9 +211,9 @@ async def score_undo_callback(callback: CallbackQuery, bot: Bot) -> None:
         callback.message.chat.id,
         callback.from_user.id,
         texts.score_undone(
-            texts.opponent_title(opponent),
+            opponent_title(opponent),
             recent_games,
-            texts.display_user_name(user.first_name, user.username),
+            display_user_name(user.first_name, user.username),
         ),
         opponent_keyboard(opponent_id),
     )
@@ -229,9 +234,9 @@ async def edit_callback(callback: CallbackQuery, bot: Bot) -> None:
         callback.message.chat.id,
         callback.from_user.id,
         texts.edit_menu(
-            texts.opponent_title(opponent),
+            opponent_title(opponent),
             stats,
-            texts.display_user_name(user.first_name, user.username),
+            display_user_name(user.first_name, user.username),
         ),
         edit_keyboard(opponent_id),
     )
@@ -285,7 +290,7 @@ async def edit_games_callback(callback: CallbackQuery, bot: Bot) -> None:
         bot,
         callback.message.chat.id,
         callback.from_user.id,
-        texts.edit_games_prompt(texts.opponent_title(opponent)),
+        texts.edit_games_prompt(opponent_title(opponent)),
         back_to_opponent_keyboard(opponent_id),
     )
 
@@ -303,7 +308,7 @@ async def edit_points_callback(callback: CallbackQuery, bot: Bot) -> None:
         bot,
         callback.message.chat.id,
         callback.from_user.id,
-        texts.edit_points_prompt(texts.opponent_title(opponent)),
+        texts.edit_points_prompt(opponent_title(opponent)),
         back_to_opponent_keyboard(opponent_id),
     )
 
@@ -320,7 +325,7 @@ async def delete_callback(callback: CallbackQuery, bot: Bot) -> None:
         bot,
         callback.message.chat.id,
         callback.from_user.id,
-        texts.delete_opponent_confirm(texts.opponent_title(opponent)),
+        texts.delete_opponent_confirm(opponent_title(opponent)),
         delete_opponent_keyboard(opponent_id),
     )
 
@@ -337,7 +342,7 @@ async def reset_stats_callback(callback: CallbackQuery, bot: Bot) -> None:
         bot,
         callback.message.chat.id,
         callback.from_user.id,
-        texts.reset_stats_confirm(texts.opponent_title(opponent)),
+        texts.reset_stats_confirm(opponent_title(opponent)),
         reset_stats_keyboard(opponent_id),
     )
 
@@ -350,7 +355,7 @@ async def reset_stats_confirm_callback(callback: CallbackQuery, bot: Bot) -> Non
     if opponent_id is None:
         return
     opponent = db.get_opponent(callback.from_user.id, opponent_id)
-    opponent_name = texts.opponent_title(opponent)
+    opponent_name = opponent_title(opponent)
     db.reset_opponent_stats(callback.from_user.id, opponent_id)
     db.clear_session(callback.from_user.id)
     await render(
@@ -370,7 +375,7 @@ async def delete_confirm_callback(callback: CallbackQuery, bot: Bot) -> None:
     if opponent_id is None:
         return
     opponent = db.get_opponent(callback.from_user.id, opponent_id)
-    opponent_name = texts.opponent_title(opponent)
+    opponent_name = opponent_title(opponent)
     db.delete_opponent(callback.from_user.id, opponent_id)
     db.clear_session(callback.from_user.id)
     has_opponents = bool(db.list_opponents(callback.from_user.id))
@@ -385,6 +390,8 @@ async def delete_confirm_callback(callback: CallbackQuery, bot: Bot) -> None:
 
 @router.message()
 async def text_message(message: Message, bot: Bot) -> None:
+    if message.from_user is None:
+        return
     user_id = message.from_user.id
     ensure_user(message.from_user)
     await delete_message(bot, message)
@@ -445,7 +452,7 @@ async def handle_rating_input(message: Message, bot: Bot, user_id: int) -> None:
         await render(bot, message.chat.id, user_id, texts.rating_prompt(), rating_keyboard(user.rating is not None))
         return
 
-    if texts.is_fnt_rating_input(rating_input):
+    if is_allowed_rating_url(rating_input):
         try:
             rating = await asyncio.to_thread(fetch_fnt_rating, rating_input)
         except Exception:
@@ -475,7 +482,7 @@ async def handle_score_input(message: Message, bot: Bot, user_id: int, opponent_
             bot,
             message.chat.id,
             user_id,
-            texts.score_input_error(texts.opponent_title(opponent), error),
+            texts.score_input_error(opponent_title(opponent), error),
             opponent_keyboard(opponent_id),
         )
         return
@@ -488,10 +495,10 @@ async def handle_score_input(message: Message, bot: Bot, user_id: int, opponent_
         message.chat.id,
         user_id,
         texts.score_saved(
-            texts.opponent_title(opponent),
+            opponent_title(opponent),
             score,
             recent_games,
-            texts.display_user_name(user.first_name, user.username),
+            display_user_name(user.first_name, user.username),
         ),
         score_saved_keyboard(opponent_id, game_id),
     )
@@ -541,7 +548,7 @@ async def show_opponent(bot: Bot, chat_id: int, user_id: int, opponent_id: int) 
         bot,
         chat_id,
         user_id,
-        texts.score_prompt(texts.opponent_title(opponent)),
+        texts.score_prompt(opponent_title(opponent)),
         opponent_keyboard(opponent_id),
     )
 
@@ -556,9 +563,9 @@ async def show_opponent_total_stats(bot: Bot, chat_id: int, user_id: int, oppone
         chat_id,
         user_id,
         texts.opponent_stats(
-            texts.opponent_title(opponent),
+            opponent_title(opponent),
             stats,
-            texts.display_user_name(user.first_name, user.username),
+            display_user_name(user.first_name, user.username),
             extended_stats,
         ),
         opponent_total_stats_keyboard(opponent_id),
@@ -578,9 +585,9 @@ async def show_opponent_daily_stats(bot: Bot, chat_id: int, user_id: int, oppone
         chat_id,
         user_id,
         texts.opponent_daily_stats(
-            texts.opponent_title(opponent),
+            opponent_title(opponent),
             page_daily_stats,
-            texts.display_user_name(user.first_name, user.username),
+            display_user_name(user.first_name, user.username),
         ),
         opponent_daily_stats_keyboard(opponent_id, page, total_pages),
     )
@@ -599,9 +606,9 @@ async def show_opponent_games_stats(bot: Bot, chat_id: int, user_id: int, oppone
         chat_id,
         user_id,
         texts.opponent_games_stats(
-            texts.opponent_title(opponent),
+            opponent_title(opponent),
             games,
-            texts.display_user_name(user.first_name, user.username),
+            display_user_name(user.first_name, user.username),
         ),
         opponent_games_stats_keyboard(opponent_id, page, total_pages),
     )
@@ -643,7 +650,7 @@ async def notify_inviter_about_new_opponent(bot: Bot, inviter_id: int, invited_u
             bot,
             inviter_id,
             inviter_id,
-            texts.invite_new_opponent_notification(texts.display_user_name(invited.first_name, invited.username)),
+            texts.invite_new_opponent_notification(display_user_name(invited.first_name, invited.username)),
             main_menu_keyboard(True),
         )
     except TelegramAPIError:
@@ -658,108 +665,15 @@ async def render(
     reply_markup: InlineKeyboardMarkup,
     force_new: bool = False,
 ) -> None:
-    user = db.get_user(user_id)
-    if force_new and user.last_message_id is not None:
-        try:
-            await bot.delete_message(chat_id, user.last_message_id)
-        except TelegramBadRequest:
-            pass
-
-    if not force_new and user.last_message_id is not None:
-        try:
-            message_id = await render_rich_message(bot, chat_id, text, reply_markup, user.last_message_id)
-            db.set_last_message_id(user_id, message_id)
-            return
-        except Exception as error:
-            logging.exception("Failed to render rich message")
-            if is_message_not_modified(error):
-                return
-            try:
-                await bot.delete_message(chat_id, user.last_message_id)
-            except TelegramBadRequest:
-                pass
-
-    message_id = await render_rich_message(bot, chat_id, text, reply_markup, None)
-    db.set_last_message_id(user_id, message_id)
-
-
-async def render_rich_message(
-    bot: Bot,
-    chat_id: int,
-    rich_html: str,
-    reply_markup: InlineKeyboardMarkup,
-    last_message_id: Optional[int],
-) -> int:
-    telegram_rich_html = rich_html.replace("\n", "<br/>")
-
-    if last_message_id is not None:
-        try:
-            result = await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=last_message_id,
-                rich_message=InputRichMessage(html=telegram_rich_html),
-                reply_markup=reply_markup,
-                parse_mode=None,
-            )
-            return message_id_from_result(result, last_message_id)
-        except Exception as error:
-            if is_message_not_modified(error):
-                await update_reply_markup(bot, chat_id, last_message_id, reply_markup)
-                return last_message_id
-
-    sent = await bot.send_rich_message(
-        chat_id=chat_id,
-        rich_message=InputRichMessage(html=telegram_rich_html),
-        reply_markup=reply_markup,
-    )
-    new_message_id = message_id_from_result(sent, None)
-
-    if last_message_id is not None and new_message_id != last_message_id:
-        try:
-            await bot.delete_message(chat_id, last_message_id)
-        except TelegramAPIError:
-            pass
-
-    return new_message_id
-
-
-def is_message_not_modified(error: Exception) -> bool:
-    return "message is not modified" in str(error).lower()
-
-
-async def update_reply_markup(
-    bot: Bot,
-    chat_id: int,
-    message_id: int,
-    reply_markup: InlineKeyboardMarkup,
-) -> None:
-    try:
-        await bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id, reply_markup=reply_markup)
-    except Exception as error:
-        if not is_message_not_modified(error):
-            raise
-
-
-def message_id_from_result(result: Any, fallback: Optional[int]) -> int:
-    message_id = getattr(result, "message_id", None)
-    if isinstance(message_id, int):
-        return message_id
-    if fallback is not None:
-        return fallback
-    raise RuntimeError("Telegram API did not return message_id.")
-
-
-async def delete_message(bot: Bot, message: Message) -> None:
-    try:
-        await bot.delete_message(message.chat.id, message.message_id)
-    except TelegramBadRequest:
-        pass
+    if renderer is None:
+        raise RuntimeError("Renderer is not initialized.")
+    await renderer.render(bot, chat_id, user_id, text, reply_markup, force_new=force_new)
 
 
 def ensure_user(user: Optional[TelegramUser]) -> None:
     if user is None:
         return
-    db.ensure_user(user.id, user.first_name or texts.DEFAULT_USER_NAME, user.username)
+    db.ensure_user(user.id, user.first_name or DEFAULT_USER_NAME, user.username)
     if seed_test_opponent:
         db.ensure_test_opponent(user.id)
 
@@ -772,16 +686,22 @@ def parse_start_payload(text: str) -> str:
 
 
 async def main() -> None:
-    global db, seed_test_opponent
+    global db, renderer, seed_test_opponent
     logging.basicConfig(level=logging.INFO)
     config = load_config()
     seed_test_opponent = config.seed_test_opponent
     db = Database(config.database_url)
+    renderer = RichRenderer(db)
 
     bot = Bot(token=config.bot_token)
     dispatcher = Dispatcher()
     dispatcher.include_router(router)
-    await dispatcher.start_polling(bot)
+    try:
+        await dispatcher.start_polling(bot)
+    finally:
+        await bot.session.close()
+        if db is not None:
+            db.close()
 
 
 if __name__ == "__main__":
