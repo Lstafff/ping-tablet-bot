@@ -15,7 +15,6 @@ from app.callbacks import (
     parse_stats_games_callback,
 )
 from app.config import load_config
-from app.domain import DEFAULT_USER_NAME, display_user_name, opponent_title
 from app.keyboards import (
     back_to_opponent_keyboard,
     back_to_main_keyboard,
@@ -34,11 +33,17 @@ from app.keyboards import (
     reset_stats_keyboard,
     score_saved_keyboard,
 )
-from app.rating import fetch_fnt_rating, is_allowed_rating_url, parse_manual_rating
 from app.rendering import RichRenderer, delete_message
-from app.scoring import ScoreError, parse_pair, parse_score
+from app.scoring import ScoreError
+from app.services import (
+    INVITE_ACCEPTED,
+    INVITE_INVALID,
+    INVITE_SELF,
+    RATING_EMPTY,
+    RATING_INVALID,
+    TennisService,
+)
 from app.states import (
-    DAILY_STATS_PAGE_SIZE,
     SESSION_EDIT_GAMES,
     SESSION_EDIT_POINTS,
     SESSION_INVITE_CODE,
@@ -51,7 +56,7 @@ from app.storage import Database
 router = Router()
 db: Optional[Database] = None
 renderer: Optional[RichRenderer] = None
-seed_test_opponent = True
+service: Optional[TennisService] = None
 
 
 @router.message(CommandStart())
@@ -85,7 +90,7 @@ async def main_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
     user_id = callback.from_user.id
-    db.clear_session(user_id)
+    get_service().clear_session(user_id)
     await show_main_menu(bot, callback.message.chat.id, user_id)
 
 
@@ -93,7 +98,7 @@ async def main_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def profile_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    db.clear_session(callback.from_user.id)
+    get_service().clear_session(callback.from_user.id)
     await show_profile(bot, callback.message.chat.id, callback.from_user.id)
 
 
@@ -106,15 +111,14 @@ async def noop_callback(callback: CallbackQuery) -> None:
 async def invite_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    invite_code = db.get_or_create_invite_code(callback.from_user.id)
     bot_info = await bot.get_me()
-    invite_link = f"https://t.me/{bot_info.username}?start=invite_{invite_code}"
+    invite = get_service().create_invite(callback.from_user.id, bot_info.username or "")
     await render(
         bot,
         callback.message.chat.id,
         callback.from_user.id,
-        texts.invite(invite_link, invite_code),
-        invite_keyboard(invite_link),
+        texts.invite(invite.link, invite.code),
+        invite_keyboard(invite.link),
     )
 
 
@@ -122,7 +126,7 @@ async def invite_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def invite_code_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    db.set_session(callback.from_user.id, SESSION_INVITE_CODE, None)
+    get_service().start_invite_code_input(callback.from_user.id)
     await render(
         bot,
         callback.message.chat.id,
@@ -136,14 +140,13 @@ async def invite_code_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def rating_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    user = db.get_user(callback.from_user.id)
-    db.set_session(callback.from_user.id, SESSION_RATING, None)
+    view = get_service().start_rating_input(callback.from_user.id)
     await render(
         bot,
         callback.message.chat.id,
         callback.from_user.id,
         texts.rating_prompt(),
-        rating_keyboard(user.rating is not None),
+        rating_keyboard(view.has_rating),
     )
 
 
@@ -151,7 +154,7 @@ async def rating_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def levels_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    db.clear_session(callback.from_user.id)
+    get_service().clear_session(callback.from_user.id)
     await render(
         bot,
         callback.message.chat.id,
@@ -165,8 +168,7 @@ async def levels_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def rating_clear_callback(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     ensure_user(callback.from_user)
-    db.set_user_rating(callback.from_user.id, None, False)
-    db.clear_session(callback.from_user.id)
+    get_service().clear_rating(callback.from_user.id)
     await show_profile(bot, callback.message.chat.id, callback.from_user.id)
 
 
@@ -184,7 +186,7 @@ async def opponent_callback(callback: CallbackQuery, bot: Bot) -> None:
     opponent_id = parse_callback_id(callback.data, "opponent:")
     if opponent_id is None:
         return
-    db.clear_session(callback.from_user.id)
+    get_service().clear_session(callback.from_user.id)
     await show_opponent(bot, callback.message.chat.id, callback.from_user.id, opponent_id)
 
 
@@ -196,24 +198,20 @@ async def score_undo_callback(callback: CallbackQuery, bot: Bot) -> None:
         await callback.answer("Кнопка устарела.")
         return
     opponent_id, game_id = parsed_callback
-    deleted = db.delete_game(callback.from_user.id, opponent_id, game_id)
-    opponent = db.get_opponent(callback.from_user.id, opponent_id)
-    if not deleted:
+    result = get_service().undo_score(callback.from_user.id, opponent_id, game_id)
+    if not result.deleted:
         await callback.answer("Этот счёт уже отменён.")
         return
 
     await callback.answer()
-    db.set_session(callback.from_user.id, SESSION_SCORE, opponent_id)
-    recent_games = db.get_recent_games(callback.from_user.id, opponent_id)
-    user = db.get_user(callback.from_user.id)
     await render(
         bot,
         callback.message.chat.id,
         callback.from_user.id,
         texts.score_undone(
-            opponent_title(opponent),
-            recent_games,
-            display_user_name(user.first_name, user.username),
+            result.opponent_name,
+            result.recent_games,
+            result.user_name,
         ),
         opponent_keyboard(opponent_id),
     )
@@ -226,17 +224,15 @@ async def edit_callback(callback: CallbackQuery, bot: Bot) -> None:
     opponent_id = parse_callback_id(callback.data, "edit:")
     if opponent_id is None:
         return
-    opponent = db.get_opponent(callback.from_user.id, opponent_id)
-    stats = db.get_opponent_stats(callback.from_user.id, opponent_id)
-    user = db.get_user(callback.from_user.id)
+    view = get_service().get_edit_menu(callback.from_user.id, opponent_id)
     await render(
         bot,
         callback.message.chat.id,
         callback.from_user.id,
         texts.edit_menu(
-            opponent_title(opponent),
-            stats,
-            display_user_name(user.first_name, user.username),
+            view.opponent_name,
+            view.stats,
+            view.user_name,
         ),
         edit_keyboard(opponent_id),
     )
@@ -249,7 +245,7 @@ async def stats_total_callback(callback: CallbackQuery, bot: Bot) -> None:
     opponent_id = parse_callback_id(callback.data, "stats_total:")
     if opponent_id is None:
         return
-    db.clear_session(callback.from_user.id)
+    get_service().clear_session(callback.from_user.id)
     await show_opponent_total_stats(bot, callback.message.chat.id, callback.from_user.id, opponent_id)
 
 
@@ -261,7 +257,7 @@ async def stats_days_callback(callback: CallbackQuery, bot: Bot) -> None:
     if parsed_callback is None:
         return
     opponent_id, page = parsed_callback
-    db.clear_session(callback.from_user.id)
+    get_service().clear_session(callback.from_user.id)
     await show_opponent_daily_stats(bot, callback.message.chat.id, callback.from_user.id, opponent_id, page)
 
 
@@ -273,7 +269,7 @@ async def stats_games_callback(callback: CallbackQuery, bot: Bot) -> None:
     if parsed_callback is None:
         return
     opponent_id, page = parsed_callback
-    db.clear_session(callback.from_user.id)
+    get_service().clear_session(callback.from_user.id)
     await show_opponent_games_stats(bot, callback.message.chat.id, callback.from_user.id, opponent_id, page)
 
 
@@ -284,13 +280,12 @@ async def edit_games_callback(callback: CallbackQuery, bot: Bot) -> None:
     opponent_id = parse_callback_id(callback.data, "edit_games:")
     if opponent_id is None:
         return
-    opponent = db.get_opponent(callback.from_user.id, opponent_id)
-    db.set_session(callback.from_user.id, SESSION_EDIT_GAMES, opponent_id)
+    view = get_service().start_edit_games_input(callback.from_user.id, opponent_id)
     await render(
         bot,
         callback.message.chat.id,
         callback.from_user.id,
-        texts.edit_games_prompt(opponent_title(opponent)),
+        texts.edit_games_prompt(view.opponent_name),
         back_to_opponent_keyboard(opponent_id),
     )
 
@@ -302,13 +297,12 @@ async def edit_points_callback(callback: CallbackQuery, bot: Bot) -> None:
     opponent_id = parse_callback_id(callback.data, "edit_points:")
     if opponent_id is None:
         return
-    opponent = db.get_opponent(callback.from_user.id, opponent_id)
-    db.set_session(callback.from_user.id, SESSION_EDIT_POINTS, opponent_id)
+    view = get_service().start_edit_points_input(callback.from_user.id, opponent_id)
     await render(
         bot,
         callback.message.chat.id,
         callback.from_user.id,
-        texts.edit_points_prompt(opponent_title(opponent)),
+        texts.edit_points_prompt(view.opponent_name),
         back_to_opponent_keyboard(opponent_id),
     )
 
@@ -320,12 +314,12 @@ async def delete_callback(callback: CallbackQuery, bot: Bot) -> None:
     opponent_id = parse_callback_id(callback.data, "delete:")
     if opponent_id is None:
         return
-    opponent = db.get_opponent(callback.from_user.id, opponent_id)
+    view = get_service().get_opponent_view(callback.from_user.id, opponent_id)
     await render(
         bot,
         callback.message.chat.id,
         callback.from_user.id,
-        texts.delete_opponent_confirm(opponent_title(opponent)),
+        texts.delete_opponent_confirm(view.opponent_name),
         delete_opponent_keyboard(opponent_id),
     )
 
@@ -337,12 +331,12 @@ async def reset_stats_callback(callback: CallbackQuery, bot: Bot) -> None:
     opponent_id = parse_callback_id(callback.data, "reset:")
     if opponent_id is None:
         return
-    opponent = db.get_opponent(callback.from_user.id, opponent_id)
+    view = get_service().get_opponent_view(callback.from_user.id, opponent_id)
     await render(
         bot,
         callback.message.chat.id,
         callback.from_user.id,
-        texts.reset_stats_confirm(opponent_title(opponent)),
+        texts.reset_stats_confirm(view.opponent_name),
         reset_stats_keyboard(opponent_id),
     )
 
@@ -354,15 +348,12 @@ async def reset_stats_confirm_callback(callback: CallbackQuery, bot: Bot) -> Non
     opponent_id = parse_callback_id(callback.data, "reset_confirm:")
     if opponent_id is None:
         return
-    opponent = db.get_opponent(callback.from_user.id, opponent_id)
-    opponent_name = opponent_title(opponent)
-    db.reset_opponent_stats(callback.from_user.id, opponent_id)
-    db.clear_session(callback.from_user.id)
+    result = get_service().reset_opponent_stats(callback.from_user.id, opponent_id)
     await render(
         bot,
         callback.message.chat.id,
         callback.from_user.id,
-        texts.reset_stats_done(opponent_name),
+        texts.reset_stats_done(result.opponent_name),
         opponent_keyboard(opponent_id),
     )
 
@@ -374,17 +365,13 @@ async def delete_confirm_callback(callback: CallbackQuery, bot: Bot) -> None:
     opponent_id = parse_callback_id(callback.data, "delete_confirm:")
     if opponent_id is None:
         return
-    opponent = db.get_opponent(callback.from_user.id, opponent_id)
-    opponent_name = opponent_title(opponent)
-    db.delete_opponent(callback.from_user.id, opponent_id)
-    db.clear_session(callback.from_user.id)
-    has_opponents = bool(db.list_opponents(callback.from_user.id))
+    result = get_service().delete_opponent(callback.from_user.id, opponent_id)
     await render(
         bot,
         callback.message.chat.id,
         callback.from_user.id,
-        texts.delete_opponent_done(opponent_name),
-        main_menu_keyboard(has_opponents),
+        texts.delete_opponent_done(result.opponent_name),
+        main_menu_keyboard(result.has_opponents),
     )
 
 
@@ -396,7 +383,7 @@ async def text_message(message: Message, bot: Bot) -> None:
     ensure_user(message.from_user)
     await delete_message(bot, message)
 
-    session = db.get_session(user_id)
+    session = get_service().get_session(user_id)
     if session is None:
         return
 
@@ -423,118 +410,97 @@ async def text_message(message: Message, bot: Bot) -> None:
         await handle_edit_points_input(message, bot, user_id, session.opponent_id)
         return
 
-    db.clear_session(user_id)
+    get_service().clear_session(user_id)
 
 
 async def handle_invite_code_input(message: Message, bot: Bot, user_id: int) -> None:
-    acceptance = db.accept_invite(message.text or "", user_id)
-    if acceptance is None:
+    result = get_service().accept_invite(message.text or "", user_id)
+    if result.status == INVITE_INVALID:
         await render(bot, message.chat.id, user_id, texts.INVITE_CODE_INVALID_TEXT, back_to_main_keyboard())
         return
 
-    db.clear_session(user_id)
-    if acceptance.is_self_invite:
+    get_service().clear_session(user_id)
+    if result.status == INVITE_SELF:
         text = texts.INVITE_SELF_TEXT
-    elif acceptance.is_new_opponent:
+    elif result.status == INVITE_ACCEPTED:
         text = texts.INVITE_ACCEPTED_TEXT
-        await notify_inviter_about_new_opponent(bot, acceptance.inviter_id, user_id)
+        if result.inviter_id is not None:
+            await notify_inviter_about_new_opponent(bot, result.inviter_id, user_id)
     else:
         text = texts.INVITE_ALREADY_CONNECTED_TEXT
 
-    has_opponents = bool(db.list_opponents(user_id))
-    await render(bot, message.chat.id, user_id, text, main_menu_keyboard(has_opponents))
+    await render(bot, message.chat.id, user_id, text, main_menu_keyboard(result.has_opponents))
 
 
 async def handle_rating_input(message: Message, bot: Bot, user_id: int) -> None:
-    rating_input = (message.text or "").strip()
-    user = db.get_user(user_id)
-    if not rating_input:
-        await render(bot, message.chat.id, user_id, texts.rating_prompt(), rating_keyboard(user.rating is not None))
+    result = await get_service().submit_rating_input(user_id, message.text or "")
+    if result.status == RATING_EMPTY:
+        await render(bot, message.chat.id, user_id, texts.rating_prompt(), rating_keyboard(result.has_rating))
         return
 
-    if is_allowed_rating_url(rating_input):
-        try:
-            rating = await asyncio.to_thread(fetch_fnt_rating, rating_input)
-        except Exception:
-            logging.exception("Failed to fetch FNT rating")
-            rating = None
-        if rating is None:
-            await render(bot, message.chat.id, user_id, texts.rating_input_error(), rating_keyboard(user.rating is not None))
-            return
-        db.set_user_rating(user_id, rating, True)
-    else:
-        rating = parse_manual_rating(rating_input)
-        if rating is None:
-            await render(bot, message.chat.id, user_id, texts.rating_input_error(), rating_keyboard(user.rating is not None))
-            return
-        db.set_user_rating(user_id, rating, False)
+    if result.status == RATING_INVALID:
+        await render(bot, message.chat.id, user_id, texts.rating_input_error(), rating_keyboard(result.has_rating))
+        return
 
-    db.clear_session(user_id)
     await show_profile(bot, message.chat.id, user_id)
 
 
 async def handle_score_input(message: Message, bot: Bot, user_id: int, opponent_id: int) -> None:
-    opponent = db.get_opponent(user_id, opponent_id)
-    try:
-        score = parse_score(message.text or "")
-    except ScoreError as error:
+    result = get_service().submit_score(user_id, opponent_id, message.text or "")
+    if result.error is not None:
         await render(
             bot,
             message.chat.id,
             user_id,
-            texts.score_input_error(opponent_title(opponent), error),
+            texts.score_input_error(result.opponent_name, result.error),
             opponent_keyboard(opponent_id),
         )
         return
 
-    game_id = db.add_game(user_id, opponent_id, score)
-    recent_games = db.get_recent_games(user_id, opponent_id)
-    user = db.get_user(user_id)
+    if result.score is None or result.game_id is None:
+        raise RuntimeError("Score service returned an incomplete successful result.")
+
     await render(
         bot,
         message.chat.id,
         user_id,
         texts.score_saved(
-            opponent_title(opponent),
-            score,
-            recent_games,
-            display_user_name(user.first_name, user.username),
+            result.opponent_name,
+            result.score,
+            result.recent_games,
+            result.user_name,
         ),
-        score_saved_keyboard(opponent_id, game_id),
+        score_saved_keyboard(opponent_id, result.game_id),
     )
 
 
 async def handle_edit_games_input(message: Message, bot: Bot, user_id: int, opponent_id: int) -> None:
     try:
-        wins, losses = parse_pair(message.text or "", "8-5")
+        get_service().set_games_total_from_input(user_id, opponent_id, message.text or "")
     except ScoreError as error:
         await render(bot, message.chat.id, user_id, texts.plain_error(error), back_to_opponent_keyboard(opponent_id))
         return
 
-    db.set_games_total(user_id, opponent_id, wins, losses)
-    db.clear_session(user_id)
     await show_opponent(bot, message.chat.id, user_id, opponent_id)
 
 
 async def handle_edit_points_input(message: Message, bot: Bot, user_id: int, opponent_id: int) -> None:
     try:
-        points_for, points_against = parse_pair(message.text or "", "132-118")
+        get_service().set_points_total_from_input(user_id, opponent_id, message.text or "")
     except ScoreError as error:
         await render(bot, message.chat.id, user_id, texts.plain_error(error), back_to_opponent_keyboard(opponent_id))
         return
 
-    db.set_points_total(user_id, opponent_id, points_for, points_against)
-    db.clear_session(user_id)
     await show_opponent(bot, message.chat.id, user_id, opponent_id)
 
 
 async def show_main_menu(bot: Bot, chat_id: int, user_id: int, force_new: bool = False) -> None:
-    opponents = db.list_opponents(user_id)
-    await render(bot, chat_id, user_id, texts.MAIN_MENU_TEXT, main_menu_keyboard(bool(opponents)), force_new=force_new)
+    view = get_service().get_main_menu(user_id)
+    await render(bot, chat_id, user_id, texts.MAIN_MENU_TEXT, main_menu_keyboard(view.has_opponents), force_new=force_new)
 
 
 async def show_opponents(bot: Bot, chat_id: int, user_id: int) -> None:
-    opponents = db.list_opponents(user_id)
+    opponents = get_service().list_opponents(user_id)
     if not opponents:
         await show_main_menu(bot, chat_id, user_id)
         return
@@ -542,115 +508,97 @@ async def show_opponents(bot: Bot, chat_id: int, user_id: int) -> None:
 
 
 async def show_opponent(bot: Bot, chat_id: int, user_id: int, opponent_id: int) -> None:
-    opponent = db.get_opponent(user_id, opponent_id)
-    db.set_session(user_id, SESSION_SCORE, opponent_id)
+    view = get_service().start_score_input(user_id, opponent_id)
     await render(
         bot,
         chat_id,
         user_id,
-        texts.score_prompt(opponent_title(opponent)),
+        texts.score_prompt(view.opponent_name),
         opponent_keyboard(opponent_id),
     )
 
 
 async def show_opponent_total_stats(bot: Bot, chat_id: int, user_id: int, opponent_id: int) -> None:
-    opponent = db.get_opponent(user_id, opponent_id)
-    stats = db.get_opponent_stats(user_id, opponent_id)
-    extended_stats = db.get_opponent_extended_stats(user_id, opponent_id)
-    user = db.get_user(user_id)
+    view = get_service().get_opponent_total_stats(user_id, opponent_id)
     await render(
         bot,
         chat_id,
         user_id,
         texts.opponent_stats(
-            opponent_title(opponent),
-            stats,
-            display_user_name(user.first_name, user.username),
-            extended_stats,
+            view.opponent_name,
+            view.stats,
+            view.user_name,
+            view.extended_stats,
         ),
         opponent_total_stats_keyboard(opponent_id),
     )
 
 
 async def show_opponent_daily_stats(bot: Bot, chat_id: int, user_id: int, opponent_id: int, page: int = 1) -> None:
-    opponent = db.get_opponent(user_id, opponent_id)
-    daily_stats = db.get_opponent_daily_stats(user_id, opponent_id)
-    user = db.get_user(user_id)
-    total_pages = max(1, (len(daily_stats) + DAILY_STATS_PAGE_SIZE - 1) // DAILY_STATS_PAGE_SIZE)
-    page = min(max(page, 1), total_pages)
-    page_start = (page - 1) * DAILY_STATS_PAGE_SIZE
-    page_daily_stats = daily_stats[page_start : page_start + DAILY_STATS_PAGE_SIZE]
+    view = get_service().get_opponent_daily_stats(user_id, opponent_id, page)
     await render(
         bot,
         chat_id,
         user_id,
         texts.opponent_daily_stats(
-            opponent_title(opponent),
-            page_daily_stats,
-            display_user_name(user.first_name, user.username),
+            view.opponent_name,
+            view.daily_stats,
+            view.user_name,
         ),
-        opponent_daily_stats_keyboard(opponent_id, page, total_pages),
+        opponent_daily_stats_keyboard(opponent_id, view.page, view.total_pages),
     )
 
 
 async def show_opponent_games_stats(bot: Bot, chat_id: int, user_id: int, opponent_id: int, page: int = 1) -> None:
-    opponent = db.get_opponent(user_id, opponent_id)
-    user = db.get_user(user_id)
-    games_count = db.count_opponent_games(user_id, opponent_id)
-    total_pages = max(1, (games_count + DAILY_STATS_PAGE_SIZE - 1) // DAILY_STATS_PAGE_SIZE)
-    page = min(max(page, 1), total_pages)
-    offset = (page - 1) * DAILY_STATS_PAGE_SIZE
-    games = db.get_recent_games(user_id, opponent_id, limit=DAILY_STATS_PAGE_SIZE, offset=offset)
+    view = get_service().get_opponent_games_stats(user_id, opponent_id, page)
     await render(
         bot,
         chat_id,
         user_id,
         texts.opponent_games_stats(
-            opponent_title(opponent),
-            games,
-            display_user_name(user.first_name, user.username),
+            view.opponent_name,
+            view.games,
+            view.user_name,
         ),
-        opponent_games_stats_keyboard(opponent_id, page, total_pages),
+        opponent_games_stats_keyboard(opponent_id, view.page, view.total_pages),
     )
 
 
 async def show_profile(bot: Bot, chat_id: int, user_id: int) -> None:
-    user = db.get_user(user_id)
-    stats = db.get_total_stats(user_id)
-    extended_stats = db.get_total_extended_stats(user_id)
+    view = get_service().get_profile(user_id)
     await render(
         bot,
         chat_id,
         user_id,
-        texts.profile(user, stats, extended_stats),
+        texts.profile(view.user, view.stats, view.extended_stats),
         profile_keyboard(),
     )
 
 
 async def accept_invite_flow(message: Message, token: str, bot: Bot, force_new: bool = False) -> None:
     user_id = message.from_user.id
-    acceptance = db.accept_invite(token, user_id)
-    if acceptance is None:
+    result = get_service().accept_invite(token, user_id)
+    if result.status == INVITE_INVALID:
         text = texts.INVITE_INVALID_TEXT
-    elif acceptance.is_self_invite:
+    elif result.status == INVITE_SELF:
         text = texts.INVITE_SELF_TEXT
-    elif acceptance.is_new_opponent:
+    elif result.status == INVITE_ACCEPTED:
         text = texts.INVITE_ACCEPTED_TEXT
-        await notify_inviter_about_new_opponent(bot, acceptance.inviter_id, user_id)
+        if result.inviter_id is not None:
+            await notify_inviter_about_new_opponent(bot, result.inviter_id, user_id)
     else:
         text = texts.INVITE_ALREADY_CONNECTED_TEXT
-    has_opponents = bool(db.list_opponents(user_id))
-    await render(bot, message.chat.id, user_id, text, main_menu_keyboard(has_opponents), force_new=force_new)
+    await render(bot, message.chat.id, user_id, text, main_menu_keyboard(result.has_opponents), force_new=force_new)
 
 
 async def notify_inviter_about_new_opponent(bot: Bot, inviter_id: int, invited_user_id: int) -> None:
-    invited = db.get_user(invited_user_id)
+    invited_name = get_service().get_invited_user_name(invited_user_id)
     try:
         await render(
             bot,
             inviter_id,
             inviter_id,
-            texts.invite_new_opponent_notification(display_user_name(invited.first_name, invited.username)),
+            texts.invite_new_opponent_notification(invited_name),
             main_menu_keyboard(True),
         )
     except TelegramAPIError:
@@ -670,12 +618,16 @@ async def render(
     await renderer.render(bot, chat_id, user_id, text, reply_markup, force_new=force_new)
 
 
+def get_service() -> TennisService:
+    if service is None:
+        raise RuntimeError("Service is not initialized.")
+    return service
+
+
 def ensure_user(user: Optional[TelegramUser]) -> None:
     if user is None:
         return
-    db.ensure_user(user.id, user.first_name or DEFAULT_USER_NAME, user.username)
-    if seed_test_opponent:
-        db.ensure_test_opponent(user.id)
+    get_service().ensure_user(user.id, user.first_name, user.username)
 
 
 def parse_start_payload(text: str) -> str:
@@ -686,11 +638,11 @@ def parse_start_payload(text: str) -> str:
 
 
 async def main() -> None:
-    global db, renderer, seed_test_opponent
+    global db, renderer, service
     logging.basicConfig(level=logging.INFO)
     config = load_config()
-    seed_test_opponent = config.seed_test_opponent
     db = Database(config.database_url)
+    service = TennisService(db, seed_test_opponent=config.seed_test_opponent)
     renderer = RichRenderer(db)
 
     bot = Bot(token=config.bot_token)
