@@ -142,7 +142,7 @@ def back_to_opponent_keyboard(opponent_id: int) -> InlineKeyboardMarkup:
 
 def score_saved_keyboard(opponent_id: int, game_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text=texts.BUTTON_UNDO_SCORE, callback_data=f"score_undo:{opponent_id}:{game_id}")
+    builder.button(text=texts.BUTTON_UNDO_SCORE, callback_data=f"score_undo:{opponent_id}:{game_id}", style="danger")
     builder.button(text=texts.BUTTON_OPPONENT_DAILY_STATS, callback_data=f"stats_total:{opponent_id}")
     builder.button(text=texts.BUTTON_BACK, callback_data=f"opponent:{opponent_id}")
     builder.adjust(1)

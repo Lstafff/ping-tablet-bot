@@ -340,7 +340,8 @@ def edit_points_prompt(opponent_name: str) -> str:
 def score_input_error(opponent_name: str, error: Exception) -> str:
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
-        f"\n{html.escape(str(error))}\n\n"
+        f"\n{html.escape(str(error))}\n"
+        "<hr/>"
         f"{next_score_hint_without_separator()}"
     )
 
