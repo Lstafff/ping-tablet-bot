@@ -8,9 +8,9 @@ from app import texts
 def main_menu_keyboard(has_opponents: bool) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if has_opponents:
-        builder.button(text=texts.BUTTON_OPPONENTS, callback_data="opponents")
-    builder.button(text=texts.BUTTON_INVITE_OPPONENT, callback_data="invite")
-    builder.button(text=texts.BUTTON_TOTAL_STATS, callback_data="profile")
+        builder.button(text=texts.BUTTON_OPPONENTS, callback_data="opponents", style="primary")
+    builder.button(text=texts.BUTTON_INVITE_OPPONENT, callback_data="invite", style="success")
+    builder.button(text=texts.BUTTON_TOTAL_STATS, callback_data="profile", style="danger")
     builder.adjust(1)
     return builder.as_markup()
 
