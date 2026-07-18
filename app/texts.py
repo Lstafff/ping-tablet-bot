@@ -181,7 +181,7 @@ def profile(user: UserLike, stats: StatsLike, extended_stats: Optional[ExtendedS
     level = format_player_level(stats.games, user.rating_is_fnt)
     return (
         f"<h2>🥷 Профиль {html.escape(user_name)}</h2>"
-        f"\n<b>･ Играет с </b>{format_day(user.created_at[:10])}\n"
+        f"\n<b>･ В игре с </b>{format_day(user.created_at[:10])}\n"
         f"<b>･ Уровень: </b>{level}\n"
         f"<b>･ Рейтинг: </b>{format_rating(user.rating, user.rating_is_fnt)}\n"
         "<h2>📊 Общая статистика</h2>"
