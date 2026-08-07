@@ -194,10 +194,10 @@ def profile(user: UserLike, stats: StatsLike, extended_stats: Optional[ExtendedS
         f"{format_elo_calibration(elo_games)}"
         f"<tr><td align=\"left\">Проф-рейтинг</td><td align=\"left\">{format_rating(user.rating, user.rating_is_fnt)}</td></tr>"
         "</table>"
-        "\n\n"
+        "\n"
         "<h2>📊 Общая статистика</h2>"
         "<hr/>"
-        f"{format_stats(stats, user_name=user_name, opponent_name='Оппоненты', extended_stats=extended_stats)}"
+        f"{format_stats(stats, user_name=user_name, opponent_name='Оппы', extended_stats=extended_stats)}"
     )
 
 
@@ -381,7 +381,7 @@ def score_saved(
     elo_summary = ""
     if elo_rating is not None and elo_change is not None:
         elo_summary = (
-            f"\n\n📊 Ping-рейтинг: <code>{format_signed_difference(elo_change)}</code> "
+            f"\n<b>Ping-рейтинг:</b> <code>{format_signed_difference(elo_change)}</code> "
             f"({elo_rating})"
         )
 

@@ -113,6 +113,7 @@ class RichMessagesTest(unittest.TestCase):
         self.assertIn("<tr><td align=\"left\">Ping-рейтинг</td><td align=\"left\">500</td></tr>", rich_html)
         self.assertIn("<tr><td align=\"left\">Калибровка</td><td align=\"left\">0 / 30 игр</td></tr>", rich_html)
         self.assertIn("<tr><td align=\"left\">Проф-рейтинг</td><td align=\"left\">пока нет</td></tr>", rich_html)
+        self.assertIn("<th align=\"left\">🏓 Оппы</th>", rich_html)
         self.assertIn("<h2>📊 Общая статистика</h2><hr/><table bordered striped>", rich_html)
         self.assertIn("<table bordered striped>", rich_html)
         self.assertIn("<th align=\"left\">🥷 @lstaff</th>", rich_html)
@@ -305,7 +306,7 @@ class RichMessagesTest(unittest.TestCase):
         rich_html = score_saved("@test", score, [], "@me", 520, 20, 480)
 
         self.assertIn("<h2>🏓 Матч с @test | <code>480</code></h2>", rich_html)
-        self.assertIn("📊 Ping-рейтинг: <code>+20</code> (520)", rich_html)
+        self.assertIn("<b>Ping-рейтинг:</b> <code>+20</code> (520)", rich_html)
 
     def test_score_prompt_includes_opponent_elo_before_score_input(self) -> None:
         rich_html = score_prompt("@test", 480)
