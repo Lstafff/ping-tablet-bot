@@ -186,13 +186,15 @@ def profile(user: UserLike, stats: StatsLike, extended_stats: Optional[ExtendedS
     level = format_player_level(elo_rating, user.rating_is_fnt)
     return (
         f"<h2>🥷 Профиль {html.escape(user_name)}</h2>"
-        "\n<table bordered striped>"
+        "<hr/>"
+        "<table bordered striped>"
         f"<tr><td align=\"left\">В игре с</td><td align=\"left\">{format_day(user.created_at[:10])}</td></tr>"
         f"<tr><td align=\"left\">Уровень</td><td align=\"left\">{level}</td></tr>"
         f"<tr><td align=\"left\">Ping-рейтинг</td><td align=\"left\">{elo_rating}</td></tr>"
         f"{format_elo_calibration(elo_games)}"
         f"<tr><td align=\"left\">Проф-рейтинг</td><td align=\"left\">{format_rating(user.rating, user.rating_is_fnt)}</td></tr>"
         "</table>"
+        "\n\n"
         "<h2>📊 Общая статистика</h2>"
         "<hr/>"
         f"{format_stats(stats, user_name=user_name, opponent_name='Оппоненты', extended_stats=extended_stats)}"
@@ -274,9 +276,9 @@ def invite_new_opponent_notification(opponent_name: str) -> str:
 
 
 # Экран ввода результата партии с конкретным соперником.
-def score_prompt(opponent_name: str) -> str:
+def score_prompt(opponent_name: str, opponent_elo_rating: Optional[int] = None) -> str:
     return (
-        f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
+        f"{match_title(opponent_name, opponent_elo_rating)}"
         "<hr/>"
         "<h4>Правила</h4>"
         "Партия заканчивается после 11 очков у победителя. При счёте 10-10 начинаются овертаймы (по одной подаче) до разницы в 2 очка."
@@ -346,9 +348,13 @@ def edit_points_prompt(opponent_name: str) -> str:
 
 
 # Ошибка ввода результата партии, остаётся на экране матча.
-def score_input_error(opponent_name: str, error: Exception) -> str:
+def score_input_error(
+    opponent_name: str,
+    error: Exception,
+    opponent_elo_rating: Optional[int] = None,
+) -> str:
     return (
-        f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
+        f"{match_title(opponent_name, opponent_elo_rating)}"
         f"\n{html.escape(str(error))}\n"
         "<hr/>"
         f"{next_score_hint_without_separator()}"
@@ -368,20 +374,20 @@ def score_saved(
     overtime = ""
     if score.overtime_own or score.overtime_opponent:
         overtime = (
-            f"\n\n<blockquote>(<code>{score.regular_own}-{score.regular_opponent}</code> в основное время, "
+            f"<blockquote>(<code>{score.regular_own}-{score.regular_opponent}</code> в основное время, "
             f"<code>{score.overtime_own}-{score.overtime_opponent}</code> в овертайме)</blockquote>"
         )
 
     elo_summary = ""
     if elo_rating is not None and elo_change is not None:
         elo_summary = (
-            f"\n🏓 Твой Ping-рейтинг: <code>{elo_rating}</code> "
-            f"({format_signed_difference(elo_change)})"
+            f"\n\n📊 Ping-рейтинг: <code>{format_signed_difference(elo_change)}</code> "
+            f"({elo_rating})"
         )
 
     return (
         f"{match_title(opponent_name, opponent_elo_rating)}"
-        f"\n<b>✅ Добавлен счёт:</b> <code>{score.own_score}-{score.opponent_score}</code>{elo_summary}{overtime}\n"
+        f"\n<b>✅ Добавлен счёт:</b> <code>{score.own_score}-{score.opponent_score}</code>{overtime}{elo_summary}\n"
         "<h2>📊 Последние 5 игр</h2>"
         "<hr/>"
         f"{format_recent_games(recent_games, user_name=user_name, opponent_name=opponent_name)}"

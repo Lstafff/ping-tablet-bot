@@ -452,7 +452,7 @@ async def handle_score_input(message: Message, bot: Bot, user_id: int, opponent_
             bot,
             message.chat.id,
             user_id,
-            texts.score_input_error(result.opponent_name, result.error),
+            texts.score_input_error(result.opponent_name, result.error, result.opponent_elo_rating),
             opponent_keyboard(opponent_id),
         )
         return
@@ -516,7 +516,7 @@ async def show_opponent(bot: Bot, chat_id: int, user_id: int, opponent_id: int) 
         bot,
         chat_id,
         user_id,
-        texts.score_prompt(view.opponent_name),
+        texts.score_prompt(view.opponent_name, view.opponent_elo_rating),
         opponent_keyboard(opponent_id),
     )
 

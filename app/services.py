@@ -73,6 +73,7 @@ class RatingInputResult:
 class OpponentView:
     opponent: Opponent
     opponent_name: str
+    opponent_elo_rating: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -237,7 +238,14 @@ class TennisService:
 
     def get_opponent_view(self, user_id: int, opponent_id: int) -> OpponentView:
         opponent = self.storage.get_opponent(user_id, opponent_id)
-        return OpponentView(opponent=opponent, opponent_name=opponent_title(opponent))
+        opponent_elo_rating = None
+        if opponent.opponent_user_id is not None:
+            opponent_elo_rating = self.storage.get_user(opponent.opponent_user_id).elo_rating
+        return OpponentView(
+            opponent=opponent,
+            opponent_name=opponent_title(opponent),
+            opponent_elo_rating=opponent_elo_rating,
+        )
 
     def start_score_input(self, user_id: int, opponent_id: int) -> OpponentView:
         view = self.get_opponent_view(user_id, opponent_id)
@@ -247,6 +255,9 @@ class TennisService:
     def submit_score(self, user_id: int, opponent_id: int, raw_score: str) -> ScoreSubmission:
         opponent = self.storage.get_opponent(user_id, opponent_id)
         opponent_name = opponent_title(opponent)
+        opponent_elo_rating = None
+        if opponent.opponent_user_id is not None:
+            opponent_elo_rating = self.storage.get_user(opponent.opponent_user_id).elo_rating
         try:
             score = parse_score(raw_score)
         except ScoreError as error:
@@ -258,13 +269,13 @@ class TennisService:
                 game_id=None,
                 recent_games=[],
                 error=error,
+                opponent_elo_rating=opponent_elo_rating,
             )
 
         game_id = self.storage.add_game(user_id, opponent_id, score)
         recent_games = self.storage.get_recent_games(user_id, opponent_id)
         user = self.storage.get_user(user_id)
         elo_event = self.storage.get_elo_event(game_id, user_id) if opponent.opponent_user_id is not None else None
-        opponent_elo_rating = None
         if opponent.opponent_user_id is not None:
             opponent_elo_rating = self.storage.get_user(opponent.opponent_user_id).elo_rating
         return ScoreSubmission(
