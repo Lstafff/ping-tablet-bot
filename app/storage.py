@@ -490,7 +490,8 @@ class Database:
                 o.name,
                 o.opponent_user_id,
                 u.first_name,
-                u.username
+                u.username,
+                u.elo_rating
             FROM opponents o
             LEFT JOIN users u ON u.telegram_id = o.opponent_user_id
             WHERE o.owner_id = ?
@@ -506,6 +507,7 @@ class Database:
                 opponent_user_id=row["opponent_user_id"],
                 first_name=row["first_name"],
                 username=row["username"],
+                elo_rating=row["elo_rating"],
             )
             for row in rows
         ]
@@ -519,7 +521,8 @@ class Database:
                 o.name,
                 o.opponent_user_id,
                 u.first_name,
-                u.username
+                u.username,
+                u.elo_rating
             FROM opponents o
             LEFT JOIN users u ON u.telegram_id = o.opponent_user_id
             WHERE o.owner_id = ? AND o.id = ?
@@ -535,6 +538,7 @@ class Database:
             opponent_user_id=row["opponent_user_id"],
             first_name=row["first_name"],
             username=row["username"],
+            elo_rating=row["elo_rating"],
         )
 
     def delete_opponent(self, owner_id: int, opponent_id: int) -> None:

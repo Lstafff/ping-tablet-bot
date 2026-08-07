@@ -151,6 +151,7 @@ class OpponentLike(Protocol):
     opponent_user_id: Optional[int]
     first_name: Optional[str]
     username: Optional[str]
+    elo_rating: Optional[int]
 
 
 # Строка статистики по одному дню.
@@ -418,8 +419,16 @@ def match_title(
 ) -> str:
     rating = ""
     if opponent_elo_rating is not None:
-        rating = f" | <code>{opponent_elo_rating}</code>"
+        rating = f" | 🏆 <code>{opponent_elo_rating}</code>"
     return f"<h2>🏓 Матч с {html.escape(opponent_name)}{rating}</h2>"
+
+
+# Название кнопки выбора соперника с его Ping-рейтингом.
+def opponent_button_title(opponent: OpponentLike) -> str:
+    title = opponent_title(opponent)
+    if opponent.elo_rating is None:
+        return title
+    return f"{title} | 🏆 {opponent.elo_rating}"
 
 
 # Подсказка под таблицей последних игр после успешного ввода или отмены.

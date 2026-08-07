@@ -288,7 +288,7 @@ class RichMessagesTest(unittest.TestCase):
     def test_score_error_shows_next_score_hint_without_recent_games(self) -> None:
         rich_html = score_input_error("@test", ValueError("Ошибка"), 480)
 
-        self.assertIn("<h2>🏓 Матч с @test | <code>480</code></h2>", rich_html)
+        self.assertIn("<h2>🏓 Матч с @test | 🏆 <code>480</code></h2>", rich_html)
         self.assertNotIn("<h2>📊 Последние 5 игр</h2>", rich_html)
         self.assertNotIn("<table bordered striped>", rich_html)
         self.assertIn("<hr/><blockquote>⬇️ Напиши следующий счёт в чат!</blockquote>", rich_html)
@@ -305,13 +305,13 @@ class RichMessagesTest(unittest.TestCase):
         )
         rich_html = score_saved("@test", score, [], "@me", 520, 20, 480)
 
-        self.assertIn("<h2>🏓 Матч с @test | <code>480</code></h2>", rich_html)
+        self.assertIn("<h2>🏓 Матч с @test | 🏆 <code>480</code></h2>", rich_html)
         self.assertIn("<b>Ping-рейтинг:</b> <code>+20</code> (520)", rich_html)
 
     def test_score_prompt_includes_opponent_elo_before_score_input(self) -> None:
         rich_html = score_prompt("@test", 480)
 
-        self.assertIn("<h2>🏓 Матч с @test | <code>480</code></h2>", rich_html)
+        self.assertIn("<h2>🏓 Матч с @test | 🏆 <code>480</code></h2>", rich_html)
 
     def test_format_day_uses_russian_month(self) -> None:
         self.assertEqual(format_day("2026-06-12"), "12 июня '26")

@@ -31,6 +31,7 @@ class Opponent:
     opponent_user_id: Optional[int]
     first_name: Optional[str] = None
     username: Optional[str] = None
+    elo_rating: Optional[int] = None
 
 
 @dataclass(frozen=True)
