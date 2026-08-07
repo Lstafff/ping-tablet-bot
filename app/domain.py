@@ -19,6 +19,8 @@ class User:
     created_at: str
     rating: Optional[str]
     rating_is_fnt: bool
+    elo_rating: int = 500
+    elo_games: int = 0
 
 
 @dataclass(frozen=True)
@@ -109,6 +111,18 @@ def opponent_title(opponent: Opponent) -> str:
         return username_label(TEST_OPPONENT_USERNAME)
 
     return opponent.first_name or opponent.name
+
+
+def player_level(elo_rating: int, rating_is_fnt: bool) -> str:
+    if rating_is_fnt or elo_rating >= 1500:
+        return "💀 профик"
+    if elo_rating >= 1100:
+        return "🦾 робот"
+    if elo_rating >= 850:
+        return "🤘 бывалый"
+    if elo_rating >= 650:
+        return "🏓 любитель"
+    return "👶 новичок"
 
 
 def build_extended_stats(game_rows: list[dict[str, Any]]) -> ExtendedStats:

@@ -20,6 +20,7 @@ from app.domain import (
     build_extended_stats,
     display_user_name,
 )
+from app.elo import EloEvent, EloGame, INITIAL_ELO_RATING, rebuild_elo_ratings
 from app.scoring import ParsedScore
 from app.states import KNOWN_SESSION_MODES
 
@@ -29,6 +30,9 @@ INVITE_CODE_ALPHABET = string.ascii_uppercase + string.digits
 INVITE_CODE_LENGTH = 8
 ALLOWED_SCHEMA_NAMES = {
     "aggregate_adjustments",
+    "elo_events",
+    "elo_games",
+    "elo_rating",
     "games",
     "games_updated_at",
     "invite_code",
@@ -102,7 +106,9 @@ class Database:
                 updated_at TEXT NOT NULL,
                 invite_code TEXT,
                 rating TEXT,
-                rating_is_fnt INTEGER NOT NULL DEFAULT 0
+                rating_is_fnt INTEGER NOT NULL DEFAULT 0,
+                elo_rating INTEGER NOT NULL DEFAULT 500,
+                elo_games INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS opponents (
@@ -150,6 +156,20 @@ class Database:
                 FOREIGN KEY(opponent_id) REFERENCES opponents(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS elo_events (
+                game_id BIGINT NOT NULL,
+                player_id BIGINT NOT NULL,
+                opponent_id BIGINT NOT NULL,
+                rating_before INTEGER NOT NULL,
+                rating_change INTEGER NOT NULL,
+                rating_after INTEGER NOT NULL,
+                played_at TEXT NOT NULL,
+                PRIMARY KEY(game_id, player_id),
+                FOREIGN KEY(game_id) REFERENCES games(id) ON DELETE CASCADE,
+                FOREIGN KEY(player_id) REFERENCES users(telegram_id) ON DELETE CASCADE,
+                FOREIGN KEY(opponent_id) REFERENCES users(telegram_id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS sessions (
                 owner_id BIGINT PRIMARY KEY,
                 mode TEXT NOT NULL,
@@ -173,6 +193,8 @@ class Database:
         self._ensure_column("users", "invite_code", "TEXT")
         self._ensure_column("users", "rating", "TEXT")
         self._ensure_column("users", "rating_is_fnt", "INTEGER NOT NULL DEFAULT 0")
+        self._ensure_column("users", "elo_rating", "INTEGER NOT NULL DEFAULT 500")
+        self._ensure_column("users", "elo_games", "INTEGER NOT NULL DEFAULT 0")
         self._ensure_column("aggregate_adjustments", "games_updated_at", "TEXT")
         self._ensure_column("aggregate_adjustments", "points_updated_at", "TEXT")
         self._backfill_adjustment_dates()
@@ -185,6 +207,7 @@ class Database:
             """
         )
         self.connection.commit()
+        self._rebuild_elo_history_if_needed()
 
     def close(self) -> None:
         self.connection.close()
@@ -236,6 +259,75 @@ class Database:
             """
         )
 
+    def _rebuild_elo_history_if_needed(self) -> None:
+        linked_games = self.connection.execute(
+            "SELECT COUNT(*) AS games_count FROM games WHERE player_b_id IS NOT NULL"
+        ).fetchone()
+        rated_games = self.connection.execute(
+            "SELECT COUNT(DISTINCT game_id) AS games_count FROM elo_events"
+        ).fetchone()
+        if int(linked_games["games_count"]) != int(rated_games["games_count"]):
+            self.recalculate_elo_ratings()
+
+    def recalculate_elo_ratings(self) -> None:
+        with self.connection:
+            self._recalculate_elo_ratings()
+
+    def _recalculate_elo_ratings(self) -> None:
+        rows = self.connection.execute(
+            """
+            SELECT id, player_a_id, player_b_id, player_a_score, player_b_score, played_at
+            FROM games
+            WHERE player_b_id IS NOT NULL
+            ORDER BY played_at ASC, id ASC
+            """
+        ).fetchall()
+        games = [
+            EloGame(
+                game_id=int(row["id"]),
+                player_a_id=int(row["player_a_id"]),
+                player_b_id=int(row["player_b_id"]),
+                player_a_score=int(row["player_a_score"]),
+                player_b_score=int(row["player_b_score"]),
+                played_at=str(row["played_at"]),
+            )
+            for row in rows
+        ]
+        ratings, games_played, events = rebuild_elo_ratings(games)
+
+        self.connection.execute("DELETE FROM elo_events")
+        self.connection.execute(
+            "UPDATE users SET elo_rating = ?, elo_games = 0",
+            (INITIAL_ELO_RATING,),
+        )
+        for event in events:
+            self._insert_elo_event(event)
+        for player_id, rating in ratings.items():
+            self.connection.execute(
+                "UPDATE users SET elo_rating = ?, elo_games = ? WHERE telegram_id = ?",
+                (rating, games_played[player_id], player_id),
+            )
+
+    def _insert_elo_event(self, event: EloEvent) -> None:
+        self.connection.execute(
+            """
+            INSERT INTO elo_events (
+                game_id, player_id, opponent_id, rating_before,
+                rating_change, rating_after, played_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.game_id,
+                event.player_id,
+                event.opponent_id,
+                event.rating_before,
+                event.rating_change,
+                event.rating_after,
+                event.played_at,
+            ),
+        )
+
     def _ensure_column(self, table: str, column: str, definition: str) -> None:
         table = require_schema_name(table)
         column = require_schema_name(column)
@@ -272,7 +364,8 @@ class Database:
     def get_user(self, telegram_id: int) -> User:
         row = self.connection.execute(
             """
-            SELECT telegram_id, first_name, username, last_message_id, created_at, rating, rating_is_fnt
+            SELECT telegram_id, first_name, username, last_message_id, created_at,
+                   rating, rating_is_fnt, elo_rating, elo_games
             FROM users
             WHERE telegram_id = ?
             """,
@@ -288,6 +381,30 @@ class Database:
             created_at=row["created_at"],
             rating=row["rating"],
             rating_is_fnt=bool(row["rating_is_fnt"]),
+            elo_rating=int(row["elo_rating"]),
+            elo_games=int(row["elo_games"]),
+        )
+
+    def get_elo_event(self, game_id: int, player_id: int) -> Optional[EloEvent]:
+        row = self.connection.execute(
+            """
+            SELECT game_id, player_id, opponent_id, rating_before,
+                   rating_change, rating_after, played_at
+            FROM elo_events
+            WHERE game_id = ? AND player_id = ?
+            """,
+            (game_id, player_id),
+        ).fetchone()
+        if row is None:
+            return None
+        return EloEvent(
+            game_id=int(row["game_id"]),
+            player_id=int(row["player_id"]),
+            opponent_id=int(row["opponent_id"]),
+            rating_before=int(row["rating_before"]),
+            rating_change=int(row["rating_change"]),
+            rating_after=int(row["rating_after"]),
+            played_at=str(row["played_at"]),
         )
 
     def set_last_message_id(self, telegram_id: int, message_id: int) -> None:
@@ -425,6 +542,8 @@ class Database:
         linked_opponent = self._get_linked_opponent(owner_id, opponent_id)
         with self.connection:
             self._reset_stats_for_opponent(owner_id, opponent_id, opponent, linked_opponent)
+            if opponent.opponent_user_id is not None:
+                self._recalculate_elo_ratings()
 
             self.connection.execute(
                 """
@@ -439,6 +558,8 @@ class Database:
         linked_opponent = self._get_linked_opponent(owner_id, opponent_id)
         with self.connection:
             self._reset_stats_for_opponent(owner_id, opponent_id, opponent, linked_opponent)
+            if opponent.opponent_user_id is not None:
+                self._recalculate_elo_ratings()
 
     def get_or_create_invite_code(self, inviter_id: int) -> str:
         row = self.connection.execute(
@@ -547,6 +668,8 @@ class Database:
             ),
         )
         row = cursor.fetchone()
+        if player_b_id is not None:
+            self._recalculate_elo_ratings()
         self.connection.commit()
         return int(row["id"])
 
@@ -583,8 +706,11 @@ class Database:
                 ),
             )
 
+        deleted = cursor.rowcount > 0
+        if deleted and opponent.opponent_user_id is not None:
+            self._recalculate_elo_ratings()
         self.connection.commit()
-        return cursor.rowcount > 0
+        return deleted
 
     def get_opponent_stats(self, owner_id: int, opponent_id: int, adjusted: bool = True) -> Stats:
         opponent = self.get_opponent(owner_id, opponent_id)

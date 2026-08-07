@@ -469,6 +469,8 @@ async def handle_score_input(message: Message, bot: Bot, user_id: int, opponent_
             result.score,
             result.recent_games,
             result.user_name,
+            result.elo_rating,
+            result.elo_change,
         ),
         score_saved_keyboard(opponent_id, result.game_id),
     )

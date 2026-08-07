@@ -12,6 +12,7 @@ from app.domain import (
     TEST_OPPONENT_USERNAME,
     display_user_name,
     opponent_title,
+    player_level,
     username_label,
 )
 from app.rating import is_allowed_rating_url
@@ -173,17 +174,23 @@ class UserLike(Protocol):
     created_at: str
     rating: Optional[str]
     rating_is_fnt: bool
+    elo_rating: int
+    elo_games: int
 
 
 # Экран профиля с общей статистикой.
 def profile(user: UserLike, stats: StatsLike, extended_stats: Optional[ExtendedStatsLike] = None) -> str:
     user_name = display_user_name(user.first_name, user.username)
-    level = format_player_level(stats.games, user.rating_is_fnt)
+    elo_rating = getattr(user, "elo_rating", 500)
+    elo_games = getattr(user, "elo_games", 0)
+    level = format_player_level(elo_rating, user.rating_is_fnt)
     return (
         f"<h2>🥷 Профиль {html.escape(user_name)}</h2>"
         f"\n<b>･ В игре с </b>{format_day(user.created_at[:10])}\n"
         f"<b>･ Уровень: </b>{level}\n"
         f"<b>･ Рейтинг: </b>{format_rating(user.rating, user.rating_is_fnt)}\n"
+        f"<b>･ Ping-рейтинг: </b>{elo_rating}\n"
+        f"{format_elo_calibration(elo_games)}"
         "<h2>📊 Общая статистика</h2>"
         "<hr/>"
         f"{format_stats(stats, user_name=user_name, opponent_name='Оппоненты', extended_stats=extended_stats)}"
@@ -228,15 +235,15 @@ def levels_info() -> str:
         "<h2>🎯 Уровни игроков</h2>"
         "<hr/>"
         "<table bordered striped>"
-        "<tr><th align=\"center\">Уровень</th><th align=\"center\">Всего матчей</th></tr>"
-        "<tr><td align=\"center\">новичок 👶</td><td align=\"center\">меньше 50</td></tr>"
-        "<tr><td align=\"center\">любитель 🏓</td><td align=\"center\">50-149</td></tr>"
-        "<tr><td align=\"center\">бывалый 🤘😎</td><td align=\"center\">150-299</td></tr>"
-        "<tr><td align=\"center\">робот 🦾</td><td align=\"center\">300-499</td></tr>"
-        "<tr><td align=\"center\">профик 💀</td><td align=\"center\">500+</td></tr>"
+        "<tr><th align=\"center\">Уровень</th><th align=\"center\">Ping-рейтинг</th></tr>"
+        "<tr><td align=\"center\">новичок 👶</td><td align=\"center\">до 649</td></tr>"
+        "<tr><td align=\"center\">любитель 🏓</td><td align=\"center\">650-849</td></tr>"
+        "<tr><td align=\"center\">бывалый 🤘😎</td><td align=\"center\">850-1099</td></tr>"
+        "<tr><td align=\"center\">робот 🦾</td><td align=\"center\">1100-1499</td></tr>"
+        "<tr><td align=\"center\">профик 💀</td><td align=\"center\">1500+</td></tr>"
         "</table>"
         "<hr/>"
-        "<blockquote>❗️ Если у тебя рейтинг ФНТР, ты профик независимо от количества сыгранных партий</blockquote>"
+        "<blockquote>❗️ Если у тебя рейтинг ФНТР, ты профик независимо от Ping-рейтинга</blockquote>"
     )
 
 
@@ -352,6 +359,8 @@ def score_saved(
     score: ScoreLike,
     recent_games: list[RecentGameLike],
     user_name: str = DEFAULT_USER_NAME,
+    elo_rating: Optional[int] = None,
+    elo_change: Optional[int] = None,
 ) -> str:
     overtime = ""
     if score.overtime_own or score.overtime_opponent:
@@ -360,9 +369,14 @@ def score_saved(
             f"<code>{score.overtime_own}-{score.overtime_opponent}</code> в овертайме)"
         )
 
+    elo_summary = ""
+    if elo_rating is not None and elo_change is not None:
+        elo_summary = f"🏓 Ping-рейтинг: <code>{elo_rating}</code> ({format_signed_difference(elo_change)})\n"
+
     return (
         f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
         f"\n✅ Добавлен счёт: <code>{score.own_score}-{score.opponent_score}</code>{overtime}\n"
+        f"{elo_summary}"
         "<h2>📊 Последние 5 игр</h2>"
         "<hr/>"
         f"{format_recent_games(recent_games, user_name=user_name, opponent_name=opponent_name)}"
@@ -627,17 +641,9 @@ def format_signed_difference(value: int) -> str:
     return str(value)
 
 
-# Уровень игрока в профиле по количеству игр и рейтингу ФНТР.
-def format_player_level(games: int, rating_is_fnt: bool) -> str:
-    if rating_is_fnt or games >= 500:
-        return "💀 профик"
-    if games >= 300:
-        return "🦾 робот"
-    if games >= 150:
-        return "🤘 бывалый"
-    if games >= 50:
-        return "🏓 любитель"
-    return "👶 новичок"
+# Уровень игрока в профиле по Ping-рейтингу и подтверждённому ФНТР.
+def format_player_level(elo_rating: int, rating_is_fnt: bool) -> str:
+    return player_level(elo_rating, rating_is_fnt)
 
 
 # Рейтинг в профиле, включая отметку подтверждения ФНТР.
@@ -647,6 +653,13 @@ def format_rating(rating: Optional[str], rating_is_fnt: bool) -> str:
     if rating_is_fnt:
         return f"{html.escape(rating)} (✅ ФНТР)"
     return html.escape(rating)
+
+
+# Статус калибровки Ping-рейтинга для новых игроков.
+def format_elo_calibration(elo_games: int) -> str:
+    if elo_games >= 30:
+        return ""
+    return f"<b>･ Калибровка: </b>{elo_games} / 30 игр\n"
 
 
 # Проверка, что пользователь прислал ссылку на поддерживаемый рейтинг.

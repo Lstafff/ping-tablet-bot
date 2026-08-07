@@ -1,5 +1,6 @@
 import unittest
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Optional
 
 from app.texts import (
@@ -284,6 +285,19 @@ class RichMessagesTest(unittest.TestCase):
         self.assertNotIn("<hr/><blockquote>⬇️ Напиши следующий счёт в чат!</blockquote>", rich_html)
         self.assertIn("<blockquote>⬇️ Напиши следующий счёт в чат!</blockquote>", rich_html)
 
+    def test_score_saved_includes_elo_change_when_available(self) -> None:
+        score = SimpleNamespace(
+            own_score=11,
+            opponent_score=7,
+            regular_own=11,
+            regular_opponent=7,
+            overtime_own=0,
+            overtime_opponent=0,
+        )
+        rich_html = score_saved("@test", score, [], "@me", 520, 20)
+
+        self.assertIn("🏓 Ping-рейтинг: <code>520</code> (+20)", rich_html)
+
     def test_format_day_uses_russian_month(self) -> None:
         self.assertEqual(format_day("2026-06-12"), "12 июня '26")
 
@@ -295,15 +309,15 @@ class RichMessagesTest(unittest.TestCase):
         self.assertEqual(format_signed_difference(0), "0")
         self.assertEqual(format_signed_difference(-2), "-2")
 
-    def test_format_player_level_uses_game_boundaries(self) -> None:
-        self.assertEqual(format_player_level(49, False), "👶 новичок")
-        self.assertEqual(format_player_level(50, False), "🏓 любитель")
-        self.assertEqual(format_player_level(149, False), "🏓 любитель")
-        self.assertEqual(format_player_level(150, False), "🤘 бывалый")
-        self.assertEqual(format_player_level(299, False), "🤘 бывалый")
-        self.assertEqual(format_player_level(300, False), "🦾 робот")
-        self.assertEqual(format_player_level(499, False), "🦾 робот")
-        self.assertEqual(format_player_level(500, False), "💀 профик")
+    def test_format_player_level_uses_elo_boundaries(self) -> None:
+        self.assertEqual(format_player_level(649, False), "👶 новичок")
+        self.assertEqual(format_player_level(650, False), "🏓 любитель")
+        self.assertEqual(format_player_level(849, False), "🏓 любитель")
+        self.assertEqual(format_player_level(850, False), "🤘 бывалый")
+        self.assertEqual(format_player_level(1099, False), "🤘 бывалый")
+        self.assertEqual(format_player_level(1100, False), "🦾 робот")
+        self.assertEqual(format_player_level(1499, False), "🦾 робот")
+        self.assertEqual(format_player_level(1500, False), "💀 профик")
 
     def test_format_player_level_uses_fnt_rating(self) -> None:
         self.assertEqual(format_player_level(0, True), "💀 профик")
@@ -313,31 +327,31 @@ class RichMessagesTest(unittest.TestCase):
 
         self.assertIn("<h2>🎯 Уровни игроков</h2>", rich_html)
         self.assertIn(
-            "<tr><th align=\"center\">Уровень</th><th align=\"center\">Всего матчей</th></tr>",
+            "<tr><th align=\"center\">Уровень</th><th align=\"center\">Ping-рейтинг</th></tr>",
             rich_html,
         )
         self.assertIn(
-            "<tr><td align=\"center\">новичок 👶</td><td align=\"center\">меньше 50</td></tr>",
+            "<tr><td align=\"center\">новичок 👶</td><td align=\"center\">до 649</td></tr>",
             rich_html,
         )
         self.assertIn(
-            "<tr><td align=\"center\">любитель 🏓</td><td align=\"center\">50-149</td></tr>",
+            "<tr><td align=\"center\">любитель 🏓</td><td align=\"center\">650-849</td></tr>",
             rich_html,
         )
         self.assertIn(
-            "<tr><td align=\"center\">бывалый 🤘😎</td><td align=\"center\">150-299</td></tr>",
+            "<tr><td align=\"center\">бывалый 🤘😎</td><td align=\"center\">850-1099</td></tr>",
             rich_html,
         )
         self.assertIn(
-            "<tr><td align=\"center\">робот 🦾</td><td align=\"center\">300-499</td></tr>",
+            "<tr><td align=\"center\">робот 🦾</td><td align=\"center\">1100-1499</td></tr>",
             rich_html,
         )
         self.assertIn(
-            "<tr><td align=\"center\">профик 💀</td><td align=\"center\">500+</td></tr>",
+            "<tr><td align=\"center\">профик 💀</td><td align=\"center\">1500+</td></tr>",
             rich_html,
         )
         self.assertIn(
-            "<blockquote>❗️ Если у тебя рейтинг ФНТР, ты профик независимо от количества сыгранных партий</blockquote>",
+            "<blockquote>❗️ Если у тебя рейтинг ФНТР, ты профик независимо от Ping-рейтинга</blockquote>",
             rich_html,
         )
 

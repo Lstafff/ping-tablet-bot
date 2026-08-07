@@ -91,6 +91,8 @@ class ScoreSubmission:
     game_id: Optional[int]
     recent_games: list[RecentGame]
     error: Optional[ScoreError]
+    elo_rating: Optional[int] = None
+    elo_change: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -260,6 +262,7 @@ class TennisService:
         game_id = self.storage.add_game(user_id, opponent_id, score)
         recent_games = self.storage.get_recent_games(user_id, opponent_id)
         user = self.storage.get_user(user_id)
+        elo_event = self.storage.get_elo_event(game_id, user_id) if opponent.opponent_user_id is not None else None
         return ScoreSubmission(
             opponent_id=opponent_id,
             opponent_name=opponent_name,
@@ -268,6 +271,8 @@ class TennisService:
             game_id=game_id,
             recent_games=recent_games,
             error=None,
+            elo_rating=elo_event.rating_after if elo_event is not None else None,
+            elo_change=elo_event.rating_change if elo_event is not None else None,
         )
 
     def undo_score(self, user_id: int, opponent_id: int, game_id: int) -> ScoreUndoResult:

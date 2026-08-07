@@ -81,6 +81,25 @@ class PostgresStorageTest(unittest.TestCase):
         self.assertEqual((first_stats.points_for, first_stats.points_against), (11, 7))
         self.assertEqual((second_stats.points_for, second_stats.points_against), (7, 11))
 
+    def test_linked_games_rebuild_elo_for_both_players(self) -> None:
+        self.db.ensure_user(1, "Игрок 1", None)
+        self.db.ensure_user(2, "Игрок 2", None)
+        first_opponent = self.db.add_opponent(1, "Игрок 2", 2)
+        self.db.add_opponent(2, "Игрок 1", 1)
+
+        game_id = self.db.add_game(1, first_opponent.id, parse_score("11-7"))
+
+        self.assertEqual(self.db.get_user(1).elo_rating, 520)
+        self.assertEqual(self.db.get_user(2).elo_rating, 480)
+        self.assertEqual(self.db.get_user(1).elo_games, 1)
+        self.assertEqual(self.db.get_user(2).elo_games, 1)
+
+        self.assertTrue(self.db.delete_game(1, first_opponent.id, game_id))
+        self.assertEqual(self.db.get_user(1).elo_rating, 500)
+        self.assertEqual(self.db.get_user(2).elo_rating, 500)
+        self.assertEqual(self.db.get_user(1).elo_games, 0)
+        self.assertEqual(self.db.get_user(2).elo_games, 0)
+
     def test_reset_linked_opponent_stats_keeps_opponents_for_both_players(self) -> None:
         self.db.ensure_user(1, "Игрок 1", None)
         self.db.ensure_user(2, "Игрок 2", None)
