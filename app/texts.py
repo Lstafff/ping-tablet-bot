@@ -28,6 +28,7 @@ BUTTON_SEND_INVITE = "💌 Отправить"
 BUTTON_SHARE_PROFILE = "💌 Поделиться"
 BUTTON_HAVE_INVITE_CODE = "✋ У меня есть код"
 BUTTON_TOTAL_STATS = "🥷 Профиль"
+BUTTON_OPEN_WEBAPP = "Открыть приложение"
 BUTTON_RATING = "🏆 Рейтинг"
 BUTTON_LEVELS = "🎯 Уровни"
 BUTTON_CLEAR_RATING = "🧹 Очистить"
@@ -276,9 +277,9 @@ def invite_new_opponent_notification(opponent_name: str) -> str:
 
 
 # Экран ввода результата партии с конкретным соперником.
-def score_prompt(opponent_name: str, opponent_elo_rating: Optional[int] = None) -> str:
+def score_prompt(opponent_name: str) -> str:
     return (
-        f"{match_title(opponent_name, opponent_elo_rating)}"
+        f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
         "<hr/>"
         "<h4>Правила</h4>"
         "Партия заканчивается после 11 очков у победителя. При счёте 10-10 начинаются овертаймы (по одной подаче) до разницы в 2 очка."
@@ -348,13 +349,9 @@ def edit_points_prompt(opponent_name: str) -> str:
 
 
 # Ошибка ввода результата партии, остаётся на экране матча.
-def score_input_error(
-    opponent_name: str,
-    error: Exception,
-    opponent_elo_rating: Optional[int] = None,
-) -> str:
+def score_input_error(opponent_name: str, error: Exception) -> str:
     return (
-        f"{match_title(opponent_name, opponent_elo_rating)}"
+        f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
         f"\n{html.escape(str(error))}\n"
         "<hr/>"
         f"{next_score_hint_without_separator()}"

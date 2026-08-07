@@ -20,9 +20,10 @@ class ParseScoreTest(unittest.TestCase):
         self.assertEqual(score.overtime_own, 5)
         self.assertEqual(score.overtime_opponent, 3)
 
-    def test_finished_game_requires_two_point_difference(self) -> None:
-        with self.assertRaises(ScoreError):
-            parse_score("12-11")
+    def test_finished_game_requires_exact_two_point_overtime_difference(self) -> None:
+        for raw_score in ("12-11", "15-10"):
+            with self.subTest(raw_score=raw_score), self.assertRaises(ScoreError):
+                parse_score(raw_score)
 
     def test_pair(self) -> None:
         self.assertEqual(parse_pair("8:5"), (8, 5))

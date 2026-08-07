@@ -51,10 +51,28 @@ def rebuild_elo_ratings(games: list[EloGame]) -> tuple[dict[int, int], dict[int,
         player_a_after = player_a_rating + rating_change
         player_b_after = player_b_rating - rating_change
 
-        events.extend((
-            EloEvent(game.game_id, game.player_a_id, game.player_b_id, player_a_rating, rating_change, player_a_after, game.played_at),
-            EloEvent(game.game_id, game.player_b_id, game.player_a_id, player_b_rating, -rating_change, player_b_after, game.played_at),
-        ))
+        events.extend(
+            (
+                EloEvent(
+                    game_id=game.game_id,
+                    player_id=game.player_a_id,
+                    opponent_id=game.player_b_id,
+                    rating_before=player_a_rating,
+                    rating_change=rating_change,
+                    rating_after=player_a_after,
+                    played_at=game.played_at,
+                ),
+                EloEvent(
+                    game_id=game.game_id,
+                    player_id=game.player_b_id,
+                    opponent_id=game.player_a_id,
+                    rating_before=player_b_rating,
+                    rating_change=-rating_change,
+                    rating_after=player_b_after,
+                    played_at=game.played_at,
+                ),
+            )
+        )
         ratings[game.player_a_id] = player_a_after
         ratings[game.player_b_id] = player_b_after
         games_played[game.player_a_id] += 1
@@ -63,7 +81,14 @@ def rebuild_elo_ratings(games: list[EloGame]) -> tuple[dict[int, int], dict[int,
     return dict(ratings), dict(games_played), events
 
 
-def calculate_rating_change(player_a_rating: int, player_b_rating: int, player_a_games: int, player_b_games: int, *, player_a_won: bool) -> int:
+def calculate_rating_change(
+    player_a_rating: int,
+    player_b_rating: int,
+    player_a_games: int,
+    player_b_games: int,
+    *,
+    player_a_won: bool,
+) -> int:
     """Return player A's zero-sum rating change for one game."""
     expected_score = expected_score_for(player_a_rating, player_b_rating)
     actual_score = 1.0 if player_a_won else 0.0
@@ -71,7 +96,10 @@ def calculate_rating_change(player_a_rating: int, player_b_rating: int, player_a
 
 
 def expected_score_for(player_rating: int, opponent_rating: int) -> float:
-    rating_difference = max(-RATING_DIFFERENCE_CAP, min(RATING_DIFFERENCE_CAP, player_rating - opponent_rating))
+    rating_difference = max(
+        -RATING_DIFFERENCE_CAP,
+        min(RATING_DIFFERENCE_CAP, player_rating - opponent_rating),
+    )
     return 1.0 / (1.0 + math.pow(10, -rating_difference / 400))
 
 

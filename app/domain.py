@@ -19,6 +19,8 @@ class User:
     created_at: str
     rating: Optional[str]
     rating_is_fnt: bool
+    display_name: Optional[str] = None
+    avatar_value: Optional[str] = None
     elo_rating: int = 500
     elo_games: int = 0
 

@@ -19,7 +19,6 @@ from app.texts import (
     opponent_stats,
     profile,
     score_input_error,
-    score_prompt,
     score_saved,
     score_undone,
     stats_fact_candidates,
@@ -113,7 +112,6 @@ class RichMessagesTest(unittest.TestCase):
         self.assertIn("<tr><td align=\"left\">Ping-рейтинг</td><td align=\"left\">500</td></tr>", rich_html)
         self.assertIn("<tr><td align=\"left\">Калибровка</td><td align=\"left\">0 / 30 игр</td></tr>", rich_html)
         self.assertIn("<tr><td align=\"left\">Проф-рейтинг</td><td align=\"left\">пока нет</td></tr>", rich_html)
-        self.assertIn("<th align=\"left\">🏓 Оппы</th>", rich_html)
         self.assertIn("<h2>📊 Общая статистика</h2><hr/><table bordered striped>", rich_html)
         self.assertIn("<table bordered striped>", rich_html)
         self.assertIn("<th align=\"left\">🥷 @lstaff</th>", rich_html)
@@ -285,15 +283,6 @@ class RichMessagesTest(unittest.TestCase):
             self.assertIn("<table bordered striped>", rich_html)
             self.assertIn("<hr/><blockquote>⬇️ Напиши следующий счёт в чат!</blockquote>", rich_html)
 
-    def test_score_error_shows_next_score_hint_without_recent_games(self) -> None:
-        rich_html = score_input_error("@test", ValueError("Ошибка"), 480)
-
-        self.assertIn("<h2>🏓 Матч с @test | <code>480</code></h2>", rich_html)
-        self.assertNotIn("<h2>📊 Последние 5 игр</h2>", rich_html)
-        self.assertNotIn("<table bordered striped>", rich_html)
-        self.assertIn("<hr/><blockquote>⬇️ Напиши следующий счёт в чат!</blockquote>", rich_html)
-        self.assertIn("<blockquote>⬇️ Напиши следующий счёт в чат!</blockquote>", rich_html)
-
     def test_score_saved_includes_elo_change_when_available(self) -> None:
         score = SimpleNamespace(
             own_score=11,
@@ -308,10 +297,13 @@ class RichMessagesTest(unittest.TestCase):
         self.assertIn("<h2>🏓 Матч с @test | <code>480</code></h2>", rich_html)
         self.assertIn("<b>Ping-рейтинг:</b> <code>+20</code> (520)", rich_html)
 
-    def test_score_prompt_includes_opponent_elo_before_score_input(self) -> None:
-        rich_html = score_prompt("@test", 480)
+    def test_score_error_shows_next_score_hint_without_recent_games(self) -> None:
+        rich_html = score_input_error("@test", ValueError("Ошибка"))
 
-        self.assertIn("<h2>🏓 Матч с @test | <code>480</code></h2>", rich_html)
+        self.assertNotIn("<h2>📊 Последние 5 игр</h2>", rich_html)
+        self.assertNotIn("<table bordered striped>", rich_html)
+        self.assertIn("<hr/><blockquote>⬇️ Напиши следующий счёт в чат!</blockquote>", rich_html)
+        self.assertIn("<blockquote>⬇️ Напиши следующий счёт в чат!</blockquote>", rich_html)
 
     def test_format_day_uses_russian_month(self) -> None:
         self.assertEqual(format_day("2026-06-12"), "12 июня '26")

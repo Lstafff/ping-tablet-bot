@@ -27,9 +27,7 @@ class EloTest(unittest.TestCase):
             EloGame(1, 2, 1, 11, 9, "2026-07-01T12:00:00+03:00"),
         ]
 
-        ratings, games_played, events = rebuild_elo_ratings(
-            sorted(games, key=lambda game: (game.played_at, game.game_id))
-        )
+        ratings, games_played, events = rebuild_elo_ratings(sorted(games, key=lambda game: (game.played_at, game.game_id)))
 
         self.assertEqual(games_played, {1: 2, 2: 2})
         self.assertEqual(len(events), 4)

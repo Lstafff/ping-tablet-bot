@@ -30,6 +30,8 @@ INVITE_CODE_ALPHABET = string.ascii_uppercase + string.digits
 INVITE_CODE_LENGTH = 8
 ALLOWED_SCHEMA_NAMES = {
     "aggregate_adjustments",
+    "avatar_value",
+    "display_name",
     "elo_events",
     "elo_games",
     "elo_rating",
@@ -107,6 +109,8 @@ class Database:
                 invite_code TEXT,
                 rating TEXT,
                 rating_is_fnt INTEGER NOT NULL DEFAULT 0,
+                display_name TEXT,
+                avatar_value TEXT,
                 elo_rating INTEGER NOT NULL DEFAULT 500,
                 elo_games INTEGER NOT NULL DEFAULT 0
             );
@@ -193,6 +197,8 @@ class Database:
         self._ensure_column("users", "invite_code", "TEXT")
         self._ensure_column("users", "rating", "TEXT")
         self._ensure_column("users", "rating_is_fnt", "INTEGER NOT NULL DEFAULT 0")
+        self._ensure_column("users", "display_name", "TEXT")
+        self._ensure_column("users", "avatar_value", "TEXT")
         self._ensure_column("users", "elo_rating", "INTEGER NOT NULL DEFAULT 500")
         self._ensure_column("users", "elo_games", "INTEGER NOT NULL DEFAULT 0")
         self._ensure_column("aggregate_adjustments", "games_updated_at", "TEXT")
@@ -364,8 +370,9 @@ class Database:
     def get_user(self, telegram_id: int) -> User:
         row = self.connection.execute(
             """
-            SELECT telegram_id, first_name, username, last_message_id, created_at,
-                   rating, rating_is_fnt, elo_rating, elo_games
+            SELECT
+                telegram_id, first_name, username, last_message_id, created_at,
+                rating, rating_is_fnt, display_name, avatar_value, elo_rating, elo_games
             FROM users
             WHERE telegram_id = ?
             """,
@@ -381,6 +388,8 @@ class Database:
             created_at=row["created_at"],
             rating=row["rating"],
             rating_is_fnt=bool(row["rating_is_fnt"]),
+            display_name=row["display_name"],
+            avatar_value=row["avatar_value"],
             elo_rating=int(row["elo_rating"]),
             elo_games=int(row["elo_games"]),
         )
@@ -406,6 +415,20 @@ class Database:
             rating_after=int(row["rating_after"]),
             played_at=str(row["played_at"]),
         )
+
+    def set_user_display_name(self, telegram_id: int, display_name: str) -> None:
+        self.connection.execute(
+            "UPDATE users SET display_name = ?, updated_at = ? WHERE telegram_id = ?",
+            (display_name, now_moscow_iso(), telegram_id),
+        )
+        self.connection.commit()
+
+    def set_user_avatar(self, telegram_id: int, avatar_value: str) -> None:
+        self.connection.execute(
+            "UPDATE users SET avatar_value = ?, updated_at = ? WHERE telegram_id = ?",
+            (avatar_value, now_moscow_iso(), telegram_id),
+        )
+        self.connection.commit()
 
     def set_last_message_id(self, telegram_id: int, message_id: int) -> None:
         self.connection.execute(
@@ -650,66 +673,66 @@ class Database:
             RETURNING id
             """
 
-        cursor = self.connection.execute(
-            insert_query,
-            (
-                owner_id,
-                owner_column,
-                opponent_column,
-                owner_id,
-                player_b_id,
-                score.own_score,
-                score.opponent_score,
-                score.regular_own,
-                score.regular_opponent,
-                score.overtime_own,
-                score.overtime_opponent,
-                now,
-            ),
-        )
-        row = cursor.fetchone()
-        if player_b_id is not None:
-            self._recalculate_elo_ratings()
-        self.connection.commit()
+        with self.connection:
+            cursor = self.connection.execute(
+                insert_query,
+                (
+                    owner_id,
+                    owner_column,
+                    opponent_column,
+                    owner_id,
+                    player_b_id,
+                    score.own_score,
+                    score.opponent_score,
+                    score.regular_own,
+                    score.regular_opponent,
+                    score.overtime_own,
+                    score.overtime_opponent,
+                    now,
+                ),
+            )
+            row = cursor.fetchone()
+            if player_b_id is not None:
+                self._recalculate_elo_ratings()
         return int(row["id"])
 
     def delete_game(self, owner_id: int, opponent_id: int, game_id: int) -> bool:
         opponent = self.get_opponent(owner_id, opponent_id)
-        if opponent.opponent_user_id is None:
-            cursor = self.connection.execute(
-                """
-                DELETE FROM games
-                WHERE id = ? AND created_by_id = ? AND owner_id = ? AND opponent_id = ?
-                """,
-                (game_id, owner_id, owner_id, opponent_id),
-            )
-        else:
-            cursor = self.connection.execute(
-                """
-                DELETE FROM games
-                WHERE
-                    id = ?
-                    AND created_by_id = ?
-                    AND (
-                        (player_a_id = ? AND player_b_id = ?)
-                        OR
-                        (player_a_id = ? AND player_b_id = ?)
-                    )
-                """,
-                (
-                    game_id,
-                    owner_id,
-                    owner_id,
-                    opponent.opponent_user_id,
-                    opponent.opponent_user_id,
-                    owner_id,
-                ),
-            )
+        with self.connection:
+            if opponent.opponent_user_id is None:
+                cursor = self.connection.execute(
+                    """
+                    DELETE FROM games
+                    WHERE id = ? AND created_by_id = ? AND owner_id = ? AND opponent_id = ?
+                    """,
+                    (game_id, owner_id, owner_id, opponent_id),
+                )
+            else:
+                cursor = self.connection.execute(
+                    """
+                    DELETE FROM games
+                    WHERE
+                        id = ?
+                        AND created_by_id = ?
+                        AND (
+                            (player_a_id = ? AND player_b_id = ?)
+                            OR
+                            (player_a_id = ? AND player_b_id = ?)
+                        )
+                    """,
+                    (
+                        game_id,
+                        owner_id,
+                        owner_id,
+                        opponent.opponent_user_id,
+                        opponent.opponent_user_id,
+                        owner_id,
+                    ),
+                )
 
-        deleted = cursor.rowcount > 0
-        if deleted and opponent.opponent_user_id is not None:
-            self._recalculate_elo_ratings()
-        self.connection.commit()
+            deleted = cursor.rowcount > 0
+            if deleted and opponent.opponent_user_id is not None:
+                self._recalculate_elo_ratings()
         return deleted
 
     def get_opponent_stats(self, owner_id: int, opponent_id: int, adjusted: bool = True) -> Stats:
