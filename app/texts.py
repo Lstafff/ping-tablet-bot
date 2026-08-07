@@ -90,7 +90,7 @@ ERROR_GAME_CANNOT_BE_DRAW = "❌ Точно всё? В завершенной п
 ERROR_WINNER_MINIMUM_SCORE = "❌ Уже закончили? Партия закончивается минимум на 11 очках у победителя."
 ERROR_DEUCE_NEEDS_TWO_POINT_LEAD = "❌ Ещё не всё! При счёте 10:10 партия должна продолжаться до разницы в 2 очка."
 ERROR_OVERTIME_ONLY_AFTER_DEUCE = "❌ Ещё играем! Счёт больше 11 возможен только после 10:10."
-ERROR_WIN_REQUIRES_TWO_POINT_LEAD = "❌ Кажется, что-то не так... Победа в партии должна быть с разницей минимум в 2 очка."
+ERROR_WIN_REQUIRES_TWO_POINT_LEAD = "❌ Кажется, что-то не так... После 10:10 партия заканчивается с разницей ровно в 2 очка."
 PAIR_DEFAULT_EXAMPLE = "11-7"
 
 # Названия месяцев для дат в таблицах.
@@ -186,11 +186,13 @@ def profile(user: UserLike, stats: StatsLike, extended_stats: Optional[ExtendedS
     level = format_player_level(elo_rating, user.rating_is_fnt)
     return (
         f"<h2>🥷 Профиль {html.escape(user_name)}</h2>"
-        f"\n<b>･ В игре с </b>{format_day(user.created_at[:10])}\n"
-        f"<b>･ Уровень: </b>{level}\n"
-        f"<b>･ Рейтинг: </b>{format_rating(user.rating, user.rating_is_fnt)}\n"
-        f"<b>･ Ping-рейтинг: </b>{elo_rating}\n"
+        "\n<table bordered striped>"
+        f"<tr><td align=\"left\">В игре с</td><td align=\"left\">{format_day(user.created_at[:10])}</td></tr>"
+        f"<tr><td align=\"left\">Уровень</td><td align=\"left\">{level}</td></tr>"
+        f"<tr><td align=\"left\">Ping-рейтинг</td><td align=\"left\">{elo_rating}</td></tr>"
         f"{format_elo_calibration(elo_games)}"
+        f"<tr><td align=\"left\">Проф-рейтинг</td><td align=\"left\">{format_rating(user.rating, user.rating_is_fnt)}</td></tr>"
+        "</table>"
         "<h2>📊 Общая статистика</h2>"
         "<hr/>"
         f"{format_stats(stats, user_name=user_name, opponent_name='Оппоненты', extended_stats=extended_stats)}"
@@ -361,22 +363,25 @@ def score_saved(
     user_name: str = DEFAULT_USER_NAME,
     elo_rating: Optional[int] = None,
     elo_change: Optional[int] = None,
+    opponent_elo_rating: Optional[int] = None,
 ) -> str:
     overtime = ""
     if score.overtime_own or score.overtime_opponent:
         overtime = (
-            f"\n(<code>{score.regular_own}-{score.regular_opponent}</code> в основное время, "
-            f"<code>{score.overtime_own}-{score.overtime_opponent}</code> в овертайме)"
+            f"\n\n<blockquote>(<code>{score.regular_own}-{score.regular_opponent}</code> в основное время, "
+            f"<code>{score.overtime_own}-{score.overtime_opponent}</code> в овертайме)</blockquote>"
         )
 
     elo_summary = ""
     if elo_rating is not None and elo_change is not None:
-        elo_summary = f"🏓 Ping-рейтинг: <code>{elo_rating}</code> ({format_signed_difference(elo_change)})\n"
+        elo_summary = (
+            f"\n🏓 Твой Ping-рейтинг: <code>{elo_rating}</code> "
+            f"({format_signed_difference(elo_change)})"
+        )
 
     return (
-        f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
-        f"\n✅ Добавлен счёт: <code>{score.own_score}-{score.opponent_score}</code>{overtime}\n"
-        f"{elo_summary}"
+        f"{match_title(opponent_name, opponent_elo_rating)}"
+        f"\n<b>✅ Добавлен счёт:</b> <code>{score.own_score}-{score.opponent_score}</code>{elo_summary}{overtime}\n"
         "<h2>📊 Последние 5 игр</h2>"
         "<hr/>"
         f"{format_recent_games(recent_games, user_name=user_name, opponent_name=opponent_name)}"
@@ -398,6 +403,17 @@ def score_undone(
         f"{format_recent_games(recent_games, user_name=user_name, opponent_name=opponent_name)}"
         f"{next_score_hint()}"
     )
+
+
+# Заголовок экрана матча: соперник и его актуальный Ping-рейтинг.
+def match_title(
+    opponent_name: str,
+    opponent_elo_rating: Optional[int] = None,
+) -> str:
+    rating = ""
+    if opponent_elo_rating is not None:
+        rating = f" | <code>{opponent_elo_rating}</code>"
+    return f"<h2>🏓 Матч с {html.escape(opponent_name)}{rating}</h2>"
 
 
 # Подсказка под таблицей последних игр после успешного ввода или отмены.
@@ -655,11 +671,14 @@ def format_rating(rating: Optional[str], rating_is_fnt: bool) -> str:
     return html.escape(rating)
 
 
-# Статус калибровки Ping-рейтинга для новых игроков.
+# Строка калибровки Ping-рейтинга в таблице профиля.
 def format_elo_calibration(elo_games: int) -> str:
     if elo_games >= 30:
         return ""
-    return f"<b>･ Калибровка: </b>{elo_games} / 30 игр\n"
+    return (
+        "<tr><td align=\"left\">Калибровка</td>"
+        f"<td align=\"left\">{elo_games} / 30 игр</td></tr>"
+    )
 
 
 # Проверка, что пользователь прислал ссылку на поддерживаемый рейтинг.
