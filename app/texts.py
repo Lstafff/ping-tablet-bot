@@ -152,6 +152,15 @@ class OpponentLike(Protocol):
     opponent_user_id: Optional[int]
     first_name: Optional[str]
     username: Optional[str]
+    elo_rating: Optional[int]
+
+
+# Подпись кнопки соперника с его Ping-рейтингом, если он связан с аккаунтом бота.
+def opponent_button_title(opponent: OpponentLike) -> str:
+    title = opponent_title(opponent)
+    if opponent.elo_rating is None:
+        return title
+    return f"{title} | 🏆 {opponent.elo_rating}"
 
 
 # Строка статистики по одному дню.
@@ -277,9 +286,9 @@ def invite_new_opponent_notification(opponent_name: str) -> str:
 
 
 # Экран ввода результата партии с конкретным соперником.
-def score_prompt(opponent_name: str) -> str:
+def score_prompt(opponent_name: str, opponent_elo_rating: Optional[int] = None) -> str:
     return (
-        f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
+        f"{match_title(opponent_name, opponent_elo_rating)}"
         "<hr/>"
         "<h4>Правила</h4>"
         "Партия заканчивается после 11 очков у победителя. При счёте 10-10 начинаются овертаймы (по одной подаче) до разницы в 2 очка."
@@ -304,7 +313,8 @@ def edit_menu(opponent_name: str, stats: StatsLike, user_name: str = DEFAULT_USE
 def delete_opponent_confirm(opponent_name: str) -> str:
     return (
         f"<h2>🗑️ Удалить соперника {html.escape(opponent_name)}?</h2>"
-        "\nТы удалишь своего соперника и всю вашу статистику."
+        "\nСоперник исчезнет только из твоего списка. Если статистика останется у него, "
+        "она вернётся после новой партии. Если данных не останется у вас обоих, счёт начнётся с нуля."
     )
 
 
@@ -312,7 +322,8 @@ def delete_opponent_confirm(opponent_name: str) -> str:
 def reset_stats_confirm(opponent_name: str) -> str:
     return (
         f"<h2>🔄 Сбросить статистику с {html.escape(opponent_name)}?</h2>"
-        "\nСоперник останется в списке, но ваши партии и мячи сбросятся."
+        "\nТвои партии и мячи обнулятся. Если статистика останется у соперника, она вернётся "
+        "после новой партии. Если данных не останется у вас обоих, счёт начнётся с нуля."
     )
 
 
@@ -320,7 +331,7 @@ def reset_stats_confirm(opponent_name: str) -> str:
 def reset_stats_done(opponent_name: str) -> str:
     return (
         "<h2>🔄 Статистика сброшена</h2>"
-        f"\nИстория матчей с {html.escape(opponent_name)} очищена."
+        f"\nТвоя статистика с {html.escape(opponent_name)} обнулена."
     )
 
 
@@ -328,7 +339,7 @@ def reset_stats_done(opponent_name: str) -> str:
 def delete_opponent_done(opponent_name: str) -> str:
     return (
         "<h2>😔 Соперника больше нет</h2>"
-        f"\n{html.escape(opponent_name)} удалён вместе со всей вашей историей..."
+        f"\n{html.escape(opponent_name)} удалён из твоего списка."
     )
 
 
@@ -349,9 +360,13 @@ def edit_points_prompt(opponent_name: str) -> str:
 
 
 # Ошибка ввода результата партии, остаётся на экране матча.
-def score_input_error(opponent_name: str, error: Exception) -> str:
+def score_input_error(
+    opponent_name: str,
+    error: Exception,
+    opponent_elo_rating: Optional[int] = None,
+) -> str:
     return (
-        f"<h2>🏓 Матч с {html.escape(opponent_name)}</h2>"
+        f"{match_title(opponent_name, opponent_elo_rating)}"
         f"\n{html.escape(str(error))}\n"
         "<hr/>"
         f"{next_score_hint_without_separator()}"
@@ -415,7 +430,7 @@ def match_title(
 ) -> str:
     rating = ""
     if opponent_elo_rating is not None:
-        rating = f" | <code>{opponent_elo_rating}</code>"
+        rating = f" | 🏆 <code>{opponent_elo_rating}</code>"
     return f"<h2>🏓 Матч с {html.escape(opponent_name)}{rating}</h2>"
 
 

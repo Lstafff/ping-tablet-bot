@@ -18,6 +18,19 @@ class BotFormattingTest(unittest.TestCase):
 
         self.assertEqual(texts.opponent_title(opponent), "@test")
 
+    def test_linked_opponent_button_includes_elo(self) -> None:
+        opponent = Opponent(
+            id=1,
+            owner_id=1,
+            name="@old",
+            opponent_user_id=2,
+            first_name="Тест",
+            username="lstaff",
+            elo_rating=430,
+        )
+
+        self.assertEqual(texts.opponent_button_title(opponent), "@lstaff | 🏆 430")
+
     def test_test_opponent_title_includes_demo_username(self) -> None:
         opponent = Opponent(
             id=1,

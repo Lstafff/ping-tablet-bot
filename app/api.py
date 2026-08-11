@@ -5,12 +5,14 @@ import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Optional
 
 from aiogram import Bot
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.config import Config, load_config, parse_csv_env
@@ -24,6 +26,7 @@ from app.webapp_auth import WebAppAuthError, WebAppUser, validate_init_data
 
 class ScoreInput(BaseModel):
     score: str = Field(min_length=1, max_length=32)
+    operation_id: Optional[str] = Field(default=None, max_length=64)
 
 
 class ValueInput(BaseModel):
@@ -69,6 +72,65 @@ class AppState:
     database: Database
     service: TennisService
     rating_guard: RatingRequestGuard
+
+
+class BodySizeLimitMiddleware:
+    def __init__(
+        self,
+        app: Any,
+        default_limit: int = 16 * 1024,
+        avatar_limit: int = 220 * 1024,
+    ) -> None:
+        self.app = app
+        self.default_limit = default_limit
+        self.avatar_limit = avatar_limit
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope.get("type") != "http" or scope.get("method") not in {"POST", "PUT", "PATCH"}:
+            await self.app(scope, receive, send)
+            return
+
+        limit = self.avatar_limit if scope.get("path") == "/api/profile/avatar" else self.default_limit
+        headers = {key.lower(): value for key, value in scope.get("headers", [])}
+        content_length = headers.get(b"content-length")
+        if content_length is not None:
+            try:
+                if int(content_length) > limit:
+                    await self._reject(scope, receive, send)
+                    return
+            except ValueError:
+                await self._reject(scope, receive, send)
+                return
+
+        messages: list[dict[str, Any]] = []
+        body_size = 0
+        while True:
+            message = await receive()
+            messages.append(message)
+            if message.get("type") == "http.request":
+                body_size += len(message.get("body", b""))
+                if body_size > limit:
+                    await self._reject(scope, receive, send)
+                    return
+                if not message.get("more_body", False):
+                    break
+            elif message.get("type") == "http.disconnect":
+                break
+
+        async def replay() -> dict[str, Any]:
+            if messages:
+                return messages.pop(0)
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        await self.app(scope, replay, send)
+
+    @staticmethod
+    async def _reject(scope: dict[str, Any], receive: Any, send: Any) -> None:
+        response = JSONResponse(
+            status_code=413,
+            content={"detail": "Запрос слишком большой. Уменьшите данные и попробуйте снова."},
+        )
+        await response(scope, receive, send)
 
 
 @asynccontextmanager
@@ -127,32 +189,24 @@ def require_webapp_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(error)) from error
 
 
-app = FastAPI(title="Ping Tablet Bot API", version="0.2.0", lifespan=lifespan)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=list(parse_csv_env("WEBAPP_ALLOWED_ORIGINS", ("http://localhost:5173",))),
-    allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["Authorization", "Content-Type", "X-Telegram-Init-Data"],
-)
+router = APIRouter()
 
 
-@app.exception_handler(LookupError)
 async def not_found_handler(_: Request, __: LookupError) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": "Ничего не найдено."})
 
 
-@app.get("/health")
+@router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/api/me")
+@router.get("/api/me")
 def me(current_user: WebAppUser = Depends(require_webapp_user)) -> dict[str, Any]:
     return {"user": asdict(current_user)}
 
 
-@app.get("/api/profile")
+@router.get("/api/profile")
 def profile(
     request: Request,
     current_user: WebAppUser = Depends(require_webapp_user),
@@ -161,7 +215,7 @@ def profile(
     return profile_response(service, current_user.id)
 
 
-@app.put("/api/profile/name")
+@router.put("/api/profile/name")
 def update_profile_name(
     payload: ProfileNameInput,
     request: Request,
@@ -175,7 +229,7 @@ def update_profile_name(
     return profile_response(service, current_user.id)
 
 
-@app.put("/api/profile/avatar")
+@router.put("/api/profile/avatar")
 def update_profile_avatar(
     payload: ProfileAvatarInput,
     request: Request,
@@ -189,7 +243,7 @@ def update_profile_avatar(
     return profile_response(service, current_user.id)
 
 
-@app.get("/api/opponents")
+@router.get("/api/opponents")
 def opponents(
     request: Request,
     current_user: WebAppUser = Depends(require_webapp_user),
@@ -203,7 +257,7 @@ def opponents(
     }
 
 
-@app.get("/api/games")
+@router.get("/api/games")
 def game_history(
     request: Request,
     page: int = 1,
@@ -218,7 +272,7 @@ def game_history(
     }
 
 
-@app.get("/api/opponents/{opponent_id}/stats")
+@router.get("/api/opponents/{opponent_id}/stats")
 def opponent_stats(
     opponent_id: int,
     request: Request,
@@ -228,7 +282,7 @@ def opponent_stats(
     return opponent_stats_response(service, current_user.id, opponent_id)
 
 
-@app.get("/api/opponents/{opponent_id}/daily")
+@router.get("/api/opponents/{opponent_id}/daily")
 def opponent_daily_stats(
     opponent_id: int,
     request: Request,
@@ -246,7 +300,7 @@ def opponent_daily_stats(
     }
 
 
-@app.get("/api/opponents/{opponent_id}/games")
+@router.get("/api/opponents/{opponent_id}/games")
 def opponent_games(
     opponent_id: int,
     request: Request,
@@ -265,7 +319,7 @@ def opponent_games(
     }
 
 
-@app.post("/api/opponents/{opponent_id}/scores", status_code=status.HTTP_201_CREATED)
+@router.post("/api/opponents/{opponent_id}/scores", status_code=status.HTTP_201_CREATED)
 def add_score(
     opponent_id: int,
     payload: ScoreInput,
@@ -273,7 +327,15 @@ def add_score(
     current_user: WebAppUser = Depends(require_webapp_user),
 ) -> dict[str, Any]:
     service = prepare_service(request, current_user)
-    result = service.submit_score(current_user.id, opponent_id, payload.score)
+    try:
+        result = service.submit_score(
+            current_user.id,
+            opponent_id,
+            payload.score,
+            operation_id=payload.operation_id,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
     if result.error is not None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(result.error))
     if result.score is None or result.game_id is None:
@@ -284,10 +346,15 @@ def add_score(
         "opponent_name": result.opponent_name,
         "score": asdict(result.score),
         "recent_games": [asdict(game) for game in result.recent_games],
+        "elo_rating": result.elo_rating,
+        "elo_change": result.elo_change,
+        "opponent_elo_rating": result.opponent_elo_rating,
+        "profile": profile_response(service, current_user.id),
+        "opponent_stats": opponent_stats_response(service, current_user.id, opponent_id),
     }
 
 
-@app.delete("/api/opponents/{opponent_id}/scores/{game_id}")
+@router.delete("/api/opponents/{opponent_id}/scores/{game_id}")
 def undo_score(
     opponent_id: int,
     game_id: int,
@@ -304,7 +371,7 @@ def undo_score(
     }
 
 
-@app.put("/api/opponents/{opponent_id}/totals/games")
+@router.put("/api/opponents/{opponent_id}/totals/games")
 def update_games_total(
     opponent_id: int,
     payload: ValueInput,
@@ -319,7 +386,7 @@ def update_games_total(
     return opponent_stats_response(service, current_user.id, opponent_id)
 
 
-@app.put("/api/opponents/{opponent_id}/totals/points")
+@router.put("/api/opponents/{opponent_id}/totals/points")
 def update_points_total(
     opponent_id: int,
     payload: ValueInput,
@@ -334,7 +401,7 @@ def update_points_total(
     return opponent_stats_response(service, current_user.id, opponent_id)
 
 
-@app.post("/api/opponents/{opponent_id}/reset")
+@router.post("/api/opponents/{opponent_id}/reset")
 def reset_opponent_stats(
     opponent_id: int,
     request: Request,
@@ -345,7 +412,7 @@ def reset_opponent_stats(
     return {"opponent_name": result.opponent_name}
 
 
-@app.delete("/api/opponents/{opponent_id}")
+@router.delete("/api/opponents/{opponent_id}")
 def delete_opponent(
     opponent_id: int,
     request: Request,
@@ -356,7 +423,7 @@ def delete_opponent(
     return {"opponent_name": result.opponent_name, "has_opponents": result.has_opponents}
 
 
-@app.post("/api/rating")
+@router.post("/api/rating")
 async def update_rating(
     payload: ValueInput,
     request: Request,
@@ -374,7 +441,7 @@ async def update_rating(
     return profile_response(service, current_user.id)
 
 
-@app.delete("/api/rating")
+@router.delete("/api/rating")
 def clear_rating(
     request: Request,
     current_user: WebAppUser = Depends(require_webapp_user),
@@ -384,7 +451,7 @@ def clear_rating(
     return profile_response(service, current_user.id)
 
 
-@app.post("/api/invites")
+@router.post("/api/invites")
 def create_invite(
     request: Request,
     current_user: WebAppUser = Depends(require_webapp_user),
@@ -398,7 +465,7 @@ def create_invite(
     return {"code": invite_code, "invite_link": invite_link}
 
 
-@app.post("/api/invites/accept")
+@router.post("/api/invites/accept")
 async def accept_invite(
     payload: InviteCodeInput,
     request: Request,
@@ -458,7 +525,45 @@ def opponent_response(opponent: Opponent, stats: Optional[Stats] = None) -> dict
         "name": opponent.name,
         "first_name": opponent.first_name,
         "username": opponent.username,
+        "elo_rating": opponent.elo_rating,
     }
     if stats is not None:
         response["stats"] = asdict(stats)
     return response
+
+
+def create_app(
+    app_state: Optional[AppState] = None,
+    static_directory: Optional[Path] = None,
+) -> FastAPI:
+    application = FastAPI(
+        title="Ping Tablet Bot API",
+        version="0.3.0",
+        lifespan=None if app_state is not None else lifespan,
+    )
+    if app_state is not None:
+        application.state.app_state = app_state
+
+    allowed_origins = (
+        app_state.config.webapp_allowed_origins
+        if app_state is not None
+        else parse_csv_env("WEBAPP_ALLOWED_ORIGINS", ("http://localhost:5173",))
+    )
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(allowed_origins),
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_headers=["Authorization", "Content-Type", "X-Telegram-Init-Data"],
+    )
+    application.add_middleware(BodySizeLimitMiddleware)
+    application.add_exception_handler(LookupError, not_found_handler)
+    application.include_router(router)
+
+    frontend = static_directory or Path(__file__).resolve().parents[1] / "web" / "dist"
+    if frontend.is_dir():
+        application.mount("/", StaticFiles(directory=frontend, html=True), name="web")
+    return application
+
+
+app = create_app()

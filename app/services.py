@@ -74,6 +74,7 @@ class RatingInputResult:
 class OpponentView:
     opponent: Opponent
     opponent_name: str
+    opponent_elo_rating: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -138,6 +139,8 @@ class HistoryGame:
     played_at: str
     own_score: int
     opponent_score: int
+    game_id: Optional[int] = None
+    elo_change: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -257,16 +260,27 @@ class TennisService:
 
     def get_opponent_view(self, user_id: int, opponent_id: int) -> OpponentView:
         opponent = self.storage.get_opponent(user_id, opponent_id)
-        return OpponentView(opponent=opponent, opponent_name=opponent_title(opponent))
+        return OpponentView(
+            opponent=opponent,
+            opponent_name=opponent_title(opponent),
+            opponent_elo_rating=opponent.elo_rating,
+        )
 
     def start_score_input(self, user_id: int, opponent_id: int) -> OpponentView:
         view = self.get_opponent_view(user_id, opponent_id)
         self.storage.set_session(user_id, SESSION_SCORE, opponent_id)
         return view
 
-    def submit_score(self, user_id: int, opponent_id: int, raw_score: str) -> ScoreSubmission:
+    def submit_score(
+        self,
+        user_id: int,
+        opponent_id: int,
+        raw_score: str,
+        operation_id: Optional[str] = None,
+    ) -> ScoreSubmission:
         opponent = self.storage.get_opponent(user_id, opponent_id)
         opponent_name = opponent_title(opponent)
+        opponent_elo_rating = opponent.elo_rating
         try:
             score = parse_score(raw_score)
         except ScoreError as error:
@@ -278,13 +292,13 @@ class TennisService:
                 game_id=None,
                 recent_games=[],
                 error=error,
+                opponent_elo_rating=opponent_elo_rating,
             )
 
-        game_id = self.storage.add_game(user_id, opponent_id, score)
+        game_id = self.storage.add_game(user_id, opponent_id, score, operation_id=operation_id)
         recent_games = self.storage.get_recent_games(user_id, opponent_id)
         user = self.storage.get_user(user_id)
         elo_event = self.storage.get_elo_event(game_id, user_id) if opponent.opponent_user_id is not None else None
-        opponent_elo_rating = None
         if opponent.opponent_user_id is not None:
             opponent_elo_rating = self.storage.get_user(opponent.opponent_user_id).elo_rating
         return ScoreSubmission(
@@ -412,33 +426,28 @@ class TennisService:
         page: int = 1,
         page_size: int = 20,
     ) -> GameHistoryView:
-        history: list[HistoryGame] = []
-        for opponent in self.storage.list_opponents(user_id):
-            games_count = self.storage.count_opponent_games(user_id, opponent.id)
-            for offset in range(0, games_count, 100):
-                games = self.storage.get_recent_games(
-                    user_id,
-                    opponent.id,
-                    limit=min(100, games_count - offset),
-                    offset=offset,
-                )
-                history.extend(
-                    HistoryGame(
-                        opponent_id=opponent.id,
-                        opponent_name=opponent_title(opponent),
-                        played_at=game.played_at,
-                        own_score=game.own_score,
-                        opponent_score=game.opponent_score,
-                    )
-                    for game in games
-                )
-
-        history.sort(key=lambda game: game.played_at, reverse=True)
-        total_pages = max(1, (len(history) + page_size - 1) // page_size)
+        opponents = {
+            opponent.id: opponent_title(opponent)
+            for opponent in self.storage.list_opponents(user_id)
+        }
+        games_count = self.storage.count_user_games(user_id)
+        total_pages = max(1, (games_count + page_size - 1) // page_size)
         page = min(max(page, 1), total_pages)
         page_start = (page - 1) * page_size
+        rows = self.storage.get_user_game_history(user_id, limit=page_size, offset=page_start)
         return GameHistoryView(
-            games=history[page_start : page_start + page_size],
+            games=[
+                HistoryGame(
+                    opponent_id=row["opponent_id"],
+                    opponent_name=opponents.get(row["opponent_id"], "Соперник"),
+                    played_at=row["played_at"],
+                    own_score=row["own_score"],
+                    opponent_score=row["opponent_score"],
+                    game_id=row["game_id"],
+                    elo_change=row["elo_change"],
+                )
+                for row in rows
+            ],
             page=page,
             total_pages=total_pages,
         )

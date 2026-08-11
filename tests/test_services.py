@@ -25,7 +25,7 @@ class FakeStorage:
             opponent_user_id=None,
         )
         self.sessions: list[tuple[int, str, int | None]] = []
-        self.saved_scores: list[tuple[int, int, int, int]] = []
+        self.saved_scores: list[tuple[int, int, int, int, str | None]] = []
         self.cleared_sessions: list[int] = []
         self.rating_updates: list[tuple[int, str | None, bool]] = []
         self.display_name_updates: list[tuple[int, str]] = []
@@ -52,13 +52,13 @@ class FakeStorage:
     def get_user(self, user_id):
         return self.user
 
-    def add_game(self, user_id, opponent_id, score):
-        self.saved_scores.append((user_id, opponent_id, score.own_score, score.opponent_score))
+    def add_game(self, user_id, opponent_id, score, operation_id=None):
+        self.saved_scores.append((user_id, opponent_id, score.own_score, score.opponent_score, operation_id))
         return 42
 
     def get_recent_games(self, user_id, opponent_id, limit=5, offset=0):
         games = [
-            RecentGame(played_at="2026-07-03T12:00:00+03:00", own_score=11, opponent_score=7),
+            RecentGame(played_at="2026-07-03T12:00:00+03:00", own_score=11, opponent_score=7, game_id=42, elo_change=20),
             RecentGame(played_at="2026-07-02T12:00:00+03:00", own_score=9, opponent_score=11),
         ]
         return games[offset : offset + limit]
@@ -106,6 +106,30 @@ class FakeStorage:
     def count_opponent_games(self, user_id, opponent_id):
         return 2
 
+    def count_user_games(self, user_id):
+        return 2
+
+    def get_user_game_history(self, user_id, limit=20, offset=0):
+        rows = [
+            {
+                "opponent_id": 10,
+                "game_id": 42,
+                "played_at": "2026-07-03T12:00:00+03:00",
+                "own_score": 11,
+                "opponent_score": 7,
+                "elo_change": 20,
+            },
+            {
+                "opponent_id": 10,
+                "game_id": 41,
+                "played_at": "2026-07-02T12:00:00+03:00",
+                "own_score": 9,
+                "opponent_score": 11,
+                "elo_change": None,
+            },
+        ]
+        return rows[offset : offset + limit]
+
     def set_user_rating(self, user_id, rating, rating_is_fnt):
         self.rating_updates.append((user_id, rating, rating_is_fnt))
 
@@ -143,13 +167,13 @@ class TennisServiceTest(unittest.TestCase):
         storage = FakeStorage()
         service = TennisService(storage, seed_test_opponent=False)
 
-        result = service.submit_score(1, 10, "11-7")
+        result = service.submit_score(1, 10, "11-7", operation_id="score-42")
 
         self.assertIsNone(result.error)
         self.assertEqual(result.game_id, 42)
         self.assertEqual(result.opponent_name, "Соперник")
         self.assertEqual(result.user_name, "@player")
-        self.assertEqual(storage.saved_scores, [(1, 10, 11, 7)])
+        self.assertEqual(storage.saved_scores, [(1, 10, 11, 7, "score-42")])
 
     def test_submit_score_returns_error_without_saving(self) -> None:
         storage = FakeStorage()
@@ -180,6 +204,7 @@ class TennisServiceTest(unittest.TestCase):
         self.assertEqual(view.games[0].opponent_id, 10)
         self.assertEqual(view.games[0].opponent_name, "Соперник")
         self.assertEqual((view.games[0].own_score, view.games[0].opponent_score), (11, 7))
+        self.assertEqual((view.games[0].game_id, view.games[0].elo_change), (42, 20))
 
     def test_update_display_name_normalizes_spaces(self) -> None:
         storage = FakeStorage()

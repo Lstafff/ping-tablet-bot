@@ -38,7 +38,7 @@ def rating_keyboard(has_rating: bool) -> InlineKeyboardMarkup:
 def opponents_keyboard(opponents: list[Opponent]) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for opponent in opponents:
-        builder.button(text=texts.opponent_title(opponent), callback_data=f"opponent:{opponent.id}", style="primary")
+        builder.button(text=texts.opponent_button_title(opponent), callback_data=f"opponent:{opponent.id}", style="primary")
     builder.button(text=texts.BUTTON_MAIN_MENU, callback_data="main")
     builder.adjust(1)
     return builder.as_markup()

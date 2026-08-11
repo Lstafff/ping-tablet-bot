@@ -1,0 +1,212 @@
+from __future__ import annotations
+
+import unittest
+import hashlib
+import hmac
+import json
+import time
+from urllib.parse import urlencode
+
+try:
+    from fastapi.testclient import TestClient
+
+    from app.api import AppState, RatingRequestGuard, create_app, require_webapp_user
+    from app.config import Config
+    from app.domain import ExtendedStats, Stats, User
+    from app.scoring import parse_score
+    from app.services import OpponentStatsView, ProfileView, ScoreSubmission
+    from app.webapp_auth import WebAppUser
+
+    API_TEST_DEPENDENCIES_AVAILABLE = True
+except ImportError:
+    API_TEST_DEPENDENCIES_AVAILABLE = False
+
+
+class FakeService:
+    def __init__(self) -> None:
+        self.operation_ids: list[str | None] = []
+
+    def ensure_user(self, telegram_id: int, first_name: str | None, username: str | None) -> None:
+        return None
+
+    def get_opponent_total_stats(self, user_id: int, opponent_id: int):
+        if opponent_id != 10:
+            raise LookupError("Соперник не принадлежит пользователю.")
+        return OpponentStatsView(
+            opponent_name="Соперник",
+            stats=Stats(wins=1, losses=0, points_for=11, points_against=7),
+            extended_stats=self._extended_stats(),
+            user_name="Игрок",
+        )
+
+    def get_profile(self, user_id: int) -> ProfileView:
+        return ProfileView(
+            user=User(
+                telegram_id=user_id,
+                first_name="Игрок",
+                username=None,
+                last_message_id=None,
+                created_at="2026-08-11T12:00:00+03:00",
+                rating=None,
+                rating_is_fnt=False,
+            ),
+            stats=Stats(wins=1, losses=0, points_for=11, points_against=7),
+            extended_stats=self._extended_stats(),
+        )
+
+    @staticmethod
+    def _extended_stats() -> ExtendedStats:
+        return ExtendedStats(
+            games=1,
+            overtime_wins=0,
+            overtime_losses=0,
+            longest_own_score=11,
+            longest_opponent_score=7,
+            longest_points=18,
+            win_streak=1,
+            large_margin_games=0,
+            close_margin_games=0,
+            most_common_score="11-7",
+            most_common_score_count=1,
+        )
+
+    def submit_score(
+        self,
+        user_id: int,
+        opponent_id: int,
+        raw_score: str,
+        operation_id: str | None = None,
+    ) -> ScoreSubmission:
+        self.operation_ids.append(operation_id)
+        if operation_id == "conflicting-operation":
+            raise ValueError("Идентификатор операции уже использован для другого счёта.")
+        score = parse_score(raw_score)
+        return ScoreSubmission(
+            opponent_id=opponent_id,
+            opponent_name="Соперник",
+            user_name="Игрок",
+            score=score,
+            game_id=42,
+            recent_games=[],
+            error=None,
+        )
+
+
+def signed_init_data(bot_token: str, auth_date: int) -> str:
+    fields = {
+        "auth_date": str(auth_date),
+        "user": json.dumps({"id": 1, "first_name": "Игрок"}, separators=(",", ":")),
+    }
+    data_check_string = "\n".join(f"{key}={value}" for key, value in sorted(fields.items()))
+    secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+    signature = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+    return urlencode({**fields, "hash": signature})
+
+
+@unittest.skipUnless(API_TEST_DEPENDENCIES_AVAILABLE, "Нужны зависимости из requirements-dev.txt.")
+class ApiTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.service = FakeService()
+        config = Config(
+            bot_token="123456:test",
+            database_url="postgresql://unused/test",
+            seed_test_opponent=False,
+            webapp_init_data_max_age_seconds=3600,
+            bot_username="ping_tablet_test_bot",
+            webapp_allowed_origins=("http://localhost:5173",),
+            webapp_url="https://example.test",
+        )
+        state = AppState(
+            config=config,
+            database=None,  # type: ignore[arg-type]
+            service=self.service,  # type: ignore[arg-type]
+            rating_guard=RatingRequestGuard(),
+        )
+        self.app = create_app(state)
+        self.client = TestClient(self.app)
+
+    def authorization(self, auth_date: int) -> dict[str, str]:
+        return {"Authorization": f"tma {signed_init_data('123456:test', auth_date)}"}
+
+    def test_protected_route_rejects_missing_init_data(self) -> None:
+        response = self.client.get("/api/opponents/999/stats")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["detail"], "Нужны данные Telegram Mini App.")
+
+    def test_unrelated_opponent_is_not_exposed(self) -> None:
+        self.app.dependency_overrides[require_webapp_user] = lambda: WebAppUser(
+            id=1,
+            first_name="Игрок",
+            username=None,
+        )
+
+        response = self.client.get("/api/opponents/999/stats")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json(), {"detail": "Ничего не найдено."})
+
+    def test_signed_init_data_returns_representative_stats_shape(self) -> None:
+        response = self.client.get(
+            "/api/opponents/10/stats",
+            headers=self.authorization(int(time.time())),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["stats"]["wins"], 1)
+        self.assertEqual(response.json()["opponent_name"], "Соперник")
+
+    def test_stale_and_future_init_data_are_rejected(self) -> None:
+        now = int(time.time())
+        for auth_date in (now - 3601, now + 60):
+            with self.subTest(auth_date=auth_date):
+                response = self.client.get(
+                    "/api/opponents/10/stats",
+                    headers=self.authorization(auth_date),
+                )
+                self.assertEqual(response.status_code, 401)
+
+    def test_score_operation_id_reaches_service(self) -> None:
+        self.app.dependency_overrides[require_webapp_user] = lambda: WebAppUser(
+            id=1,
+            first_name="Игрок",
+            username=None,
+        )
+
+        response = self.client.post(
+            "/api/opponents/10/scores",
+            json={"score": "11-7", "operation_id": "score-operation-42"},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["game_id"], 42)
+        self.assertEqual(self.service.operation_ids, ["score-operation-42"])
+
+    def test_conflicting_score_operation_returns_409(self) -> None:
+        self.app.dependency_overrides[require_webapp_user] = lambda: WebAppUser(
+            id=1,
+            first_name="Игрок",
+            username=None,
+        )
+
+        response = self.client.post(
+            "/api/opponents/10/scores",
+            json={"score": "11-7", "operation_id": "conflicting-operation"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("уже использован", response.json()["detail"])
+
+    def test_oversized_json_is_rejected_before_validation(self) -> None:
+        response = self.client.post(
+            "/api/invites/accept",
+            content=b'{' + b'"code":"' + (b"A" * 17_000) + b'"}',
+            headers={"Content-Type": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 413)
+        self.assertIn("слишком большой", response.json()["detail"])
+
+
+if __name__ == "__main__":
+    unittest.main()

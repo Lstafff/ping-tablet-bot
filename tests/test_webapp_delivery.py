@@ -45,7 +45,16 @@ class WebAppDeliveryTest(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        self.assertEqual(response, {"id": 4, "name": "Мария", "first_name": "Мария", "username": "maria"})
+        self.assertEqual(
+            response,
+            {
+                "id": 4,
+                "name": "Мария",
+                "first_name": "Мария",
+                "username": "maria",
+                "elo_rating": None,
+            },
+        )
 
 
 if __name__ == "__main__":

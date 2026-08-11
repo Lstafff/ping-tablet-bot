@@ -33,6 +33,9 @@ class Opponent:
     opponent_user_id: Optional[int]
     first_name: Optional[str] = None
     username: Optional[str] = None
+    elo_rating: Optional[int] = None
+    history_start_game_id: int = 0
+    is_hidden: bool = False
 
 
 @dataclass(frozen=True)
@@ -78,6 +81,8 @@ class RecentGame:
     played_at: str
     own_score: int
     opponent_score: int
+    game_id: Optional[int] = None
+    elo_change: Optional[int] = None
 
 
 @dataclass(frozen=True)

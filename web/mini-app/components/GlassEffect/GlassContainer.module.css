@@ -32,3 +32,25 @@
   will-change: transform;
   transform: translateZ(0);
 }
+
+@media (prefers-reduced-transparency: reduce) {
+  .glassBackground {
+    background: var(--color-surface);
+    -apple-visual-effect: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .glassBackground {
+    background: var(--color-surface);
+    -apple-visual-effect: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .glassShadow {
+    box-shadow: 0 0 0 1px var(--color-border-strong);
+  }
+}
