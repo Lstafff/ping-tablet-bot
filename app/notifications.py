@@ -17,7 +17,6 @@ async def notify_inviter_about_new_opponent(
     database: Database,
     inviter_id: int,
     invited_user_id: int,
-    webapp_url: str = "",
 ) -> None:
     invited_user = database.get_user(invited_user_id)
     invited_name = display_user_name(invited_user.first_name, invited_user.username)
@@ -27,7 +26,7 @@ async def notify_inviter_about_new_opponent(
             inviter_id,
             inviter_id,
             texts.invite_new_opponent_notification(invited_name),
-            main_menu_keyboard(True, webapp_url),
+            main_menu_keyboard(True),
         )
     except TelegramAPIError:
         logging.exception("Failed to notify inviter about a new opponent")

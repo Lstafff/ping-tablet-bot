@@ -482,7 +482,6 @@ async def accept_invite(
                 get_app_state(request).database,
                 result.inviter_id,
                 current_user.id,
-                config.webapp_url,
             )
         finally:
             await bot.session.close()

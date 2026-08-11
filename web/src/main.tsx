@@ -1,8 +1,12 @@
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { FormEvent, type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
+import { FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import ReactDOM from "react-dom/client";
+import { Drawer } from "vaul";
 import avatarEmojis from "./avatar-emojis.json";
+
+import "@fontsource-variable/nunito/wght.css";
+import "@fontsource/noto-color-emoji/400.css";
 
 import { requestApi } from "./api/client";
 import type {
@@ -21,7 +25,9 @@ import type {
 } from "./api/types";
 import { AppIcon } from "./components/AppIcon";
 import { BottomNavigation, MainTab } from "./components/BottomNavigation";
-import { easeDrawer, easeInOut, easeOut } from "./lib/motion";
+import { NumericKeypad } from "./components/NumericKeypad";
+import { ProgressiveLoadTrigger } from "./components/ProgressiveLoadTrigger";
+import { easeInOut, easeOut } from "./lib/motion";
 import { tma } from "./lib/tma";
 import "./tokens.css";
 import "./styles.css";
@@ -490,6 +496,19 @@ function createOperationId(): string {
   return `score-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function recentGameKey(game: RecentGame): string {
+  return `${game.game_id ?? game.played_at}-${game.own_score}-${game.opponent_score}`;
+}
+
+function historyGameKey(game: HistoryGame): string {
+  return `${game.opponent_id}-${recentGameKey(game)}`;
+}
+
+function appendUnique<T>(current: T[], next: T[], key: (item: T) => string): T[] {
+  const seen = new Set(current.map(key));
+  return [...current, ...next.filter((item) => !seen.has(key(item)))];
+}
+
 function addGameToDailyView(view: DailyView | null, game: RecentGame): DailyView {
   const playedOn = game.played_at.slice(0, 10);
   const won = game.own_score > game.opponent_score;
@@ -521,9 +540,16 @@ function App() {
   const [chartGames, setChartGames] = useState<RecentGame[]>([]);
   const [history, setHistory] = useState<HistoryView | null>(null);
   const [historyNewestFirst, setHistoryNewestFirst] = useState(true);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
+  const [historyLoadError, setHistoryLoadError] = useState("");
+  const [dailyLoadingMore, setDailyLoadingMore] = useState(false);
+  const [dailyLoadError, setDailyLoadError] = useState("");
+  const [gamesLoadingMore, setGamesLoadingMore] = useState(false);
+  const [gamesLoadError, setGamesLoadError] = useState("");
   const [statsTab, setStatsTab] = useState<StatsTab>("summary");
   const [scoreSide, setScoreSide] = useState<ScoreSide>("own");
   const [scoreReturnTarget, setScoreReturnTarget] = useState<ScoreReturnTarget>("home");
+  const [scoreDrawerOpen, setScoreDrawerOpen] = useState(false);
   const [actionSheet, setActionSheet] = useState<ActionSheet>(null);
   const [opponentEditSheet, setOpponentEditSheet] = useState<OpponentEditSheet>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
@@ -577,9 +603,23 @@ function App() {
     setHistory(historyResponse);
   };
 
-  const loadHistory = async (page = 1) => {
-    const response = await api<HistoryView>(`/api/games?page=${page}`);
-    setHistory(response);
+  const loadHistory = async (page = 1, append = false) => {
+    if (append) {
+      if (historyLoadingMore || (history && history.page >= history.total_pages)) return;
+      setHistoryLoadingMore(true);
+      setHistoryLoadError("");
+    }
+    try {
+      const response = await api<HistoryView>(`/api/games?page=${page}`);
+      setHistory((current) => append && current
+        ? { ...response, games: appendUnique(current.games, response.games, historyGameKey) }
+        : response);
+    } catch (loadError: unknown) {
+      if (!append) throw loadError;
+      setHistoryLoadError(messageFromError(loadError));
+    } finally {
+      if (append) setHistoryLoadingMore(false);
+    }
   };
 
   const loadOpponent = async (opponent: Opponent, tab: StatsTab = "summary", page = 1, showScreen = true) => {
@@ -587,6 +627,8 @@ function App() {
     setSelectedOpponent(opponent);
     setStatsTab(tab);
     setLastSavedGameId(null);
+    setDailyLoadError("");
+    setGamesLoadError("");
     setError("");
     if (showScreen) setScreen("opponent");
     const [statsResponse, gamesResponse, dailyResponse, chartResponse] = await Promise.all([
@@ -599,7 +641,45 @@ function App() {
     setOpponentStats(statsResponse);
     setGames(gamesResponse);
     setDaily(dailyResponse);
+    setDailyLoadError("");
+    setGamesLoadError("");
     setChartGames(chartResponse.games);
+  };
+
+  const loadOpponentDays = async (page: number) => {
+    if (!selectedOpponent || dailyLoadingMore || (daily && daily.page >= daily.total_pages)) return;
+    const requestId = opponentRequestId.current;
+    setDailyLoadingMore(true);
+    setDailyLoadError("");
+    try {
+      const response = await api<DailyView>(`/api/opponents/${selectedOpponent.id}/daily?page=${page}`);
+      if (requestId !== opponentRequestId.current) return;
+      setDaily((current) => current
+        ? { ...response, daily_stats: appendUnique(current.daily_stats, response.daily_stats, (item) => item.played_on) }
+        : response);
+    } catch (loadError: unknown) {
+      setDailyLoadError(messageFromError(loadError));
+    } finally {
+      setDailyLoadingMore(false);
+    }
+  };
+
+  const loadOpponentGames = async (page: number) => {
+    if (!selectedOpponent || gamesLoadingMore || (games && games.page >= games.total_pages)) return;
+    const requestId = opponentRequestId.current;
+    setGamesLoadingMore(true);
+    setGamesLoadError("");
+    try {
+      const response = await api<GamesView>(`/api/opponents/${selectedOpponent.id}/games?page=${page}&limit=10`);
+      if (requestId !== opponentRequestId.current) return;
+      setGames((current) => current
+        ? { ...response, games: appendUnique(current.games, response.games, recentGameKey) }
+        : response);
+    } catch (loadError: unknown) {
+      setGamesLoadError(messageFromError(loadError));
+    } finally {
+      setGamesLoadingMore(false);
+    }
   };
 
   useEffect(() => {
@@ -744,7 +824,7 @@ function App() {
       } : opponent));
       if (savedGame) {
         setGames((current) => ({
-          games: [savedGame, ...(current?.games ?? []).filter((game) => game.game_id !== savedGame.game_id)].slice(0, 10),
+          games: [savedGame, ...(current?.games ?? []).filter((game) => game.game_id !== savedGame.game_id)],
           page: 1,
           total_pages: current?.total_pages ?? 1,
         }));
@@ -758,7 +838,7 @@ function App() {
               opponent_name: result.opponent_name,
             },
             ...(current?.games ?? []).filter((game) => game.game_id !== savedGame.game_id),
-          ].slice(0, 20),
+          ],
           page: 1,
           total_pages: current?.total_pages ?? 1,
         }));
@@ -767,6 +847,7 @@ function App() {
       setOpponentScore("");
       scoreOperationId.current = null;
       tma.haptic.notification("success");
+      setScoreDrawerOpen(false);
       setScreen("opponent");
     } catch (submitError: unknown) {
       setError(messageFromError(submitError));
@@ -784,7 +865,7 @@ function App() {
     setScoreReturnTarget(returnTarget);
     scoreOperationId.current = null;
     setError("");
-    setScreen("score");
+    setScoreDrawerOpen(true);
   };
 
   const openScoreForOpponent = async (opponent: Opponent) => {
@@ -803,6 +884,7 @@ function App() {
 
   const backFromScoreToOpponentPicker = () => {
     resetScoreDraft();
+    setScoreDrawerOpen(false);
     setScreen("home");
     setActionSheet("opponents");
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -810,6 +892,7 @@ function App() {
 
   const closeScoreToOrigin = () => {
     resetScoreDraft();
+    setScoreDrawerOpen(false);
     setActionSheet(null);
     if (scoreReturnTarget === "opponent" && selectedOpponent && opponentStats) {
       setScreen("opponent");
@@ -1105,9 +1188,13 @@ function App() {
   };
 
   useEffect(() => {
+    if (scoreDrawerOpen) return tma.backButton(closeScoreToOrigin);
     if (screen === "home" || screen === "stats" || screen === "profile") return;
     return tma.backButton(goBack);
-  }, [screen]);
+    // Re-subscribe only when routing state changes; both handlers intentionally
+    // close over the matching render's score/opponent state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, scoreDrawerOpen]);
 
   useEffect(() => {
     if (loading || !profile || handledStartParam.current) return;
@@ -1116,9 +1203,12 @@ function App() {
     handledStartParam.current = true;
     setInviteInput(startParam.slice("invite_".length).toUpperCase());
     void openInvite("accept");
+    // `openInvite` belongs to the render that first receives the ready profile;
+    // re-running this one-shot start-param effect for its identity is incorrect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, profile]);
 
-  const page = useMemo(() => {
+  const page = (() => {
     if (loading) {
       return <LoadingScreen />;
     }
@@ -1151,7 +1241,15 @@ function App() {
       );
     }
     if (screen === "stats") {
-      return <HistoryScreen newestFirst={historyNewestFirst} view={history} onPage={(page) => void loadHistory(page)} />;
+      return (
+        <HistoryScreen
+          newestFirst={historyNewestFirst}
+          view={history}
+          loadingMore={historyLoadingMore}
+          loadError={historyLoadError}
+          onLoadMore={() => void loadHistory((history?.page ?? 1) + 1, true)}
+        />
+      );
     }
     if (screen === "rating") {
       return (
@@ -1179,34 +1277,16 @@ function App() {
           chartGames={chartGames}
           lastSavedGameId={lastSavedGameId}
           submitting={scoreSubmitting}
-          onAddScore={() => openScore("opponent")}
           onUndo={() => void undoScore()}
           onTabChange={selectOpponentTab}
-          onDaysPage={(page) => selectedOpponent && openOpponent(selectedOpponent, "days", page)}
-          onGamesPage={(page) => selectedOpponent && openOpponent(selectedOpponent, "games", page)}
+          dailyLoadingMore={dailyLoadingMore}
+          dailyLoadError={dailyLoadError}
+          gamesLoadingMore={gamesLoadingMore}
+          gamesLoadError={gamesLoadError}
+          onDaysLoadMore={() => void loadOpponentDays((daily?.page ?? 1) + 1)}
+          onGamesLoadMore={() => void loadOpponentGames((games?.page ?? 1) + 1)}
           onEdit={openEdit}
           editingOpen={opponentEditSheet !== null}
-        />
-      );
-    }
-    if (screen === "score" && selectedOpponent && opponentStats) {
-      return (
-        <ScoreScreen
-          opponentName={selectedName}
-          ownScore={ownScore}
-          opponentScore={opponentScore}
-          side={scoreSide}
-          submitting={scoreSubmitting}
-          validationMessage={scoreValidationMessage}
-          onDigit={enterScoreDigit}
-          onErase={eraseScoreDigit}
-          onContinue={continueScore}
-          onBack={backFromScoreToOpponentPicker}
-          onClose={closeScoreToOrigin}
-          onSide={(side) => {
-            setScoreValidationMessage("");
-            setScoreSide(side);
-          }}
         />
       );
     }
@@ -1244,44 +1324,9 @@ function App() {
       );
     }
     return <HomeScreen profile={profile} opponents={opponents} onOpenOpponent={openOpponent} />;
-  }, [
-    confirmAction,
-    actionSheet,
-    avatarPickerOpen,
-    chartGames,
-    daily,
-    error,
-    games,
-    gamesTotal,
-    history,
-    historyNewestFirst,
-    inviteCode,
-    inviteInput,
-    inviteLink,
-    inviteMessage,
-    lastSavedGameId,
-    loading,
-    opponentScore,
-    opponentEditSheet,
-    opponentStats,
-    opponents,
-    ownScore,
-    pointsTotal,
-    profile,
-    profileEditing,
-    profileNameInput,
-    ratingInput,
-    screen,
-    scoreSide,
-    scoreReturnTarget,
-    scoreValidationMessage,
-    selectedName,
-    selectedOpponent,
-    statsTab,
-    pendingActions,
-  ]);
+  })();
 
-  const canShowNavigation = profile && !loading && !profileEditing && (screen === "home" || screen === "stats" || screen === "profile");
+  const canShowNavigation = profile && !loading && (screen === "home" || screen === "stats" || screen === "profile" || screen === "opponent");
   const activeTab: MainTab = screen === "stats" || screen === "profile" ? screen : "matches";
   const isMainTabScreen = screen === "home" || screen === "stats" || screen === "profile";
   const mainTabEnterTransform = !isMainTabScreen
@@ -1295,7 +1340,7 @@ function App() {
   return (
     <MotionConfig reducedMotion="user">
       <LayoutGroup id="ping-tablet-layout">
-        <div className={screen === "score" ? "app-shell app-shell-dark" : "app-shell"}>
+        <div className="app-shell" data-vaul-drawer-wrapper="">
           {profile && (screen === "home" || screen === "stats" || screen === "opponent") ? (
             <PageHeader
               title={screen === "home" ? "пинг понг каунтер" : screen === "stats" ? "история" : "статистика"}
@@ -1324,15 +1369,15 @@ function App() {
               className="screen"
               key={screen}
               initial={{
-                opacity: screen === "score" && !reduceMotion ? 1 : 0,
-                transform: reduceMotion ? "translate(0, 0)" : screen === "score" ? "translateY(100%)" : mainTabEnterTransform,
+                opacity: 0,
+                transform: reduceMotion ? "translate(0, 0)" : mainTabEnterTransform,
               }}
               animate={{
                 opacity: 1,
                 transform: "translate(0, 0)",
                 transition: {
-                  duration: reduceMotion ? 0.12 : screen === "score" ? 0.28 : 0.18,
-                  ease: screen === "score" ? easeDrawer : easeOut,
+                  duration: reduceMotion ? 0.12 : 0.18,
+                  ease: easeOut,
                 },
               }}
               onAnimationComplete={() => {
@@ -1340,10 +1385,10 @@ function App() {
               }}
               exit={{
                 opacity: 0,
-                transform: reduceMotion ? "translateY(0)" : screen === "score" ? "translateY(100%)" : "translateY(-3px)",
+                transform: reduceMotion ? "translateY(0)" : "translateY(-3px)",
                 transition: {
-                  duration: reduceMotion ? 0.12 : screen === "score" ? 0.28 : 0.12,
-                  ease: screen === "score" ? easeDrawer : easeOut,
+                  duration: reduceMotion ? 0.12 : 0.12,
+                  ease: easeOut,
                 },
               }}
             >
@@ -1354,7 +1399,7 @@ function App() {
             </motion.main>
           </AnimatePresence>
 
-        {canShowNavigation || (screen === "profile" && profileEditing) ? (
+        {canShowNavigation ? (
           <div className="bottom-toolbar-slot">
             <motion.div
               className="bottom-nav-slot"
@@ -1365,11 +1410,36 @@ function App() {
               <BottomNavigation
                 active={activeTab}
                 onSelect={selectMainTab}
-                profileEditing={screen === "profile" && profileEditing}
-                profileSaveDisabled={profileSubmitting || !profileNameInput.trim()}
+                actionLabel={screen === "profile" && profileEditing ? "Сохранить" : screen === "opponent" ? "Добавить счёт" : undefined}
+                actionForm={screen === "profile" && profileEditing ? "profile-name-form" : undefined}
+                actionDisabled={screen === "profile" && profileEditing ? profileSubmitting || !profileNameInput.trim() : false}
+                onAction={screen === "opponent" ? () => openScore("opponent") : undefined}
               />
             </motion.div>
           </div>
+        ) : null}
+        {selectedOpponent && opponentStats ? (
+          <ScoreDrawer
+            open={scoreDrawerOpen}
+            opponentName={selectedName}
+            ownScore={ownScore}
+            opponentScore={opponentScore}
+            side={scoreSide}
+            submitting={scoreSubmitting}
+            validationMessage={scoreValidationMessage}
+            onOpenChange={(open) => {
+              if (!open) closeScoreToOrigin();
+            }}
+            onDigit={enterScoreDigit}
+            onErase={eraseScoreDigit}
+            onContinue={continueScore}
+            onBack={backFromScoreToOpponentPicker}
+            onClose={closeScoreToOrigin}
+            onSide={(side) => {
+              setScoreValidationMessage("");
+              setScoreSide(side);
+            }}
+          />
         ) : null}
         <ActionMenu
           mode={actionSheet}
@@ -1559,6 +1629,7 @@ function HeaderProfileAvatar({ value, back }: { value: string | null; back: bool
     : value
       ? <span className="profile-avatar-emoji">{value}</span>
       : null;
+  const showDefaultAvatar = !back && !customAvatar;
 
   return (
     <motion.span
@@ -1585,13 +1656,13 @@ function HeaderProfileAvatar({ value, back }: { value: string | null; back: bool
         <motion.circle
           cx="12"
           cy="8"
-          r="3"
-          animate={{ opacity: back ? 0 : 1, pathLength: back ? 0 : 1, transform: reduceMotion || !back ? "scale(1)" : "scale(0.72)" }}
+          r="5"
+          animate={{ opacity: showDefaultAvatar ? 1 : 0, pathLength: showDefaultAvatar ? 1 : 0, transform: reduceMotion || showDefaultAvatar ? "scale(1)" : "scale(0.72)" }}
           transition={morphTransition}
         />
         <motion.path
-          d="M5 21a7 7 0 0 1 14 0"
-          animate={{ opacity: back ? 0 : 1, pathLength: back ? 0 : 1, transform: reduceMotion || !back ? "scale(1)" : "scale(0.72)" }}
+          d="M20 21a8 8 0 0 0-16 0"
+          animate={{ opacity: showDefaultAvatar ? 1 : 0, pathLength: showDefaultAvatar ? 1 : 0, transform: reduceMotion || showDefaultAvatar ? "scale(1)" : "scale(0.72)" }}
           transition={morphTransition}
         />
         <motion.path
@@ -1698,7 +1769,23 @@ function ScoreValue({ value }: { value: string | null }) {
   return parts.length === 2 ? <ScorePair left={parts[0].trim()} right={parts[1].trim()} /> : <>{value}</>;
 }
 
-function HistoryScreen({ newestFirst, view, onPage }: { newestFirst: boolean; view: HistoryView | null; onPage(page: number): void }) {
+function ProgressiveBottomBlur() {
+  return <div className="progressive-bottom-blur" aria-hidden="true" />;
+}
+
+function HistoryScreen({
+  newestFirst,
+  view,
+  loadingMore,
+  loadError,
+  onLoadMore,
+}: {
+  newestFirst: boolean;
+  view: HistoryView | null;
+  loadingMore: boolean;
+  loadError: string;
+  onLoadMore(): void;
+}) {
   const reduceMotion = useReducedMotion();
   const sortedGames = [...(view?.games ?? [])].sort((left, right) => {
     const delta = new Date(right.played_at).valueOf() - new Date(left.played_at).valueOf();
@@ -1740,7 +1827,13 @@ function HistoryScreen({ newestFirst, view, onPage }: { newestFirst: boolean; vi
           </div>
         </motion.section>
       ))}</LayoutGroup> : <p className="muted-copy history-empty">Здесь появятся сыгранные матчи.</p>}
-      <Pagination page={view?.page ?? 1} totalPages={view?.total_pages ?? 1} onPage={onPage} />
+      <ProgressiveLoadTrigger
+        error={loadError}
+        hasMore={(view?.page ?? 1) < (view?.total_pages ?? 1)}
+        loading={loadingMore}
+        onLoadMore={onLoadMore}
+      />
+      <ProgressiveBottomBlur />
     </section>
   );
 }
@@ -1754,15 +1847,58 @@ function OpponentScreen(props: {
   chartGames: RecentGame[];
   lastSavedGameId: number | null;
   submitting: boolean;
-  onAddScore(): void;
   onUndo(): void;
   onTabChange(tab: StatsTab): void;
-  onDaysPage(page: number): void;
-  onGamesPage(page: number): void;
+  dailyLoadingMore: boolean;
+  dailyLoadError: string;
+  gamesLoadingMore: boolean;
+  gamesLoadError: string;
+  onDaysLoadMore(): void;
+  onGamesLoadMore(): void;
   onEdit(): void;
   editingOpen: boolean;
 }) {
   const { opponent, stats } = props;
+  const reduceMotion = useReducedMotion();
+  const previousTab = useRef(props.tab);
+  const tabOrder: Record<StatsTab, number> = { summary: 0, days: 1, games: 2 };
+  const tabDirection = Math.sign(tabOrder[props.tab] - tabOrder[previousTab.current]);
+
+  useEffect(() => {
+    previousTab.current = props.tab;
+  }, [props.tab]);
+
+  const tabContent = props.tab === "summary" ? (
+    <>
+      <StatsSummary stats={stats.extended_stats} />
+      {!props.editingOpen ? (
+        <motion.button
+          className="secondary-button opponent-edit-inline"
+          type="button"
+          layoutId="opponent-edit-flow-surface"
+          onClick={props.onEdit}
+          transition={{ layout: reduceMotion ? { duration: 0 } : { duration: 0.24, ease: easeInOut } }}
+        >
+          Редактировать
+        </motion.button>
+      ) : <span className="opponent-edit-inline-placeholder" aria-hidden="true" />}
+    </>
+  ) : props.tab === "days" ? (
+    <DailyTable
+      view={props.daily}
+      loadingMore={props.dailyLoadingMore}
+      loadError={props.dailyLoadError}
+      onLoadMore={props.onDaysLoadMore}
+    />
+  ) : (
+    <GamesTable
+      view={props.games}
+      loadingMore={props.gamesLoadingMore}
+      loadError={props.gamesLoadError}
+      onLoadMore={props.onGamesLoadMore}
+    />
+  );
+
   return (
     <>
       <section className="opponent-hero">
@@ -1781,7 +1917,7 @@ function OpponentScreen(props: {
 
       <section className="opponent-metrics" aria-label="Главная статистика">
         <div><span>Мячи</span><strong><ScorePair left={stats.stats.points_for} right={stats.stats.points_against} /></strong></div>
-        <div><span>Лучшая серия</span><strong>{stats.extended_stats.win_streak}</strong></div>
+        <div><span>Текущая серия</span><strong>{stats.extended_stats.win_streak}</strong></div>
       </section>
 
       <LayoutGroup id={`opponent-stat-tabs-${opponent.id}`}>
@@ -1792,28 +1928,31 @@ function OpponentScreen(props: {
         </div>
       </LayoutGroup>
 
-      {props.tab === "summary" ? <StatsSummary stats={stats.extended_stats} /> : null}
-      {props.tab === "days" ? <DailyTable view={props.daily} onPage={props.onDaysPage} /> : null}
-      {props.tab === "games" ? <GamesTable view={props.games} onPage={props.onGamesPage} /> : null}
-
-      <div className="opponent-actions">
-        <button className="primary-button" type="button" onClick={props.onAddScore}>Добавить счёт</button>
-        {!props.editingOpen ? (
-          <motion.button
-            className="opponent-edit-button"
-            type="button"
-            aria-label="Изменить"
-            title="Изменить"
-            onClick={props.onEdit}
-            initial={{ opacity: 0, transform: "scale(0.94)" }}
-            animate={{ opacity: 1, transform: "scale(1)" }}
-            whileTap={{ scale: 0.92 }}
-            transition={{ duration: 0.18, ease: easeOut }}
-          >
-            <AppIcon name="pencil" size={25} aria-hidden="true" />
-          </motion.button>
-        ) : <span className="opponent-edit-placeholder" aria-hidden="true" />}
-      </div>
+      <AnimatePresence initial={false} mode="popLayout" custom={tabDirection}>
+        <motion.div
+          className="opponent-tab-content"
+          key={props.tab}
+          custom={tabDirection}
+          variants={{
+            initial: (direction: number) => ({
+              opacity: 0,
+              transform: reduceMotion ? "translateX(0)" : `translateX(${direction >= 0 ? 14 : -14}px)`,
+            }),
+            animate: { opacity: 1, transform: "translateX(0)" },
+            exit: (direction: number) => ({
+              opacity: 0,
+              transform: reduceMotion ? "translateX(0)" : `translateX(${direction >= 0 ? -10 : 10}px)`,
+            }),
+          }}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }}
+        >
+          {tabContent}
+        </motion.div>
+      </AnimatePresence>
+      {props.tab === "days" || props.tab === "games" ? <ProgressiveBottomBlur /> : null}
       {props.lastSavedGameId !== null ? <button className="text-button undo-button" type="button" onClick={props.onUndo} disabled={props.submitting}>Отменить последний счёт</button> : null}
     </>
   );
@@ -1896,7 +2035,11 @@ function ActivityHeatmap({ games }: { games: RecentGame[] }) {
       </div>
       <div className="match-activity-footer">
         <span>{dateFormatter.format(startDate)}</span>
-        <span className="activity-legend"><i className="activity-cell" data-level="1" data-result="win" />Победы<i className="activity-cell" data-level="1" data-result="loss" />Поражения</span>
+        <span className="activity-legend">
+          <span><i className="activity-cell" data-level="1" data-result="win" />Победы</span>
+          <span><i className="activity-cell" data-level="1" data-result="mixed" />Оба исхода</span>
+          <span><i className="activity-cell" data-level="1" data-result="loss" />Поражения</span>
+        </span>
         <span>Сегодня</span>
       </div>
     </section>
@@ -2051,6 +2194,44 @@ function ScoreValidationSnackbar({ message }: { message: string }) {
   );
 }
 
+function ScoreDrawer(props: {
+  open: boolean;
+  opponentName: string;
+  ownScore: string;
+  opponentScore: string;
+  side: ScoreSide;
+  submitting: boolean;
+  validationMessage: string;
+  onOpenChange(open: boolean): void;
+  onDigit(digit: string): void;
+  onErase(): void;
+  onContinue(): void;
+  onBack(): void;
+  onClose(): void;
+  onSide(side: ScoreSide): void;
+}) {
+  return (
+    <Drawer.Root
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      fixed
+      handleOnly
+      repositionInputs={false}
+      shouldScaleBackground
+    >
+      <Drawer.Portal>
+        <Drawer.Overlay className="score-drawer-overlay" />
+        <Drawer.Content className="score-drawer-content">
+          <Drawer.Title className="visually-hidden">Добавить счёт</Drawer.Title>
+          <Drawer.Description className="visually-hidden">Введи свой счёт и счёт соперника</Drawer.Description>
+          <Drawer.Handle className="score-drawer-handle" aria-label="Потянуть, чтобы закрыть" />
+          <ScoreScreen {...props} />
+        </Drawer.Content>
+      </Drawer.Portal>
+    </Drawer.Root>
+  );
+}
+
 function ScoreScreen(props: {
   opponentName: string;
   ownScore: string;
@@ -2067,7 +2248,6 @@ function ScoreScreen(props: {
 }) {
   const current = props.side === "own" ? props.ownScore : props.opponentScore;
   const canContinue = props.side === "own" ? Boolean(props.ownScore) : Boolean(props.ownScore && props.opponentScore);
-  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "erase"];
 
   return (
     <motion.section className="score-screen">
@@ -2089,13 +2269,7 @@ function ScoreScreen(props: {
         />
       </p>
       <div className="score-opponent-row"><span className="avatar">{initials(props.opponentName)}</span><div><strong>{props.opponentName}</strong><small>{props.side === "own" ? "Сначала твой счёт" : "Теперь счёт соперника"}</small></div></div>
-      <div className="score-keypad" aria-label="Клавиатура счёта">
-        {keys.map((key, index) => key === "" ? <span key={`empty-${index}`} /> : (
-          <button key={key} type="button" aria-label={key === "erase" ? "Удалить цифру" : key} onClick={key === "erase" ? props.onErase : () => props.onDigit(key)}>
-            {key === "erase" ? <AppIcon name="arrow-left" size={29} /> : key}
-          </button>
-        ))}
-      </div>
+      <NumericKeypad ariaLabel="Клавиатура счёта" onDigit={props.onDigit} onErase={props.onErase} />
       <button className="score-continue" type="button" disabled={!canContinue || props.submitting} onClick={props.onContinue}>{props.submitting ? "Сохраняем…" : props.side === "own" ? "Дальше" : "Сохранить"}</button>
     </motion.section>
   );
@@ -2105,7 +2279,7 @@ function StatsSummary({ stats }: { stats: ExtendedStats }) {
   return (
     <section className="details-section">
       <dl className="facts-list">
-        <div><dt>Серия побед</dt><dd>{stats.win_streak}</dd></div>
+        <div><dt>Текущая серия</dt><dd>{stats.win_streak}</dd></div>
         <div><dt>Овертаймы</dt><dd><ScorePair left={stats.overtime_wins} right={stats.overtime_losses} /></dd></div>
         <div><dt>Самая длинная партия</dt><dd>{stats.longest_own_score !== null ? <ScorePair left={stats.longest_own_score} right={stats.longest_opponent_score ?? "—"} /> : "—"}</dd></div>
         <div><dt>Частый счёт</dt><dd><ScoreValue value={stats.most_common_score} /></dd></div>
@@ -2114,19 +2288,19 @@ function StatsSummary({ stats }: { stats: ExtendedStats }) {
   );
 }
 
-function DailyTable({ view, onPage }: { view: DailyView | null; onPage(page: number): void }) {
+function DailyTable({ view, loadingMore, loadError, onLoadMore }: { view: DailyView | null; loadingMore: boolean; loadError: string; onLoadMore(): void }) {
   return (
     <section className="table-section">
       {view?.daily_stats.length ? <div className="data-table" role="list">{view.daily_stats.map((day) => <div className="table-row" key={day.played_on} role="listitem"><time dateTime={day.played_on}>{formatDate(day.played_on)}</time><b><ScorePair left={day.wins} right={day.losses} /></b></div>)}</div> : <p className="muted-copy">Пока нет сыгранных матчей.</p>}
-      <Pagination page={view?.page ?? 1} totalPages={view?.total_pages ?? 1} onPage={onPage} />
+      <ProgressiveLoadTrigger error={loadError} hasMore={(view?.page ?? 1) < (view?.total_pages ?? 1)} loading={loadingMore} onLoadMore={onLoadMore} />
     </section>
   );
 }
 
-function GamesTable({ view, onPage }: { view: GamesView | null; onPage(page: number): void }) {
+function GamesTable({ view, loadingMore, loadError, onLoadMore }: { view: GamesView | null; loadingMore: boolean; loadError: string; onLoadMore(): void }) {
   return (
     <section className="table-section">
-      {view?.games.length ? <div className="data-table" role="list">{view.games.slice(0, 10).map((game) => {
+      {view?.games.length ? <div className="data-table" role="list">{view.games.map((game) => {
         const won = game.own_score > game.opponent_score;
         return (
           <div className="table-row" key={`${game.game_id ?? game.played_at}-${game.own_score}-${game.opponent_score}`} role="listitem">
@@ -2138,7 +2312,7 @@ function GamesTable({ view, onPage }: { view: GamesView | null; onPage(page: num
           </div>
         );
       })}</div> : <p className="muted-copy">Пока нет сыгранных матчей.</p>}
-      <Pagination page={view?.page ?? 1} totalPages={view?.total_pages ?? 1} onPage={onPage} />
+      <ProgressiveLoadTrigger error={loadError} hasMore={(view?.page ?? 1) < (view?.total_pages ?? 1)} loading={loadingMore} onLoadMore={onLoadMore} />
     </section>
   );
 }
@@ -2197,7 +2371,7 @@ function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: s
           <div><dt><AppIcon name="crown" size={21} /><span>Победы</span></dt><dd>{profile.stats.wins}</dd></div>
           <div><dt><AppIcon name="circle-minus" size={21} /><span>Поражения</span></dt><dd>{profile.stats.losses}</dd></div>
           <div><dt><AppIcon name="circle-pile" size={21} /><span>Всего мячей</span></dt><dd><ScorePair left={profile.stats.points_for} right={profile.stats.points_against} /></dd></div>
-          <div><dt><AppIcon name="zap" size={21} /><span>Лучшая серия</span></dt><dd>{profile.extended_stats.win_streak}</dd></div>
+          <div><dt><AppIcon name="zap" size={21} /><span>Текущая серия</span></dt><dd>{profile.extended_stats.win_streak}</dd></div>
           <div><dt><AppIcon name="clock" size={21} /><span>Овертаймы</span></dt><dd><ScorePair left={profile.extended_stats.overtime_wins} right={profile.extended_stats.overtime_losses} /></dd></div>
         </dl>
       </div>
@@ -2271,9 +2445,9 @@ function RatingScreen(props: { profile: Profile; value: string; submitting: bool
     <>
       <section className="rating-hero">
         <span aria-hidden="true"><AppIcon name="star" size={46} fill="currentColor" /></span>
-        <p>Твой рейтинг</p>
+        <p>Профессиональный рейтинг</p>
         <MorphingHeading>{rating ?? "Не указан"}</MorphingHeading>
-        <small>{props.profile.user.rating_is_fnt ? "Рейтинг ФНТР" : "Внутренний рейтинг"}</small>
+        {props.profile.user.rating_is_fnt ? <small>Рейтинг ФНТР</small> : null}
       </section>
       <section className="rating-editor">
         <form className="stacked-form rating-form" onSubmit={props.onSave}>
@@ -2495,7 +2669,8 @@ function OpponentEditMenu(props: {
 }) {
   const reduceMotion = useReducedMotion();
   const mode = props.mode;
-  const closedTransform = reduceMotion ? "translateY(0)" : "translateY(100%)";
+  const [pairSide, setPairSide] = useState<ScoreSide>("own");
+  const touchedPairSides = useRef<Set<ScoreSide>>(new Set());
   const titles: Record<Exclude<OpponentEditSheet, null>, string> = {
     actions: "Изменить",
     games: "Итог матчей",
@@ -2505,6 +2680,34 @@ function OpponentEditMenu(props: {
   };
   const isRoot = mode === "actions";
   const isDanger = mode === "reset" || mode === "delete";
+  const pairValue = mode === "games" ? props.gamesTotal : props.pointsTotal;
+  const [pairOwn = "", pairOpponent = ""] = pairValue.split(/[-:]/, 2);
+  const updatePair = (own: string, opponent: string) => {
+    const next = `${own}-${opponent}`;
+    if (mode === "games") props.onGamesTotal(next);
+    if (mode === "points") props.onPointsTotal(next);
+  };
+  const enterPairDigit = (digit: string) => {
+    const current = pairSide === "own" ? pairOwn : pairOpponent;
+    const next = touchedPairSides.current.has(pairSide) ? `${current}${digit}`.slice(0, 4) : digit;
+    touchedPairSides.current.add(pairSide);
+    if (pairSide === "own") updatePair(next, pairOpponent);
+    else updatePair(pairOwn, next);
+    tma.haptic.impact("light");
+  };
+  const erasePairDigit = () => {
+    const current = pairSide === "own" ? pairOwn : pairOpponent;
+    const next = touchedPairSides.current.has(pairSide) ? current.slice(0, -1) : "";
+    touchedPairSides.current.add(pairSide);
+    if (pairSide === "own") updatePair(next, pairOpponent);
+    else updatePair(pairOwn, next);
+  };
+
+  useEffect(() => {
+    if (mode !== "games" && mode !== "points") return;
+    setPairSide("own");
+    touchedPairSides.current = new Set();
+  }, [mode]);
 
   return (
     <motion.div
@@ -2517,19 +2720,14 @@ function OpponentEditMenu(props: {
       transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }}
     >
       <motion.section
-        className="action-sheet opponent-edit-sheet"
+        className="action-sheet action-sheet-root opponent-edit-sheet"
         role="dialog"
         aria-modal="true"
         aria-label={titles[mode]}
         onClick={(event) => event.stopPropagation()}
-        initial={{ opacity: 0, transform: closedTransform }}
-        animate={{ opacity: 1, transform: "translateY(0)" }}
-        exit={{
-          opacity: 0,
-          transform: closedTransform,
-          transition: { duration: reduceMotion ? 0.12 : 0.18, ease: easeOut },
-        }}
-        transition={{ duration: reduceMotion ? 0.12 : 0.24, ease: reduceMotion ? easeOut : easeDrawer }}
+        layout
+        layoutId="opponent-edit-flow-surface"
+        transition={{ layout: reduceMotion ? { duration: 0 } : { duration: 0.24, ease: easeInOut } }}
       >
         <div className="action-sheet-content">
           <header>
@@ -2565,15 +2763,23 @@ function OpponentEditMenu(props: {
                   {mode === "games" ? (
                     <div className="opponent-edit-form">
                       <label htmlFor="opponent-games-total">Общий счёт с {props.opponentName}</label>
-                      <input id="opponent-games-total" value={props.gamesTotal} onChange={(event) => props.onGamesTotal(event.target.value)} inputMode="numeric" placeholder="Например, 16-7" autoFocus />
-                      <button className="sheet-primary-button" type="button" onClick={props.onSaveGames} disabled={props.submitting || !props.gamesTotal.trim()}>Сохранить</button>
+                      <div className="pair-keypad-switch" id="opponent-games-total" role="tablist" aria-label="Чей итог изменить">
+                        <button className={pairSide === "own" ? "pair-keypad-side pair-keypad-side-active" : "pair-keypad-side"} type="button" role="tab" aria-selected={pairSide === "own"} onClick={() => setPairSide("own")}><span>Ты</span><strong>{pairOwn || "0"}</strong></button>
+                        <button className={pairSide === "opponent" ? "pair-keypad-side pair-keypad-side-active" : "pair-keypad-side"} type="button" role="tab" aria-selected={pairSide === "opponent"} onClick={() => setPairSide("opponent")}><span>{props.opponentName}</span><strong>{pairOpponent || "0"}</strong></button>
+                      </div>
+                      <NumericKeypad ariaLabel="Клавиатура итога матчей" onDigit={enterPairDigit} onErase={erasePairDigit} />
+                      <button className="sheet-primary-button" type="button" onClick={props.onSaveGames} disabled={props.submitting || !pairOwn || !pairOpponent}>Сохранить</button>
                     </div>
                   ) : null}
                   {mode === "points" ? (
                     <div className="opponent-edit-form">
                       <label htmlFor="opponent-points-total">Общий итог мячей</label>
-                      <input id="opponent-points-total" value={props.pointsTotal} onChange={(event) => props.onPointsTotal(event.target.value)} inputMode="numeric" placeholder="Например, 244-228" autoFocus />
-                      <button className="sheet-primary-button" type="button" onClick={props.onSavePoints} disabled={props.submitting || !props.pointsTotal.trim()}>Сохранить</button>
+                      <div className="pair-keypad-switch" id="opponent-points-total" role="tablist" aria-label="Чей итог изменить">
+                        <button className={pairSide === "own" ? "pair-keypad-side pair-keypad-side-active" : "pair-keypad-side"} type="button" role="tab" aria-selected={pairSide === "own"} onClick={() => setPairSide("own")}><span>Ты</span><strong>{pairOwn || "0"}</strong></button>
+                        <button className={pairSide === "opponent" ? "pair-keypad-side pair-keypad-side-active" : "pair-keypad-side"} type="button" role="tab" aria-selected={pairSide === "opponent"} onClick={() => setPairSide("opponent")}><span>{props.opponentName}</span><strong>{pairOpponent || "0"}</strong></button>
+                      </div>
+                      <NumericKeypad ariaLabel="Клавиатура итога мячей" onDigit={enterPairDigit} onErase={erasePairDigit} />
+                      <button className="sheet-primary-button" type="button" onClick={props.onSavePoints} disabled={props.submitting || !pairOwn || !pairOpponent}>Сохранить</button>
                     </div>
                   ) : null}
                   {isDanger ? (
@@ -2621,13 +2827,6 @@ function linkedStatsPolicyText(action: ConfirmAction, opponentName: string): str
   return `${localAction} Если данные останутся у соперника, они вернутся после новой партии. Если их не останется у вас обоих, счёт начнётся с нуля.`;
 }
 
-function Pagination({ page, totalPages, onPage }: { page: number; totalPages: number; onPage(page: number): void }) {
-  if (totalPages <= 1) {
-    return null;
-  }
-  return <div className="pagination"><button type="button" onClick={() => onPage(page - 1)} disabled={page <= 1}>Назад</button><span>{page} / {totalPages}</span><button type="button" onClick={() => onPage(page + 1)} disabled={page >= totalPages}>Дальше</button></div>;
-}
-
 function TabButton({ active, children, indicatorId, onClick }: { active: boolean; children: string; indicatorId: string; onClick(): void }) {
   const reduceMotion = useReducedMotion();
   return (
@@ -2636,7 +2835,7 @@ function TabButton({ active, children, indicatorId, onClick }: { active: boolean
         <motion.span
           className="tab-active-indicator"
           layoutId={indicatorId}
-          transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 36, mass: 0.7 }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: easeInOut }}
         />
       ) : null}
       <span className="tab-button-label">{children}</span>

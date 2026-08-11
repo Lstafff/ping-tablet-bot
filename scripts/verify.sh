@@ -10,4 +10,7 @@ node web/primitives/scripts/generate-layout-tokens.mjs --check
 node web/primitives/scripts/generate-react-icons.mjs --check
 
 cd web
+npm run lint
+npm run test
 npm run build
+npm run test:e2e

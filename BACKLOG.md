@@ -57,10 +57,27 @@ Ideas are tracked separately in `docs/ideas/`. An idea appears here only after i
 - Goal: make agent autonomy depend on repeatable checks.
 - Evidence: `.github/workflows/ci.yml` runs Postgres migrations/integration tests and the strict Vite build. Frontend unit/e2e/lint stay explicit future tool decisions.
 
-## LATER
+## NEXT / PHASE 4 BACKLOG
 
-### P3-008 — Implement product identity separation
+### P4-001 — Add frontend quality gates
 
-- Status: planned; target and migration constraints documented in DECISION-004
-- Goal: make Telegram one auth provider instead of the permanent product-user primary key.
-- Acceptance: coupling inventory, target schema, account-linking rules, staged migration, rollback and cost are documented; no destructive migration is executed in this task.
+- Status: done for the current Mini App toolchain.
+- Goal: make screen and interaction changes reviewable without treating a successful production build as the only frontend safety net.
+- Acceptance: choose and document a lint runner, focused component/integration tests for critical UI states and one production-like Telegram Mini App e2e smoke path; run them in CI; keep the suite narrow enough to remain fast and reliable.
+- Scope guard: do not introduce a large testing stack or chase coverage percentage without a demonstrated regression risk.
+- Evidence: ESLint checks `web/src`; Vitest covers the numeric keypad and progressive-load observer; Playwright covers opponent navigation, the Vaul score drawer, score entry and mutation feedback in a mobile viewport; `scripts/verify.sh` and CI run all three gates plus the production build.
+- Limit: the smoke test uses the Telegram WebApp SDK in a local browser and does not replace a final pass in a deployed Telegram client on real hardware.
+
+### P4-002 — Establish explicit API response contracts
+
+- Status: planned; execute before adding a second non-Telegram client or materially expanding the public API.
+- Goal: stop relying on separately maintained handwritten Python response dictionaries and TypeScript response types as the long-term client boundary.
+- Acceptance: representative FastAPI routes use explicit response models; contract tests cover their stable shapes and error semantics; the TypeScript client has one documented synchronization strategy. OpenAPI code generation remains optional and must be justified by maintenance cost.
+- Scope guard: preserve current routes and product behavior; do not combine this work with a frontend redesign or an API rewrite.
+
+### P4-003 — Separate product identity from Telegram
+
+- Status: planned direction; target and migration constraints documented in DECISION-004.
+- Goal: make Telegram one authentication provider instead of the permanent product-user primary key.
+- Acceptance: complete the coupling inventory; decide account-linking, collision and recovery rules; define an additive staged migration, verification, rollback and operational cost; execute schema changes only after those decisions and a verified backup.
+- Scope guard: no destructive identity migration, provider choice or iOS authentication implementation is authorized by this backlog entry alone.

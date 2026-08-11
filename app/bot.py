@@ -5,7 +5,7 @@ from typing import Optional
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, User as TelegramUser
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, MenuButtonWebApp, Message, User as TelegramUser, WebAppInfo
 
 from app import texts
 from app.callbacks import (
@@ -373,7 +373,7 @@ async def delete_confirm_callback(callback: CallbackQuery, bot: Bot) -> None:
         callback.message.chat.id,
         callback.from_user.id,
         texts.delete_opponent_done(result.opponent_name),
-        main_menu_keyboard(result.has_opponents, webapp_url),
+        main_menu_keyboard(result.has_opponents),
     )
 
 
@@ -431,7 +431,7 @@ async def handle_invite_code_input(message: Message, bot: Bot, user_id: int) -> 
     else:
         text = texts.INVITE_ALREADY_CONNECTED_TEXT
 
-    await render(bot, message.chat.id, user_id, text, main_menu_keyboard(result.has_opponents, webapp_url))
+    await render(bot, message.chat.id, user_id, text, main_menu_keyboard(result.has_opponents))
 
 
 async def handle_rating_input(message: Message, bot: Bot, user_id: int) -> None:
@@ -501,7 +501,7 @@ async def handle_edit_points_input(message: Message, bot: Bot, user_id: int, opp
 
 async def show_main_menu(bot: Bot, chat_id: int, user_id: int, force_new: bool = False) -> None:
     view = get_service().get_main_menu(user_id)
-    await render(bot, chat_id, user_id, texts.MAIN_MENU_TEXT, main_menu_keyboard(view.has_opponents, webapp_url), force_new=force_new)
+    await render(bot, chat_id, user_id, texts.MAIN_MENU_TEXT, main_menu_keyboard(view.has_opponents), force_new=force_new)
 
 
 async def show_opponents(bot: Bot, chat_id: int, user_id: int) -> None:
@@ -593,13 +593,24 @@ async def accept_invite_flow(message: Message, token: str, bot: Bot, force_new: 
             await notify_inviter_about_new_opponent(bot, result.inviter_id, user_id)
     else:
         text = texts.INVITE_ALREADY_CONNECTED_TEXT
-    await render(bot, message.chat.id, user_id, text, main_menu_keyboard(result.has_opponents, webapp_url), force_new=force_new)
+    await render(bot, message.chat.id, user_id, text, main_menu_keyboard(result.has_opponents), force_new=force_new)
 
 
 async def notify_inviter_about_new_opponent(bot: Bot, inviter_id: int, invited_user_id: int) -> None:
     if db is None:
         raise RuntimeError("Database is not initialized.")
-    await send_inviter_notification(bot, db, inviter_id, invited_user_id, webapp_url)
+    await send_inviter_notification(bot, db, inviter_id, invited_user_id)
+
+
+async def configure_webapp_menu(bot: Bot, url: str) -> None:
+    if not url:
+        return
+    await bot.set_chat_menu_button(
+        menu_button=MenuButtonWebApp(
+            text=texts.BUTTON_APP,
+            web_app=WebAppInfo(url=url),
+        )
+    )
 
 
 async def render(
@@ -647,6 +658,7 @@ async def main() -> None:
     dispatcher = Dispatcher()
     dispatcher.include_router(router)
     try:
+        await configure_webapp_menu(bot, webapp_url)
         await dispatcher.start_polling(bot)
     finally:
         await bot.session.close()

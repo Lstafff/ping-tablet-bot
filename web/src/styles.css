@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Tennis SF Pro Rounded Debug";
+  src: url("./assets/fonts/SF-Pro-Rounded-Debug.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 :root {
   color: var(--color-text-primary);
   background: var(--color-canvas);
@@ -18,10 +26,17 @@ body,
   margin: 0;
 }
 
+html,
+body {
+  overscroll-behavior: none;
+}
+
 body {
   min-width: 320px;
+  overflow-x: clip;
   background: var(--color-canvas);
   color: var(--color-text-primary);
+  -webkit-tap-highlight-color: transparent;
 }
 
 button,
@@ -31,6 +46,10 @@ input {
 
 button {
   cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button:disabled {
@@ -46,7 +65,8 @@ input:focus-visible {
 
 .app-shell {
   width: min(100%, 430px);
-  min-height: var(--tma-viewport-height, 100vh);
+  min-height: var(--tma-viewport-height, 100dvh);
+  overflow-x: clip;
   margin: 0 auto;
   padding: max(22px, env(safe-area-inset-top), var(--tma-safe-top)) max(var(--space-page-gutter), env(safe-area-inset-right), var(--tma-safe-right)) calc(112px + max(env(safe-area-inset-bottom), var(--tma-safe-bottom))) max(var(--space-page-gutter), env(safe-area-inset-left), var(--tma-safe-left));
   background: var(--color-canvas);
@@ -157,8 +177,7 @@ input:focus-visible {
 .back-button,
 .text-button,
 .nav-button,
-.tab-button,
-.pagination button {
+.tab-button {
   border: 0;
   background: transparent;
   color: inherit;
@@ -428,16 +447,14 @@ h2 {
 .primary-button,
 .danger-button,
 .nav-button,
-.tab-button,
-.pagination button {
+.tab-button {
   transition: transform var(--duration-press) var(--ease-out);
 }
 
 .primary-button:active,
 .danger-button:active,
 .nav-button:active,
-.tab-button:active,
-.pagination button:active {
+.tab-button:active {
   transform: scale(0.97);
 }
 
@@ -837,24 +854,11 @@ h2 {
   font-weight: var(--font-weight-semibold);
 }
 
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 18px;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-caption);
-}
-
-.pagination button {
-  min-height: 44px;
-  padding: 0;
-  color: var(--color-accent);
-  font-weight: var(--font-weight-bold);
-}
-
 .family-profile-hero {
   display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   justify-items: center;
   gap: 0;
   margin: 0;
@@ -886,6 +890,7 @@ h2 {
   width: 100%;
   height: 100%;
   place-items: center;
+  font-family: "Apple Color Emoji", "Noto Color Emoji", sans-serif;
   font-size: var(--font-size-display-avatar);
   line-height: var(--line-height-single);
   transform: translateY(3px);
@@ -916,6 +921,7 @@ h2 {
   width: min(100%, 310px);
   height: 40px;
   align-items: center;
+  justify-self: center;
   gap: 8px;
 }
 
@@ -1233,7 +1239,7 @@ h2 {
 }
 
 .level-row-current {
-  background: var(--color-success-soft);
+  background: inherit;
 }
 
 .level-emoji {
@@ -1241,6 +1247,7 @@ h2 {
   width: 44px;
   height: 44px;
   place-items: center;
+  font-family: "Apple Color Emoji", "Noto Color Emoji", sans-serif;
   border-radius: 50%;
   font-size: var(--font-size-title-2);
 }
@@ -1449,7 +1456,7 @@ h2 {
   padding: 0;
   border: 1px solid var(--color-glass-edge);
   border-radius: 999px;
-  box-shadow: var(--shadow-toolbar);
+  box-shadow: none;
   overflow: hidden;
 }
 
@@ -1486,7 +1493,6 @@ h2 {
   inset: 0;
   border-radius: 999px;
   background: var(--color-accent);
-  box-shadow: 0 5px 13px var(--color-accent-shadow);
   transform-origin: center;
 }
 
@@ -1519,12 +1525,28 @@ h2 {
   color: var(--color-on-accent);
 }
 
+.nav-button:focus-visible,
+.nav-save-button:focus-visible {
+  outline: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .nav-button:focus-visible .nav-button-content,
+  .nav-save-button:focus-visible .nav-button-content {
+    color: var(--color-focus-ring);
+  }
+
+  .nav-button-active:focus-visible .nav-button-content,
+  .nav-save-button:focus-visible .nav-button-content {
+    color: var(--color-on-accent);
+  }
+}
+
 .nav-active-pill {
   position: absolute;
   inset: 4px 0;
   border-radius: 999px;
   background: var(--color-accent);
-  box-shadow: 0 5px 13px var(--color-accent-shadow);
 }
 
 .nav-button-save-label {
@@ -1961,11 +1983,19 @@ h2 {
 
 .activity-legend {
   display: flex;
+  grid-column: 1 / -1;
+  grid-row: 2;
   min-width: 0;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 10px;
   white-space: nowrap;
+}
+
+.activity-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .activity-legend .activity-cell {
@@ -1997,6 +2027,65 @@ h2 {
 
 .opponent-metrics strong {
   font-size: var(--font-size-title-2);
+}
+
+.opponent-tab-content {
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.opponent-edit-inline,
+.opponent-edit-inline-placeholder {
+  display: block;
+  width: 100%;
+  min-height: var(--size-action-control);
+  margin-top: 18px;
+  border-radius: calc(var(--size-action-control) / 2);
+}
+
+.opponent-edit-inline {
+  color: var(--color-text-primary);
+}
+
+.progressive-load {
+  display: grid;
+  min-height: 68px;
+  place-items: center;
+  padding: 12px 0 28px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-subheadline);
+  text-align: center;
+}
+
+.progressive-load > span {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.progressive-load button {
+  min-height: 40px;
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  font-weight: var(--font-weight-bold);
+}
+
+.progressive-bottom-blur {
+  position: fixed;
+  z-index: 2;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: min(100%, 430px);
+  height: calc(112px + max(env(safe-area-inset-bottom), var(--tma-safe-bottom)));
+  margin: 0 auto;
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--color-canvas) 80%, transparent) 66%, var(--color-canvas));
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 58%);
+  mask-image: linear-gradient(to bottom, transparent, black 58%);
 }
 
 .opponent-actions {
@@ -2039,6 +2128,54 @@ h2 {
   font-weight: var(--font-weight-bold);
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.score-drawer-overlay {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.46);
+}
+
+.score-drawer-content {
+  position: fixed;
+  z-index: 41;
+  right: 14px;
+  bottom: 0;
+  left: 14px;
+  width: min(calc(100% - 28px), 402px);
+  height: min(820px, calc(var(--tma-viewport-height, 100dvh) - max(8px, env(safe-area-inset-top), var(--tma-safe-top))));
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--color-tray-border);
+  border-bottom: 0;
+  border-radius: 32px 32px 0 0;
+  outline: 0;
+  background: var(--color-dark-canvas);
+  color: var(--color-text-inverse);
+  box-shadow: var(--shadow-tray);
+}
+
+.score-drawer-handle {
+  position: absolute;
+  z-index: 2;
+  top: 9px;
+  left: 50%;
+  width: 42px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--color-dark-separator);
+  transform: translateX(-50%);
+}
+
 .app-shell-dark {
   min-height: var(--tma-viewport-height, 100vh);
   padding: 0;
@@ -2052,9 +2189,10 @@ h2 {
 
 .score-screen {
   display: grid;
-  min-height: var(--tma-viewport-height, 100vh);
+  height: 100%;
+  min-height: 0;
   grid-template-rows: auto auto auto auto auto minmax(270px, 1fr) auto;
-  padding: max(22px, env(safe-area-inset-top), var(--tma-safe-top)) max(26px, env(safe-area-inset-right), var(--tma-safe-right)) calc(18px + max(env(safe-area-inset-bottom), var(--tma-safe-bottom))) max(26px, env(safe-area-inset-left), var(--tma-safe-left));
+  padding: 22px 20px calc(10px + max(env(safe-area-inset-bottom), var(--tma-safe-bottom)));
   background: var(--color-dark-canvas);
 }
 
@@ -2075,7 +2213,7 @@ h2 {
 
 .score-header button,
 .score-switch button,
-.score-keypad button {
+.score-screen .numeric-keypad button {
   border: 0;
   background: transparent;
   color: var(--color-text-inverse);
@@ -2161,6 +2299,7 @@ h2 {
   z-index: 1;
   width: min(100%, 402px);
   overflow: hidden;
+  border-radius: 32px;
   background: var(--color-snackbar-surface);
   color: var(--color-snackbar-text);
   box-shadow: var(--shadow-snackbar);
@@ -2306,27 +2445,30 @@ h2 {
   color: var(--color-dark-text-tertiary);
 }
 
-.score-keypad {
+.numeric-keypad {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   align-content: center;
   margin-top: 10px;
 }
 
-.score-keypad button,
-.score-keypad > span {
+.numeric-keypad button,
+.numeric-keypad > span {
   display: grid;
   min-height: 64px;
   place-items: center;
+  border: 0;
   padding: 0;
+  background: transparent;
+  color: inherit;
   font-size: var(--font-size-title-1);
 }
 
-.score-keypad button {
+.numeric-keypad button {
   transition: transform var(--duration-press) var(--ease-out);
 }
 
-.score-keypad button:active {
+.numeric-keypad button:active {
   transform: scale(0.95);
 }
 
@@ -2343,6 +2485,45 @@ h2 {
 .score-continue:disabled {
   background: var(--color-dark-disabled-surface);
   color: var(--color-dark-disabled-text);
+}
+
+@media (max-height: 720px) {
+  .score-screen {
+    grid-template-rows: auto auto auto auto auto minmax(176px, 1fr) auto;
+    padding-top: 16px;
+  }
+
+  .score-header {
+    min-height: 44px;
+  }
+
+  .score-switch {
+    margin-top: 10px;
+  }
+
+  .score-value {
+    margin-top: 12px;
+    font-size: var(--font-size-display-large);
+  }
+
+  .score-progress {
+    margin: 6px 0 12px;
+  }
+
+  .score-opponent-row {
+    min-height: 58px;
+    padding-block: 6px;
+  }
+
+  .score-opponent-row .avatar {
+    width: 42px;
+    height: 42px;
+  }
+
+  .score-screen .numeric-keypad button,
+  .score-screen .numeric-keypad > span {
+    min-height: 44px;
+  }
 }
 
 .subscreen-hero {
@@ -2395,7 +2576,7 @@ h2 {
 }
 
 .action-overlay-expanded {
-  padding: 0;
+  padding: 16px 14px calc(16px + max(env(safe-area-inset-bottom), var(--tma-safe-bottom)));
 }
 
 .avatar-picker-overlay {
@@ -2414,7 +2595,7 @@ h2 {
   width: min(100%, 402px);
   max-height: min(70dvh, 560px);
   grid-template-rows: auto minmax(0, 1fr);
-  border-radius: 28px;
+  border-radius: 32px;
   background: var(--color-surface);
   padding: 8px;
   box-shadow: var(--shadow-picker);
@@ -2457,7 +2638,7 @@ h2 {
   border: 0;
   border-radius: 12px;
   background: transparent;
-  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-family: "Apple Color Emoji", "Noto Color Emoji", sans-serif;
   font-size: 27px;
   line-height: 1;
   transition: transform var(--duration-press) var(--ease-out), background-color var(--duration-press) var(--ease-out);
@@ -2469,10 +2650,12 @@ h2 {
 }
 
 .action-sheet {
+  display: grid;
   width: min(100%, 402px);
+  max-height: min(78dvh, 660px);
   overflow: hidden;
   border: 1px solid var(--color-tray-border);
-  border-radius: 24px;
+  border-radius: 32px;
   background: var(--color-tray-canvas);
   color: var(--color-tray-text);
   box-shadow: var(--shadow-tray);
@@ -2480,29 +2663,34 @@ h2 {
 }
 
 .action-sheet-root {
-  border-radius: 24px;
+  border-radius: 32px;
 }
 
 .action-sheet-expanded {
-  width: min(100%, 430px);
-  min-height: var(--tma-viewport-height, 100dvh);
-  border-width: 0;
-  border-radius: 0;
-  box-shadow: none;
-  transform-origin: center bottom;
+  width: min(100%, 402px);
+  min-height: 0;
+  border-radius: 32px;
+  transform-origin: calc(100% - 38px) 100%;
 }
 
 .action-sheet-content {
+  display: grid;
   width: 100%;
+  min-height: 0;
+  max-height: min(78dvh, 660px);
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .action-sheet-detail {
-  min-height: var(--tma-viewport-height, 100dvh);
-  padding-top: max(12px, env(safe-area-inset-top), var(--tma-safe-top));
+  min-height: 0;
 }
 
 .action-sheet-panel {
   width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .action-sheet header {
@@ -2644,6 +2832,54 @@ h2 {
 
 .opponent-edit-form input:focus-visible {
   border-color: var(--color-tray-focus-border);
+}
+
+.pair-keypad-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 18px;
+  background: var(--color-dark-control);
+}
+
+.pair-keypad-side {
+  display: grid;
+  min-width: 0;
+  min-height: 70px;
+  align-content: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--color-dark-text-tertiary);
+}
+
+.pair-keypad-side span {
+  overflow: hidden;
+  font-size: var(--font-size-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pair-keypad-side strong {
+  color: inherit;
+  font-size: var(--font-size-title-2);
+}
+
+.pair-keypad-side-active {
+  background: var(--color-dark-control-active);
+  color: var(--color-tray-text);
+}
+
+.opponent-edit-form .numeric-keypad {
+  margin-top: 0;
+}
+
+.opponent-edit-form .numeric-keypad button,
+.opponent-edit-form .numeric-keypad > span {
+  min-height: 54px;
+  color: var(--color-tray-text);
 }
 
 .opponent-edit-confirm p {
@@ -2820,10 +3056,18 @@ h2 {
   button:active > span,
   .opponent-card:active,
   .profile-actions > button:active,
-  .score-keypad button,
+  .numeric-keypad button,
   .score-validation-handle > span,
   .avatar-emoji-grid button:active {
     transform: none !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .progressive-bottom-blur {
+    background: linear-gradient(to bottom, transparent, var(--color-canvas));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 

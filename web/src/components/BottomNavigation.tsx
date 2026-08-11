@@ -17,16 +17,21 @@ const tabs: ReadonlyArray<{ id: MainTab; label: string; icon: AppIconName }> = [
 export function BottomNavigation({
   active,
   onSelect,
-  profileEditing = false,
-  profileSaveDisabled = false,
+  actionLabel,
+  actionDisabled = false,
+  actionForm,
+  onAction,
 }: {
   active: MainTab;
   onSelect(tab: MainTab): void;
-  profileEditing?: boolean;
-  profileSaveDisabled?: boolean;
+  actionLabel?: string;
+  actionDisabled?: boolean;
+  actionForm?: string;
+  onAction?(): void;
 }) {
   const reduceMotion = useReducedMotion();
-  const saveMorphTransition = reduceMotion
+  const actionVisible = Boolean(actionLabel);
+  const actionMorphTransition = reduceMotion
     ? { duration: 0 }
     : { duration: 0.18, ease: easeInOut };
 
@@ -46,9 +51,9 @@ export function BottomNavigation({
           <motion.div
             className="nav-tabs-grid"
             initial={false}
-            animate={{ opacity: profileEditing ? 0 : 1 }}
-            transition={{ duration: reduceMotion ? 0.12 : 0.1, delay: !profileEditing && !reduceMotion ? 0.08 : 0, ease: easeOut }}
-            aria-hidden={profileEditing}
+            animate={{ opacity: actionVisible ? 0 : 1 }}
+            transition={{ duration: reduceMotion ? 0.12 : 0.1, delay: !actionVisible && !reduceMotion ? 0.08 : 0, ease: easeOut }}
+            aria-hidden={actionVisible}
           >
             {tabs.map(({ id, label, icon }) => {
               const isActive = active === id;
@@ -60,22 +65,18 @@ export function BottomNavigation({
                   aria-current={isActive ? "page" : undefined}
                   aria-label={label}
                   title={label}
-                  disabled={profileEditing}
+                  disabled={actionVisible}
                   onClick={() => {
                     tma.haptic.selection();
                     onSelect(id);
                   }}
                 >
-                  {isActive && !profileEditing ? (
+                  {isActive && !actionVisible ? (
                     <motion.span
                       className="nav-active-pill"
                       layoutId="active-main-tab"
                       style={{ borderRadius: 999 }}
-                      transition={{
-                        layout: active === "profile"
-                          ? saveMorphTransition
-                          : { type: "spring", stiffness: 500, damping: 36, mass: 0.7 },
-                      }}
+                      transition={{ layout: actionMorphTransition }}
                     />
                   ) : null}
                   <span className="nav-button-content"><AppIcon name={icon} aria-hidden="true" size={25} /></span>
@@ -84,14 +85,15 @@ export function BottomNavigation({
             })}
           </motion.div>
           <AnimatePresence initial={false}>
-            {profileEditing ? (
+            {actionVisible ? (
               <motion.button
                 className="nav-save-button"
-                type="submit"
-                form="profile-name-form"
-                aria-label="Сохранить"
-                title="Сохранить"
-                disabled={profileSaveDisabled}
+                type={actionForm ? "submit" : "button"}
+                form={actionForm}
+                aria-label={actionLabel}
+                title={actionLabel}
+                disabled={actionDisabled}
+                onClick={actionForm ? undefined : onAction}
                 initial={{ opacity: 1 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 1 }}
@@ -101,7 +103,7 @@ export function BottomNavigation({
                   aria-hidden="true"
                   layoutId="active-main-tab"
                   style={{ borderRadius: 999 }}
-                  transition={{ layout: saveMorphTransition }}
+                  transition={{ layout: actionMorphTransition }}
                 />
                 <motion.span
                   className="nav-button-content nav-button-save-label"
@@ -110,7 +112,7 @@ export function BottomNavigation({
                   exit={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
                   transition={{ duration: reduceMotion ? 0.12 : 0.12, delay: reduceMotion ? 0 : 0.06, ease: easeOut }}
                 >
-                  Сохранить
+                  {actionLabel}
                 </motion.span>
               </motion.button>
             ) : null}

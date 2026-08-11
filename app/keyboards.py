@@ -1,18 +1,16 @@
-from aiogram.types import InlineKeyboardMarkup, WebAppInfo
+from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.domain import Opponent
 from app import texts
 
 
-def main_menu_keyboard(has_opponents: bool, webapp_url: str = "") -> InlineKeyboardMarkup:
+def main_menu_keyboard(has_opponents: bool) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if has_opponents:
         builder.button(text=texts.BUTTON_OPPONENTS, callback_data="opponents")
     builder.button(text=texts.BUTTON_INVITE_OPPONENT, callback_data="invite")
     builder.button(text=texts.BUTTON_TOTAL_STATS, callback_data="profile")
-    if webapp_url:
-        builder.button(text=texts.BUTTON_OPEN_WEBAPP, web_app=WebAppInfo(url=webapp_url))
     builder.adjust(1)
     return builder.as_markup()
 
