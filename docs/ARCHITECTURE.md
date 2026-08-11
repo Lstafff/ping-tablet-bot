@@ -1,0 +1,98 @@
+# Architecture
+
+This document describes the current working tree. `Current` is evidence from the repository; `Direction / Planned` is not implemented unless explicitly stated.
+
+## Current
+
+### Runtime surfaces
+
+```text
+Telegram chat update                         Telegram Mini App
+        |                                           |
+    app.bot                                  web/src/main.tsx
+        |                                           |
+        |                                      HTTP /api/*
+        |                                           |
+        +------------> TennisService <--------- app.api
+                              |
+                           Database
+                              |
+                           Postgres
+```
+
+- `app.bot` is an aiogram polling entrypoint and Railway worker (`railway.json`).
+- `app.api` is a FastAPI entrypoint that also serves the built `web/dist`; Railway uses `/railway.api.json`, `$PORT` and `/health`.
+- `web/src/main.tsx` is the active React/Vite Mini App. It calls the API with signed Telegram `initData` through `web/src/api/client.ts`; request/response types live in `web/src/api/types.ts`.
+- `web/src/lib/tma.ts` is a useful Telegram capability adapter for init data, viewport/safe-area updates, links, haptics and back-button behavior.
+
+### Domain and application boundaries
+
+- `app.scoring`, `app.elo`, `app.rating` and pure helpers in `app.domain` hold focused rules/calculations.
+- `app.services.TennisService` is the shared application layer used by both bot handlers and FastAPI routes.
+- `app.storage.Database` owns repository queries and transactions. `app.migrations` is the only schema owner; runtime constructors only verify `schema_migrations`.
+- FastAPI endpoints are thin in control flow but return handwritten dictionaries rather than explicit response contracts.
+- TypeScript API shapes are handwritten in `web/src/api/types.ts`; there is no generated schema client or schema sharing across Python and TypeScript.
+
+### Data model and identity
+
+- Postgres tables include `users`, `opponents`, `games`, `aggregate_adjustments`, `elo_events`, `sessions` and `invite_uses`.
+- `users.telegram_id` is the primary key and is also used as the product user identifier throughout domain/service/storage APIs.
+- `opponents` supports both local opponents (`opponent_user_id IS NULL`) and links to registered users. `history_start_game_id` and `is_hidden` make reset/delete owner-local without duplicating shared game rows.
+- Linked games are shared records between two registered players; ownership checks start from an owner-scoped opponent lookup. Reset/delete affects only the initiating owner's view. A later linked game restores mirrored statistics from the peer that retained them; if neither side retained data, the pair starts from zero.
+
+### Authentication and authorization
+
+- Mini App auth validates the Telegram HMAC, requires `auth_date`, rejects future data and expires old data using a configurable maximum age.
+- API routes derive the current user only from validated `initData`; client-supplied product user IDs are not trusted.
+- Storage lookups such as `get_opponent(owner_id, opponent_id)` scope objects to the current owner before reads or mutations.
+- Telegram callbacks derive the acting user from `callback.from_user.id` and reuse the same service/storage ownership boundary.
+
+### Schema evolution
+
+- `app.migrations` owns an advisory-locked `schema_migrations` ledger and standalone `python -m app.migrations` command.
+- Railway API pre-deploy is the single migration owner. Bot/API startup fail clearly on a missing or stale schema instead of racing DDL.
+- Migrations are additive; operational rollback uses a compatible application revision or a verified Postgres backup for data rollback.
+
+### Frontend system
+
+- Active product UI remains concentrated in `web/src/main.tsx` and `web/src/styles.css`; API transport/contracts, `BottomNavigation` and `AppIcon` are extracted boundaries.
+- `web/src/tokens.css` already separates semantic theme, accent, status, material and motion tokens. This is a strong base to keep.
+- Motion uses `motion/react`, shared easing/duration tokens and multiple `useReducedMotion` branches.
+- The copied `web/mini-app` and `web/primitives` trees are source libraries, not the active design system wholesale. Active code imports only Telegram runtime helpers and `GlassContainer` from them.
+- Initial home load sends three requests in parallel. Opponent load still requests summary/table/chart data explicitly, with stale-response protection.
+- Score mutation returns the updated profile/opponent state and updates the local history immediately instead of waiting for seven follow-up GETs.
+- Pending state is scoped by action family; errors have a rendered live surface and modal flows render feedback inside the active layer.
+
+### Validation and delivery
+
+- Backend uses `unittest`; Postgres integration tests run only when `TEST_DATABASE_URL` is supplied.
+- Frontend has a TypeScript/Vite production build.
+- `.github/workflows/ci.yml` runs migrations, the backend suite (including Postgres integration tests) and the strict frontend build.
+- There is still no chosen frontend unit/e2e or lint runner; the build is not described as their replacement.
+- Docker and separate Railway config files define bot worker plus API/static-web topology. Live Railway behavior remains unverified until an approved deploy.
+
+## Direction / Planned
+
+### Product core and clients
+
+```text
+Telegram Bot ----\
+Mini App ---------> stable API -> application/domain services -> repositories -> Postgres
+iOS (later) ------/
+```
+
+- Preserve `TennisService` as the current shared seam, then split only responsibilities proven to change independently.
+- Define stable request/response contracts before adding a second non-Telegram client; code generation is optional, not a Phase 3 requirement.
+- Tournament state and progression belong in domain/application code, never React components.
+
+### Identity
+
+Target a product-owned user key with separate platform identities, for example `users.id` plus `auth_identities(provider, external_id, user_id)`. Phase 3 should first inventory coupling and create a reversible migration plan. Do not perform a destructive identity migration without backup, verification, rollback and a product decision about account linking.
+
+### Migrations
+
+Keep the current lightweight versioned runner while migrations remain small and additive. Adopt a framework only when dependency ordering, downgrade metadata or migration volume creates a proven gap; do not mix framework adoption with schema redesign.
+
+### Platform capabilities
+
+Evolve the existing `tma` adapter only when a real second implementation appears. Product code should request semantic capabilities such as share, haptic success or scanner input; Telegram, web fallback and future iOS can implement them differently.

@@ -1,0 +1,27 @@
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.backIcon {
+  transform: translateX(-2px);
+}
+
+.bar::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 -16px;
+  z-index: -1;
+
+  --fade-color: var(--page-background, var(--background));
+
+  background: linear-gradient(to bottom, var(--fade-color), transparent);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.scrolled::before {
+  opacity: 1;
+}

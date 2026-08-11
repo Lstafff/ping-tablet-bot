@@ -19,6 +19,8 @@ class User:
     created_at: str
     rating: Optional[str]
     rating_is_fnt: bool
+    display_name: Optional[str] = None
+    avatar_value: Optional[str] = None
     elo_rating: int = 500
     elo_games: int = 0
 
@@ -32,6 +34,8 @@ class Opponent:
     first_name: Optional[str] = None
     username: Optional[str] = None
     elo_rating: Optional[int] = None
+    history_start_game_id: int = 0
+    is_hidden: bool = False
 
 
 @dataclass(frozen=True)
@@ -77,6 +81,8 @@ class RecentGame:
     played_at: str
     own_score: int
     opponent_score: int
+    game_id: Optional[int] = None
+    elo_change: Optional[int] = None
 
 
 @dataclass(frozen=True)

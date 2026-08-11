@@ -33,6 +33,7 @@ from app.keyboards import (
     reset_stats_keyboard,
     score_saved_keyboard,
 )
+from app.notifications import notify_inviter_about_new_opponent as send_inviter_notification
 from app.rendering import RichRenderer, delete_message
 from app.scoring import ScoreError
 from app.services import (
@@ -57,6 +58,7 @@ router = Router()
 db: Optional[Database] = None
 renderer: Optional[RichRenderer] = None
 service: Optional[TennisService] = None
+webapp_url = ""
 
 
 @router.message(CommandStart())
@@ -371,7 +373,7 @@ async def delete_confirm_callback(callback: CallbackQuery, bot: Bot) -> None:
         callback.message.chat.id,
         callback.from_user.id,
         texts.delete_opponent_done(result.opponent_name),
-        main_menu_keyboard(result.has_opponents),
+        main_menu_keyboard(result.has_opponents, webapp_url),
     )
 
 
@@ -429,7 +431,7 @@ async def handle_invite_code_input(message: Message, bot: Bot, user_id: int) -> 
     else:
         text = texts.INVITE_ALREADY_CONNECTED_TEXT
 
-    await render(bot, message.chat.id, user_id, text, main_menu_keyboard(result.has_opponents))
+    await render(bot, message.chat.id, user_id, text, main_menu_keyboard(result.has_opponents, webapp_url))
 
 
 async def handle_rating_input(message: Message, bot: Bot, user_id: int) -> None:
@@ -499,7 +501,7 @@ async def handle_edit_points_input(message: Message, bot: Bot, user_id: int, opp
 
 async def show_main_menu(bot: Bot, chat_id: int, user_id: int, force_new: bool = False) -> None:
     view = get_service().get_main_menu(user_id)
-    await render(bot, chat_id, user_id, texts.MAIN_MENU_TEXT, main_menu_keyboard(view.has_opponents), force_new=force_new)
+    await render(bot, chat_id, user_id, texts.MAIN_MENU_TEXT, main_menu_keyboard(view.has_opponents, webapp_url), force_new=force_new)
 
 
 async def show_opponents(bot: Bot, chat_id: int, user_id: int) -> None:
@@ -591,21 +593,13 @@ async def accept_invite_flow(message: Message, token: str, bot: Bot, force_new: 
             await notify_inviter_about_new_opponent(bot, result.inviter_id, user_id)
     else:
         text = texts.INVITE_ALREADY_CONNECTED_TEXT
-    await render(bot, message.chat.id, user_id, text, main_menu_keyboard(result.has_opponents), force_new=force_new)
+    await render(bot, message.chat.id, user_id, text, main_menu_keyboard(result.has_opponents, webapp_url), force_new=force_new)
 
 
 async def notify_inviter_about_new_opponent(bot: Bot, inviter_id: int, invited_user_id: int) -> None:
-    invited_name = get_service().get_invited_user_name(invited_user_id)
-    try:
-        await render(
-            bot,
-            inviter_id,
-            inviter_id,
-            texts.invite_new_opponent_notification(invited_name),
-            main_menu_keyboard(True),
-        )
-    except TelegramAPIError:
-        logging.exception("Failed to notify inviter about a new opponent")
+    if db is None:
+        raise RuntimeError("Database is not initialized.")
+    await send_inviter_notification(bot, db, inviter_id, invited_user_id, webapp_url)
 
 
 async def render(
@@ -641,9 +635,10 @@ def parse_start_payload(text: str) -> str:
 
 
 async def main() -> None:
-    global db, renderer, service
+    global db, renderer, service, webapp_url
     logging.basicConfig(level=logging.INFO)
     config = load_config()
+    webapp_url = config.webapp_url
     db = Database(config.database_url)
     service = TennisService(db, seed_test_opponent=config.seed_test_opponent)
     renderer = RichRenderer(db)

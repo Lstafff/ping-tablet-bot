@@ -1,0 +1,17 @@
+.label {
+  color: var(--primary);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.label.accent {
+  color: var(--accent-blue);
+}
+
+.description {
+  color: var(--primary);
+}
+
+.caption {
+  max-height: 18px;
+  color: var(--primary-60);
+}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import unicodedata
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -132,6 +133,24 @@ class OpponentGamesView:
 
 
 @dataclass(frozen=True)
+class HistoryGame:
+    opponent_id: int
+    opponent_name: str
+    played_at: str
+    own_score: int
+    opponent_score: int
+    game_id: Optional[int] = None
+    elo_change: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class GameHistoryView:
+    games: list[HistoryGame]
+    page: int
+    total_pages: int
+
+
+@dataclass(frozen=True)
 class ProfileView:
     user: User
     stats: Stats
@@ -171,8 +190,11 @@ class TennisService:
         return MainMenuView(has_opponents=bool(self.storage.list_opponents(user_id)))
 
     def create_invite(self, inviter_id: int, bot_username: str) -> InviteView:
-        invite_code = self.storage.get_or_create_invite_code(inviter_id)
+        invite_code = self.create_invite_code(inviter_id)
         return InviteView(code=invite_code, link=f"https://t.me/{bot_username}?start=invite_{invite_code}")
+
+    def create_invite_code(self, inviter_id: int) -> str:
+        return self.storage.get_or_create_invite_code(inviter_id)
 
     def start_invite_code_input(self, user_id: int) -> None:
         self.storage.set_session(user_id, SESSION_INVITE_CODE, None)
@@ -238,13 +260,10 @@ class TennisService:
 
     def get_opponent_view(self, user_id: int, opponent_id: int) -> OpponentView:
         opponent = self.storage.get_opponent(user_id, opponent_id)
-        opponent_elo_rating = None
-        if opponent.opponent_user_id is not None:
-            opponent_elo_rating = self.storage.get_user(opponent.opponent_user_id).elo_rating
         return OpponentView(
             opponent=opponent,
             opponent_name=opponent_title(opponent),
-            opponent_elo_rating=opponent_elo_rating,
+            opponent_elo_rating=opponent.elo_rating,
         )
 
     def start_score_input(self, user_id: int, opponent_id: int) -> OpponentView:
@@ -252,12 +271,16 @@ class TennisService:
         self.storage.set_session(user_id, SESSION_SCORE, opponent_id)
         return view
 
-    def submit_score(self, user_id: int, opponent_id: int, raw_score: str) -> ScoreSubmission:
+    def submit_score(
+        self,
+        user_id: int,
+        opponent_id: int,
+        raw_score: str,
+        operation_id: Optional[str] = None,
+    ) -> ScoreSubmission:
         opponent = self.storage.get_opponent(user_id, opponent_id)
         opponent_name = opponent_title(opponent)
-        opponent_elo_rating = None
-        if opponent.opponent_user_id is not None:
-            opponent_elo_rating = self.storage.get_user(opponent.opponent_user_id).elo_rating
+        opponent_elo_rating = opponent.elo_rating
         try:
             score = parse_score(raw_score)
         except ScoreError as error:
@@ -272,7 +295,7 @@ class TennisService:
                 opponent_elo_rating=opponent_elo_rating,
             )
 
-        game_id = self.storage.add_game(user_id, opponent_id, score)
+        game_id = self.storage.add_game(user_id, opponent_id, score, operation_id=operation_id)
         recent_games = self.storage.get_recent_games(user_id, opponent_id)
         user = self.storage.get_user(user_id)
         elo_event = self.storage.get_elo_event(game_id, user_id) if opponent.opponent_user_id is not None else None
@@ -350,6 +373,10 @@ class TennisService:
             user_name=display_user_name(user.first_name, user.username),
         )
 
+    def get_opponent_stats(self, user_id: int, opponent_id: int) -> Stats:
+        self.storage.get_opponent(user_id, opponent_id)
+        return self.storage.get_opponent_stats(user_id, opponent_id)
+
     def get_opponent_daily_stats(
         self,
         user_id: int,
@@ -393,12 +420,66 @@ class TennisService:
             total_pages=total_pages,
         )
 
+    def get_game_history(
+        self,
+        user_id: int,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> GameHistoryView:
+        opponents = {
+            opponent.id: opponent_title(opponent)
+            for opponent in self.storage.list_opponents(user_id)
+        }
+        games_count = self.storage.count_user_games(user_id)
+        total_pages = max(1, (games_count + page_size - 1) // page_size)
+        page = min(max(page, 1), total_pages)
+        page_start = (page - 1) * page_size
+        rows = self.storage.get_user_game_history(user_id, limit=page_size, offset=page_start)
+        return GameHistoryView(
+            games=[
+                HistoryGame(
+                    opponent_id=row["opponent_id"],
+                    opponent_name=opponents.get(row["opponent_id"], "Соперник"),
+                    played_at=row["played_at"],
+                    own_score=row["own_score"],
+                    opponent_score=row["opponent_score"],
+                    game_id=row["game_id"],
+                    elo_change=row["elo_change"],
+                )
+                for row in rows
+            ],
+            page=page,
+            total_pages=total_pages,
+        )
+
     def get_profile(self, user_id: int) -> ProfileView:
         return ProfileView(
             user=self.storage.get_user(user_id),
             stats=self.storage.get_total_stats(user_id),
             extended_stats=self.storage.get_total_extended_stats(user_id),
         )
+
+    def update_display_name(self, user_id: int, display_name: str) -> ProfileView:
+        normalized = " ".join(display_name.split())
+        if not normalized:
+            raise ValueError("Введите имя.")
+        self.storage.set_user_display_name(user_id, normalized)
+        return self.get_profile(user_id)
+
+    def update_avatar(self, user_id: int, avatar_value: str) -> ProfileView:
+        normalized = avatar_value.strip()
+        is_image = normalized.startswith((
+            "data:image/png;base64,",
+            "data:image/jpeg;base64,",
+            "data:image/webp;base64,",
+        ))
+        is_emoji = len(normalized) <= 32 and any(
+            unicodedata.category(character) in {"So", "Sk"} for character in normalized
+        )
+        if not (is_image or is_emoji) or len(normalized) > 200_000:
+            raise ValueError("Выберите изображение или эмодзи.")
+        self.storage.set_user_avatar(user_id, normalized)
+        return self.get_profile(user_id)
 
     def reset_opponent_stats(self, user_id: int, opponent_id: int) -> OpponentActionResult:
         opponent = self.storage.get_opponent(user_id, opponent_id)

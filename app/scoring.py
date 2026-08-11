@@ -79,5 +79,5 @@ def _validate_finished_game(own_score: int, opponent_score: int) -> None:
     if winner > 11 and loser < 10:
         raise ScoreError(texts.ERROR_OVERTIME_ONLY_AFTER_DEUCE)
 
-    if winner - loser < 2:
+    if winner > 11 and winner - loser != 2:
         raise ScoreError(texts.ERROR_WIN_REQUIRES_TWO_POINT_LEAD)

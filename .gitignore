@@ -1,8 +1,14 @@
 .env
 .venv/
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo
+web/mini-app/storybook/
 __pycache__/
 *.pyc
 .pytest_cache/
+.playwright-mcp/
+.agents/skills/
 .DS_Store
 data/
 *.sqlite3

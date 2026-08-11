@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
+from app.db import CURRENT_SCHEMA_VERSION, PostgresConnection
 from app.domain import (
     DEFAULT_USER_NAME,
     TEST_OPPONENT_NAME,
@@ -20,7 +21,7 @@ from app.domain import (
     build_extended_stats,
     display_user_name,
 )
-from app.elo import EloEvent, EloGame, INITIAL_ELO_RATING, rebuild_elo_ratings
+from app.elo import EloEvent, EloGame, INITIAL_ELO_RATING, calculate_rating_change, rebuild_elo_ratings
 from app.scoring import ParsedScore
 from app.states import KNOWN_SESSION_MODES
 
@@ -28,246 +29,30 @@ from app.states import KNOWN_SESSION_MODES
 MOSCOW_TZ = ZoneInfo("Europe/Moscow")
 INVITE_CODE_ALPHABET = string.ascii_uppercase + string.digits
 INVITE_CODE_LENGTH = 8
-ALLOWED_SCHEMA_NAMES = {
-    "aggregate_adjustments",
-    "elo_events",
-    "elo_games",
-    "elo_rating",
-    "games",
-    "games_updated_at",
-    "invite_code",
-    "invite_uses",
-    "opponents",
-    "points_updated_at",
-    "rating",
-    "rating_is_fnt",
-    "users",
-}
-
-
-class PostgresConnection:
-    def __init__(self, database_url: str) -> None:
-        try:
-            import psycopg
-            from psycopg.rows import dict_row
-        except ImportError as error:
-            raise RuntimeError(
-                "Для подключения к Postgres нужно установить зависимость psycopg[binary]."
-            ) from error
-
-        self._connection = psycopg.connect(database_url, row_factory=dict_row, connect_timeout=10)
-
-    def execute(self, query: str, parameters: tuple[Any, ...] = ()) -> Any:
-        return self._connection.execute(self._prepare_query(query), parameters)
-
-    def executescript(self, script: str) -> None:
-        for statement in script.split(";"):
-            statement = statement.strip()
-            if statement:
-                self.execute(statement)
-
-    def commit(self) -> None:
-        self._connection.commit()
-
-    def close(self) -> None:
-        self._connection.close()
-
-    def __enter__(self) -> PostgresConnection:
-        return self
-
-    def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None:
-        if exc_type is None:
-            self._connection.commit()
-        else:
-            self._connection.rollback()
-
-    @staticmethod
-    def _prepare_query(query: str) -> str:
-        return query.replace("?", "%s")
-
-
 class Database:
     def __init__(self, database_url: str) -> None:
         if not database_url:
             raise RuntimeError("Нужно задать DATABASE_URL для подключения к Postgres.")
         self.database_url = database_url
         self.connection = PostgresConnection(database_url)
-        self._migrate()
-
-    def _migrate(self) -> None:
-        self.connection.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                telegram_id BIGINT PRIMARY KEY,
-                first_name TEXT NOT NULL,
-                username TEXT,
-                last_message_id BIGINT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                invite_code TEXT,
-                rating TEXT,
-                rating_is_fnt INTEGER NOT NULL DEFAULT 0,
-                elo_rating INTEGER NOT NULL DEFAULT 500,
-                elo_games INTEGER NOT NULL DEFAULT 0
-            );
-
-            CREATE TABLE IF NOT EXISTS opponents (
-                id BIGSERIAL PRIMARY KEY,
-                owner_id BIGINT NOT NULL,
-                opponent_user_id BIGINT,
-                name TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                UNIQUE(owner_id, opponent_user_id),
-                UNIQUE(owner_id, name),
-                FOREIGN KEY(owner_id) REFERENCES users(telegram_id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS games (
-                id BIGSERIAL PRIMARY KEY,
-                created_by_id BIGINT NOT NULL,
-                owner_id BIGINT,
-                opponent_id BIGINT,
-                player_a_id BIGINT NOT NULL,
-                player_b_id BIGINT,
-                player_a_score INTEGER NOT NULL,
-                player_b_score INTEGER NOT NULL,
-                regular_a INTEGER NOT NULL,
-                regular_b INTEGER NOT NULL,
-                overtime_a INTEGER NOT NULL,
-                overtime_b INTEGER NOT NULL,
-                played_at TEXT NOT NULL,
-                FOREIGN KEY(created_by_id) REFERENCES users(telegram_id) ON DELETE CASCADE,
-                FOREIGN KEY(owner_id) REFERENCES users(telegram_id) ON DELETE CASCADE,
-                FOREIGN KEY(opponent_id) REFERENCES opponents(id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS aggregate_adjustments (
-                owner_id BIGINT NOT NULL,
-                opponent_id BIGINT NOT NULL,
-                games_won_delta INTEGER NOT NULL DEFAULT 0,
-                games_lost_delta INTEGER NOT NULL DEFAULT 0,
-                points_for_delta INTEGER NOT NULL DEFAULT 0,
-                points_against_delta INTEGER NOT NULL DEFAULT 0,
-                updated_at TEXT NOT NULL,
-                games_updated_at TEXT,
-                points_updated_at TEXT,
-                PRIMARY KEY(owner_id, opponent_id),
-                FOREIGN KEY(owner_id) REFERENCES users(telegram_id) ON DELETE CASCADE,
-                FOREIGN KEY(opponent_id) REFERENCES opponents(id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS elo_events (
-                game_id BIGINT NOT NULL,
-                player_id BIGINT NOT NULL,
-                opponent_id BIGINT NOT NULL,
-                rating_before INTEGER NOT NULL,
-                rating_change INTEGER NOT NULL,
-                rating_after INTEGER NOT NULL,
-                played_at TEXT NOT NULL,
-                PRIMARY KEY(game_id, player_id),
-                FOREIGN KEY(game_id) REFERENCES games(id) ON DELETE CASCADE,
-                FOREIGN KEY(player_id) REFERENCES users(telegram_id) ON DELETE CASCADE,
-                FOREIGN KEY(opponent_id) REFERENCES users(telegram_id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS sessions (
-                owner_id BIGINT PRIMARY KEY,
-                mode TEXT NOT NULL,
-                opponent_id BIGINT,
-                updated_at TEXT NOT NULL,
-                FOREIGN KEY(owner_id) REFERENCES users(telegram_id) ON DELETE CASCADE,
-                FOREIGN KEY(opponent_id) REFERENCES opponents(id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS invite_uses (
-                inviter_id BIGINT NOT NULL,
-                invited_user_id BIGINT NOT NULL,
-                invite_code TEXT NOT NULL,
-                accepted_at TEXT NOT NULL,
-                PRIMARY KEY(inviter_id, invited_user_id),
-                FOREIGN KEY(inviter_id) REFERENCES users(telegram_id) ON DELETE CASCADE,
-                FOREIGN KEY(invited_user_id) REFERENCES users(telegram_id) ON DELETE CASCADE
-            );
-            """
-        )
-        self._ensure_column("users", "invite_code", "TEXT")
-        self._ensure_column("users", "rating", "TEXT")
-        self._ensure_column("users", "rating_is_fnt", "INTEGER NOT NULL DEFAULT 0")
-        self._ensure_column("users", "elo_rating", "INTEGER NOT NULL DEFAULT 500")
-        self._ensure_column("users", "elo_games", "INTEGER NOT NULL DEFAULT 0")
-        self._ensure_column("aggregate_adjustments", "games_updated_at", "TEXT")
-        self._ensure_column("aggregate_adjustments", "points_updated_at", "TEXT")
-        self._backfill_adjustment_dates()
-        self._ensure_indexes()
-        self.connection.execute(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite_code
-            ON users(invite_code)
-            WHERE invite_code IS NOT NULL
-            """
-        )
-        self.connection.commit()
-        self._rebuild_elo_history_if_needed()
+        self._assert_schema_current()
 
     def close(self) -> None:
         self.connection.close()
 
-    def _ensure_indexes(self) -> None:
-        for statement in (
-            """
-            CREATE INDEX IF NOT EXISTS idx_opponents_owner_name
-            ON opponents(owner_id, lower(name))
-            """,
-            """
-            CREATE INDEX IF NOT EXISTS idx_opponents_owner_user
-            ON opponents(owner_id, opponent_user_id)
-            """,
-            """
-            CREATE INDEX IF NOT EXISTS idx_games_unlinked_opponent_history
-            ON games(owner_id, opponent_id, played_at DESC, id DESC)
-            WHERE owner_id IS NOT NULL AND opponent_id IS NOT NULL
-            """,
-            """
-            CREATE INDEX IF NOT EXISTS idx_games_linked_players_history
-            ON games(player_a_id, player_b_id, played_at DESC, id DESC)
-            WHERE player_b_id IS NOT NULL
-            """,
-            """
-            CREATE INDEX IF NOT EXISTS idx_invite_uses_inviter
-            ON invite_uses(inviter_id)
-            """,
-            """
-            CREATE INDEX IF NOT EXISTS idx_sessions_updated_at
-            ON sessions(updated_at)
-            """,
-        ):
-            self.connection.execute(statement)
-
-    def _backfill_adjustment_dates(self) -> None:
-        self.connection.execute(
-            """
-            UPDATE aggregate_adjustments
-            SET games_updated_at = updated_at
-            WHERE games_updated_at IS NULL
-            """
-        )
-        self.connection.execute(
-            """
-            UPDATE aggregate_adjustments
-            SET points_updated_at = updated_at
-            WHERE points_updated_at IS NULL
-            """
-        )
-
-    def _rebuild_elo_history_if_needed(self) -> None:
-        linked_games = self.connection.execute(
-            "SELECT COUNT(*) AS games_count FROM games WHERE player_b_id IS NOT NULL"
+    def _assert_schema_current(self) -> None:
+        table = self.connection.execute(
+            "SELECT to_regclass('public.schema_migrations') AS table_name"
         ).fetchone()
-        rated_games = self.connection.execute(
-            "SELECT COUNT(DISTINCT game_id) AS games_count FROM elo_events"
+        if table is None or table["table_name"] is None:
+            raise RuntimeError("Схема Postgres не инициализирована. Запустите python -m app.migrations.")
+        row = self.connection.execute(
+            "SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations"
         ).fetchone()
-        if int(linked_games["games_count"]) != int(rated_games["games_count"]):
-            self.recalculate_elo_ratings()
+        if int(row["version"]) != CURRENT_SCHEMA_VERSION:
+            raise RuntimeError(
+                "Схема Postgres устарела. Запустите python -m app.migrations перед приложением."
+            )
 
     def recalculate_elo_ratings(self) -> None:
         with self.connection:
@@ -328,23 +113,6 @@ class Database:
             ),
         )
 
-    def _ensure_column(self, table: str, column: str, definition: str) -> None:
-        table = require_schema_name(table)
-        column = require_schema_name(column)
-        columns = {
-            row["column_name"]
-            for row in self.connection.execute(
-                """
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_schema = 'public' AND table_name = ? AND column_name = ?
-                """,
-                (table, column),
-            ).fetchall()
-        }
-        if column not in columns:
-            self.connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
-
     def ensure_user(self, telegram_id: int, first_name: str, username: Optional[str]) -> User:
         now = now_moscow_iso()
         self.connection.execute(
@@ -364,8 +132,9 @@ class Database:
     def get_user(self, telegram_id: int) -> User:
         row = self.connection.execute(
             """
-            SELECT telegram_id, first_name, username, last_message_id, created_at,
-                   rating, rating_is_fnt, elo_rating, elo_games
+            SELECT
+                telegram_id, first_name, username, last_message_id, created_at,
+                rating, rating_is_fnt, display_name, avatar_value, elo_rating, elo_games
             FROM users
             WHERE telegram_id = ?
             """,
@@ -381,6 +150,8 @@ class Database:
             created_at=row["created_at"],
             rating=row["rating"],
             rating_is_fnt=bool(row["rating_is_fnt"]),
+            display_name=row["display_name"],
+            avatar_value=row["avatar_value"],
             elo_rating=int(row["elo_rating"]),
             elo_games=int(row["elo_games"]),
         )
@@ -406,6 +177,20 @@ class Database:
             rating_after=int(row["rating_after"]),
             played_at=str(row["played_at"]),
         )
+
+    def set_user_display_name(self, telegram_id: int, display_name: str) -> None:
+        self.connection.execute(
+            "UPDATE users SET display_name = ?, updated_at = ? WHERE telegram_id = ?",
+            (display_name, now_moscow_iso(), telegram_id),
+        )
+        self.connection.commit()
+
+    def set_user_avatar(self, telegram_id: int, avatar_value: str) -> None:
+        self.connection.execute(
+            "UPDATE users SET avatar_value = ?, updated_at = ? WHERE telegram_id = ?",
+            (avatar_value, now_moscow_iso(), telegram_id),
+        )
+        self.connection.commit()
 
     def set_last_message_id(self, telegram_id: int, message_id: int) -> None:
         self.connection.execute(
@@ -450,7 +235,13 @@ class Database:
                 (owner_id, opponent_user_id),
             ).fetchone()
             if row is not None:
-                return self.get_opponent(owner_id, int(row["id"]))
+                opponent_id = int(row["id"])
+                self.connection.execute(
+                    "UPDATE opponents SET is_hidden = FALSE WHERE id = ?",
+                    (opponent_id,),
+                )
+                self.connection.commit()
+                return self._get_opponent_record(owner_id, opponent_id, include_hidden=True)
             name = self._unique_opponent_name(owner_id, name)
 
         self.connection.execute(
@@ -491,10 +282,12 @@ class Database:
                 o.opponent_user_id,
                 u.first_name,
                 u.username,
-                u.elo_rating
+                u.elo_rating,
+                o.history_start_game_id,
+                o.is_hidden
             FROM opponents o
             LEFT JOIN users u ON u.telegram_id = o.opponent_user_id
-            WHERE o.owner_id = ?
+            WHERE o.owner_id = ? AND o.is_hidden = FALSE
             ORDER BY lower(o.name)
             """,
             (owner_id,),
@@ -507,12 +300,17 @@ class Database:
                 opponent_user_id=row["opponent_user_id"],
                 first_name=row["first_name"],
                 username=row["username"],
-                elo_rating=row["elo_rating"],
+                elo_rating=int(row["elo_rating"]) if row["elo_rating"] is not None else None,
+                history_start_game_id=int(row["history_start_game_id"]),
+                is_hidden=bool(row["is_hidden"]),
             )
             for row in rows
         ]
 
     def get_opponent(self, owner_id: int, opponent_id: int) -> Opponent:
+        return self._get_opponent_record(owner_id, opponent_id, include_hidden=False)
+
+    def _get_opponent_record(self, owner_id: int, opponent_id: int, *, include_hidden: bool) -> Opponent:
         row = self.connection.execute(
             """
             SELECT
@@ -522,12 +320,14 @@ class Database:
                 o.opponent_user_id,
                 u.first_name,
                 u.username,
-                u.elo_rating
+                u.elo_rating,
+                o.history_start_game_id,
+                o.is_hidden
             FROM opponents o
             LEFT JOIN users u ON u.telegram_id = o.opponent_user_id
-            WHERE o.owner_id = ? AND o.id = ?
+            WHERE o.owner_id = ? AND o.id = ? AND (? OR o.is_hidden = FALSE)
             """,
-            (owner_id, opponent_id),
+            (owner_id, opponent_id, include_hidden),
         ).fetchone()
         if row is None:
             raise LookupError("Соперник не найден.")
@@ -538,31 +338,42 @@ class Database:
             opponent_user_id=row["opponent_user_id"],
             first_name=row["first_name"],
             username=row["username"],
-            elo_rating=row["elo_rating"],
+            elo_rating=int(row["elo_rating"]) if row["elo_rating"] is not None else None,
+            history_start_game_id=int(row["history_start_game_id"]),
+            is_hidden=bool(row["is_hidden"]),
         )
 
     def delete_opponent(self, owner_id: int, opponent_id: int) -> None:
         opponent = self.get_opponent(owner_id, opponent_id)
-        linked_opponent = self._get_linked_opponent(owner_id, opponent_id)
         with self.connection:
-            self._reset_stats_for_opponent(owner_id, opponent_id, opponent, linked_opponent)
-            if opponent.opponent_user_id is not None:
-                self._recalculate_elo_ratings()
+            if opponent.opponent_user_id is None:
+                self.connection.execute(
+                    "DELETE FROM opponents WHERE owner_id = ? AND id = ?",
+                    (owner_id, opponent_id),
+                )
+                return
 
+            purged_games = self._reset_linked_stats_for_owner(opponent)
             self.connection.execute(
-                """
-                DELETE FROM opponents
-                WHERE owner_id = ? AND id = ?
-                """,
+                "UPDATE opponents SET is_hidden = TRUE WHERE owner_id = ? AND id = ?",
                 (owner_id, opponent_id),
             )
+            if purged_games:
+                self._recalculate_elo_ratings()
 
     def reset_opponent_stats(self, owner_id: int, opponent_id: int) -> None:
         opponent = self.get_opponent(owner_id, opponent_id)
-        linked_opponent = self._get_linked_opponent(owner_id, opponent_id)
         with self.connection:
-            self._reset_stats_for_opponent(owner_id, opponent_id, opponent, linked_opponent)
-            if opponent.opponent_user_id is not None:
+            if opponent.opponent_user_id is None:
+                self.connection.execute(
+                    "DELETE FROM games WHERE owner_id = ? AND opponent_id = ?",
+                    (owner_id, opponent_id),
+                )
+                self._delete_adjustment(owner_id, opponent_id)
+                return
+
+            purged_games = self._reset_linked_stats_for_owner(opponent)
+            if purged_games:
                 self._recalculate_elo_ratings()
 
     def get_or_create_invite_code(self, inviter_id: int) -> str:
@@ -632,8 +443,19 @@ class Database:
         ).fetchone()
         return int(row["referral_count"])
 
-    def add_game(self, owner_id: int, opponent_id: int, score: ParsedScore) -> int:
+    def add_game(
+        self,
+        owner_id: int,
+        opponent_id: int,
+        score: ParsedScore,
+        operation_id: Optional[str] = None,
+    ) -> int:
         opponent = self.get_opponent(owner_id, opponent_id)
+        normalized_operation_id = operation_id.strip() if operation_id is not None else None
+        if normalized_operation_id == "":
+            normalized_operation_id = None
+        if normalized_operation_id is not None and len(normalized_operation_id) > 64:
+            raise ValueError("Идентификатор операции слишком длинный.")
         now = now_moscow_iso()
         if opponent.opponent_user_id is None:
             owner_column = owner_id
@@ -648,72 +470,156 @@ class Database:
             INSERT INTO games (
                 created_by_id, owner_id, opponent_id, player_a_id, player_b_id,
                 player_a_score, player_b_score, regular_a, regular_b,
-                overtime_a, overtime_b, played_at
+                overtime_a, overtime_b, played_at, operation_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT DO NOTHING
             RETURNING id
             """
 
-        cursor = self.connection.execute(
-            insert_query,
-            (
-                owner_id,
-                owner_column,
-                opponent_column,
-                owner_id,
-                player_b_id,
-                score.own_score,
-                score.opponent_score,
-                score.regular_own,
-                score.regular_opponent,
-                score.overtime_own,
-                score.overtime_opponent,
-                now,
-            ),
+        with self.connection:
+            if normalized_operation_id is not None:
+                existing_game_id = self._existing_operation_game_id(
+                    owner_id,
+                    normalized_operation_id,
+                    opponent,
+                    score,
+                )
+                if existing_game_id is not None:
+                    return existing_game_id
+
+            locked_ratings: dict[int, tuple[int, int]] = {}
+            if player_b_id is not None:
+                self._prepare_linked_pair_for_game(opponent)
+                locked_ratings = self._lock_linked_ratings(owner_id, player_b_id)
+
+            cursor = self.connection.execute(
+                insert_query,
+                (
+                    owner_id,
+                    owner_column,
+                    opponent_column,
+                    owner_id,
+                    player_b_id,
+                    score.own_score,
+                    score.opponent_score,
+                    score.regular_own,
+                    score.regular_opponent,
+                    score.overtime_own,
+                    score.overtime_opponent,
+                    now,
+                    normalized_operation_id,
+                ),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                if normalized_operation_id is None:
+                    raise RuntimeError("Не удалось сохранить игру.")
+                existing_game_id = self._existing_operation_game_id(
+                    owner_id,
+                    normalized_operation_id,
+                    opponent,
+                    score,
+                )
+                if existing_game_id is None:
+                    raise RuntimeError("Не удалось сохранить игру.")
+                return existing_game_id
+
+            game_id = int(row["id"])
+            if player_b_id is not None:
+                self._append_linked_elo_events(
+                    game_id,
+                    owner_id,
+                    player_b_id,
+                    score,
+                    now,
+                    locked_ratings,
+                )
+        return game_id
+
+    def _existing_operation_game_id(
+        self,
+        owner_id: int,
+        operation_id: str,
+        opponent: Opponent,
+        score: ParsedScore,
+    ) -> Optional[int]:
+        row = self.connection.execute(
+            """
+            SELECT
+                id, owner_id, opponent_id, player_a_id, player_b_id,
+                player_a_score, player_b_score, regular_a, regular_b,
+                overtime_a, overtime_b
+            FROM games
+            WHERE created_by_id = ? AND operation_id = ?
+            """,
+            (owner_id, operation_id),
+        ).fetchone()
+        if row is None:
+            return None
+
+        if opponent.opponent_user_id is None:
+            same_opponent = (
+                row["owner_id"] == owner_id
+                and row["opponent_id"] == opponent.id
+                and row["player_b_id"] is None
+            )
+        else:
+            same_opponent = (
+                row["owner_id"] is None
+                and row["opponent_id"] is None
+                and row["player_a_id"] == owner_id
+                and row["player_b_id"] == opponent.opponent_user_id
+            )
+        same_score = (
+            row["player_a_score"] == score.own_score
+            and row["player_b_score"] == score.opponent_score
+            and row["regular_a"] == score.regular_own
+            and row["regular_b"] == score.regular_opponent
+            and row["overtime_a"] == score.overtime_own
+            and row["overtime_b"] == score.overtime_opponent
         )
-        row = cursor.fetchone()
-        if player_b_id is not None:
-            self._recalculate_elo_ratings()
-        self.connection.commit()
+        if not same_opponent or not same_score:
+            raise ValueError("Идентификатор операции уже использован для другого счёта.")
         return int(row["id"])
 
     def delete_game(self, owner_id: int, opponent_id: int, game_id: int) -> bool:
         opponent = self.get_opponent(owner_id, opponent_id)
-        if opponent.opponent_user_id is None:
-            cursor = self.connection.execute(
-                """
-                DELETE FROM games
-                WHERE id = ? AND created_by_id = ? AND owner_id = ? AND opponent_id = ?
-                """,
-                (game_id, owner_id, owner_id, opponent_id),
-            )
-        else:
-            cursor = self.connection.execute(
-                """
-                DELETE FROM games
-                WHERE
-                    id = ?
-                    AND created_by_id = ?
-                    AND (
-                        (player_a_id = ? AND player_b_id = ?)
-                        OR
-                        (player_a_id = ? AND player_b_id = ?)
-                    )
-                """,
-                (
-                    game_id,
-                    owner_id,
-                    owner_id,
-                    opponent.opponent_user_id,
-                    opponent.opponent_user_id,
-                    owner_id,
-                ),
-            )
+        with self.connection:
+            if opponent.opponent_user_id is None:
+                cursor = self.connection.execute(
+                    """
+                    DELETE FROM games
+                    WHERE id = ? AND created_by_id = ? AND owner_id = ? AND opponent_id = ?
+                    """,
+                    (game_id, owner_id, owner_id, opponent_id),
+                )
+            else:
+                cursor = self.connection.execute(
+                    """
+                    DELETE FROM games
+                    WHERE
+                        id = ?
+                        AND created_by_id = ?
+                        AND (
+                            (player_a_id = ? AND player_b_id = ?)
+                            OR
+                            (player_a_id = ? AND player_b_id = ?)
+                        )
+                    """,
+                    (
+                        game_id,
+                        owner_id,
+                        owner_id,
+                        opponent.opponent_user_id,
+                        opponent.opponent_user_id,
+                        owner_id,
+                    ),
+                )
 
-        deleted = cursor.rowcount > 0
-        if deleted and opponent.opponent_user_id is not None:
-            self._recalculate_elo_ratings()
-        self.connection.commit()
+            deleted = cursor.rowcount > 0
+            if deleted and opponent.opponent_user_id is not None:
+                self._recalculate_elo_ratings()
         return deleted
 
     def get_opponent_stats(self, owner_id: int, opponent_id: int, adjusted: bool = True) -> Stats:
@@ -775,13 +681,20 @@ class Database:
                 """
                 SELECT player_a_id, player_b_id, player_a_score, player_b_score, played_at
                 FROM games
-                WHERE
+                WHERE id > ? AND (
                     (player_a_id = ? AND player_b_id = ?)
                     OR
                     (player_a_id = ? AND player_b_id = ?)
+                )
                 ORDER BY played_at DESC
                 """,
-                (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id),
+                (
+                    opponent.history_start_game_id,
+                    owner_id,
+                    opponent.opponent_user_id,
+                    opponent.opponent_user_id,
+                    owner_id,
+                ),
             ).fetchall()
             for row in rows:
                 if int(row["player_a_id"]) == owner_id:
@@ -823,12 +736,19 @@ class Database:
             """
             SELECT COUNT(*) AS games_count
             FROM games
-            WHERE
+            WHERE id > ? AND (
                 (player_a_id = ? AND player_b_id = ?)
                 OR
                 (player_a_id = ? AND player_b_id = ?)
+            )
             """,
-            (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id),
+            (
+                opponent.history_start_game_id,
+                owner_id,
+                opponent.opponent_user_id,
+                opponent.opponent_user_id,
+                owner_id,
+            ),
         ).fetchone()
         return int(row["games_count"])
 
@@ -840,7 +760,7 @@ class Database:
         if opponent.opponent_user_id is None:
             rows = self.connection.execute(
                 """
-                SELECT played_at, player_a_score, player_b_score
+                SELECT id, played_at, player_a_score, player_b_score
                 FROM games
                 WHERE owner_id = ? AND opponent_id = ?
                 ORDER BY played_at DESC, id DESC
@@ -854,23 +774,42 @@ class Database:
                     played_at=row["played_at"],
                     own_score=int(row["player_a_score"]),
                     opponent_score=int(row["player_b_score"]),
+                    game_id=int(row["id"]),
                 )
                 for row in rows
             ]
 
         rows = self.connection.execute(
             """
-            SELECT player_a_id, player_b_id, player_a_score, player_b_score, played_at
-            FROM games
-            WHERE
-                (player_a_id = ? AND player_b_id = ?)
+            SELECT
+                g.id,
+                g.player_a_id,
+                g.player_b_id,
+                g.player_a_score,
+                g.player_b_score,
+                g.played_at,
+                e.rating_change AS elo_change
+            FROM games g
+            LEFT JOIN elo_events e ON e.game_id = g.id AND e.player_id = ?
+            WHERE g.id > ? AND (
+                (g.player_a_id = ? AND g.player_b_id = ?)
                 OR
-                (player_a_id = ? AND player_b_id = ?)
-            ORDER BY played_at DESC, id DESC
+                (g.player_a_id = ? AND g.player_b_id = ?)
+            )
+            ORDER BY g.played_at DESC, g.id DESC
             LIMIT ?
             OFFSET ?
             """,
-            (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id, limit, offset),
+            (
+                owner_id,
+                opponent.history_start_game_id,
+                owner_id,
+                opponent.opponent_user_id,
+                opponent.opponent_user_id,
+                owner_id,
+                limit,
+                offset,
+            ),
         ).fetchall()
         recent_games: list[RecentGame] = []
         for row in rows:
@@ -885,9 +824,118 @@ class Database:
                     played_at=row["played_at"],
                     own_score=own_score,
                     opponent_score=opponent_score,
+                    game_id=int(row["id"]),
+                    elo_change=int(row["elo_change"]) if row["elo_change"] is not None else None,
                 )
             )
         return recent_games
+
+    def count_user_games(self, owner_id: int) -> int:
+        row = self.connection.execute(
+            """
+            SELECT COUNT(*) AS games_count
+            FROM (
+                SELECT g.id
+                FROM games g
+                JOIN opponents o ON o.id = g.opponent_id AND o.owner_id = g.owner_id
+                WHERE g.owner_id = ? AND o.is_hidden = FALSE
+
+                UNION ALL
+
+                SELECT g.id
+                FROM games g
+                JOIN opponents o
+                  ON o.owner_id = ?
+                 AND o.opponent_user_id = CASE
+                    WHEN g.player_a_id = ? THEN g.player_b_id
+                    ELSE g.player_a_id
+                 END
+                WHERE
+                    o.is_hidden = FALSE
+                    AND g.player_b_id IS NOT NULL
+                    AND g.id > o.history_start_game_id
+                    AND (g.player_a_id = ? OR g.player_b_id = ?)
+            ) history
+            """,
+            (owner_id, owner_id, owner_id, owner_id, owner_id),
+        ).fetchone()
+        return int(row["games_count"])
+
+    def get_user_game_history(self, owner_id: int, limit: int = 20, offset: int = 0) -> list[dict[str, Any]]:
+        limit = require_positive_limit(limit, maximum=100)
+        offset = require_non_negative_offset(offset)
+        rows = self.connection.execute(
+            """
+            SELECT
+                history.opponent_id,
+                history.id,
+                history.played_at,
+                history.own_score,
+                history.opponent_score,
+                history.elo_change
+            FROM (
+                SELECT
+                    o.id AS opponent_id,
+                    g.id,
+                    g.played_at,
+                    g.player_a_score AS own_score,
+                    g.player_b_score AS opponent_score,
+                    NULL::INTEGER AS elo_change
+                FROM games g
+                JOIN opponents o ON o.id = g.opponent_id AND o.owner_id = g.owner_id
+                WHERE g.owner_id = ? AND o.is_hidden = FALSE
+
+                UNION ALL
+
+                SELECT
+                    o.id AS opponent_id,
+                    g.id,
+                    g.played_at,
+                    CASE WHEN g.player_a_id = ? THEN g.player_a_score ELSE g.player_b_score END AS own_score,
+                    CASE WHEN g.player_a_id = ? THEN g.player_b_score ELSE g.player_a_score END AS opponent_score,
+                    e.rating_change AS elo_change
+                FROM games g
+                JOIN opponents o
+                  ON o.owner_id = ?
+                 AND o.opponent_user_id = CASE
+                    WHEN g.player_a_id = ? THEN g.player_b_id
+                    ELSE g.player_a_id
+                 END
+                LEFT JOIN elo_events e ON e.game_id = g.id AND e.player_id = ?
+                WHERE
+                    o.is_hidden = FALSE
+                    AND g.player_b_id IS NOT NULL
+                    AND g.id > o.history_start_game_id
+                    AND (g.player_a_id = ? OR g.player_b_id = ?)
+            ) history
+            ORDER BY history.played_at DESC, history.id DESC
+            LIMIT ?
+            OFFSET ?
+            """,
+            (
+                owner_id,
+                owner_id,
+                owner_id,
+                owner_id,
+                owner_id,
+                owner_id,
+                owner_id,
+                owner_id,
+                limit,
+                offset,
+            ),
+        ).fetchall()
+        return [
+            {
+                "opponent_id": int(row["opponent_id"]),
+                "game_id": int(row["id"]),
+                "played_at": str(row["played_at"]),
+                "own_score": int(row["own_score"]),
+                "opponent_score": int(row["opponent_score"]),
+                "elo_change": int(row["elo_change"]) if row["elo_change"] is not None else None,
+            }
+            for row in rows
+        ]
 
     def set_games_total(self, owner_id: int, opponent_id: int, wins: int, losses: int) -> None:
         with self.connection:
@@ -990,12 +1038,19 @@ class Database:
             """
             SELECT player_a_id, player_b_id, player_a_score, player_b_score
             FROM games
-            WHERE
+            WHERE id > ? AND (
                 (player_a_id = ? AND player_b_id = ?)
                 OR
                 (player_a_id = ? AND player_b_id = ?)
+            )
             """,
-            (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id),
+            (
+                opponent.history_start_game_id,
+                owner_id,
+                opponent.opponent_user_id,
+                opponent.opponent_user_id,
+                owner_id,
+            ),
         ).fetchall()
         for row in rows:
             if int(row["player_a_id"]) == owner_id:
@@ -1054,13 +1109,20 @@ class Database:
                 overtime_b,
                 played_at
             FROM games
-            WHERE
+            WHERE id > ? AND (
                 (player_a_id = ? AND player_b_id = ?)
                 OR
                 (player_a_id = ? AND player_b_id = ?)
+            )
             ORDER BY played_at DESC, id DESC
             """,
-            (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id),
+            (
+                opponent.history_start_game_id,
+                owner_id,
+                opponent.opponent_user_id,
+                opponent.opponent_user_id,
+                owner_id,
+            ),
         ).fetchall()
         game_rows: list[dict[str, Any]] = []
         for row in rows:
@@ -1128,39 +1190,245 @@ class Database:
             (owner_id, opponent_id),
         )
 
-    def _reset_stats_for_opponent(
-        self,
-        owner_id: int,
-        opponent_id: int,
-        opponent: Opponent,
-        linked_opponent: Optional[Opponent],
-    ) -> None:
+    def _reset_linked_stats_for_owner(self, opponent: Opponent) -> bool:
         if opponent.opponent_user_id is None:
+            raise ValueError("Для локального соперника нужен локальный сброс.")
+
+        linked_opponent = self._get_linked_opponent(opponent.owner_id, opponent.id)
+        cutoff = self._max_linked_game_id(opponent.owner_id, opponent.opponent_user_id)
+        self.connection.execute(
+            """
+            UPDATE opponents
+            SET history_start_game_id = ?
+            WHERE owner_id = ? AND id = ?
+            """,
+            (cutoff, opponent.owner_id, opponent.id),
+        )
+        self._delete_adjustment(opponent.owner_id, opponent.id)
+
+        if linked_opponent is not None and self._opponent_has_retained_stats(linked_opponent):
+            return False
+
+        deleted = self.connection.execute(
+            """
+            DELETE FROM games
+            WHERE
+                (player_a_id = ? AND player_b_id = ?)
+                OR
+                (player_a_id = ? AND player_b_id = ?)
+            """,
+            (
+                opponent.owner_id,
+                opponent.opponent_user_id,
+                opponent.opponent_user_id,
+                opponent.owner_id,
+            ),
+        ).rowcount > 0
+        self.connection.execute(
+            "UPDATE opponents SET history_start_game_id = 0 WHERE owner_id = ? AND id = ?",
+            (opponent.owner_id, opponent.id),
+        )
+        if linked_opponent is not None:
+            self._delete_adjustment(linked_opponent.owner_id, linked_opponent.id)
             self.connection.execute(
-                """
-                DELETE FROM games
-                WHERE owner_id = ? AND opponent_id = ?
-                """,
-                (owner_id, opponent_id),
+                "UPDATE opponents SET history_start_game_id = 0 WHERE owner_id = ? AND id = ?",
+                (linked_opponent.owner_id, linked_opponent.id),
             )
+        return deleted
+
+    def _prepare_linked_pair_for_game(self, opponent: Opponent) -> None:
+        linked_opponent = self._get_linked_opponent(opponent.owner_id, opponent.id)
+        if linked_opponent is None:
+            return
+
+        current_has_stats = self._opponent_has_retained_stats(opponent)
+        linked_has_stats = self._opponent_has_retained_stats(linked_opponent)
+
+        if current_has_stats and not linked_has_stats:
+            self._restore_opponent_from_source(linked_opponent, opponent)
+        elif linked_has_stats and not current_has_stats:
+            self._restore_opponent_from_source(opponent, linked_opponent)
+        elif current_has_stats and linked_has_stats:
+            source, target = (
+                (opponent, linked_opponent)
+                if opponent.history_start_game_id <= linked_opponent.history_start_game_id
+                else (linked_opponent, opponent)
+            )
+            if source.history_start_game_id != target.history_start_game_id or target.is_hidden:
+                self._restore_opponent_from_source(target, source)
         else:
             self.connection.execute(
                 """
-                DELETE FROM games
-                WHERE
+                UPDATE opponents
+                SET history_start_game_id = 0, is_hidden = FALSE
+                WHERE id IN (?, ?)
+                """,
+                (opponent.id, linked_opponent.id),
+            )
+            self._delete_adjustment(opponent.owner_id, opponent.id)
+            self._delete_adjustment(linked_opponent.owner_id, linked_opponent.id)
+
+        self.connection.execute(
+            "UPDATE opponents SET is_hidden = FALSE WHERE id IN (?, ?)",
+            (opponent.id, linked_opponent.id),
+        )
+
+    def _restore_opponent_from_source(self, target: Opponent, source: Opponent) -> None:
+        self.connection.execute(
+            """
+            UPDATE opponents
+            SET history_start_game_id = ?, is_hidden = FALSE
+            WHERE owner_id = ? AND id = ?
+            """,
+            (source.history_start_game_id, target.owner_id, target.id),
+        )
+        adjustment = self._get_adjustment(source.owner_id, source.id)
+        if all(
+            adjustment[key] == 0
+            for key in (
+                "games_won_delta",
+                "games_lost_delta",
+                "points_for_delta",
+                "points_against_delta",
+            )
+        ):
+            self._delete_adjustment(target.owner_id, target.id)
+            return
+        self._upsert_adjustment(
+            owner_id=target.owner_id,
+            opponent_id=target.id,
+            games_won_delta=adjustment["games_lost_delta"],
+            games_lost_delta=adjustment["games_won_delta"],
+            points_for_delta=adjustment["points_against_delta"],
+            points_against_delta=adjustment["points_for_delta"],
+            games_updated_at=adjustment["games_updated_at"],
+            points_updated_at=adjustment["points_updated_at"],
+        )
+
+    def _opponent_has_retained_stats(self, opponent: Opponent) -> bool:
+        if opponent.is_hidden:
+            return False
+        if opponent.opponent_user_id is None:
+            return self.count_opponent_games(opponent.owner_id, opponent.id) > 0
+        row = self.connection.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM games
+                WHERE id > ? AND (
                     (player_a_id = ? AND player_b_id = ?)
                     OR
                     (player_a_id = ? AND player_b_id = ?)
-                """,
-                (owner_id, opponent.opponent_user_id, opponent.opponent_user_id, owner_id),
+                )
+            ) AS has_games
+            """,
+            (
+                opponent.history_start_game_id,
+                opponent.owner_id,
+                opponent.opponent_user_id,
+                opponent.opponent_user_id,
+                opponent.owner_id,
+            ),
+        ).fetchone()
+        if bool(row["has_games"]):
+            return True
+        adjustment = self._get_adjustment(opponent.owner_id, opponent.id)
+        return any(
+            adjustment[key] != 0
+            for key in (
+                "games_won_delta",
+                "games_lost_delta",
+                "points_for_delta",
+                "points_against_delta",
             )
+        )
 
-        self._delete_adjustment(owner_id, opponent_id)
-        if linked_opponent is not None:
-            self._delete_adjustment(linked_opponent.owner_id, linked_opponent.id)
+    def _max_linked_game_id(self, player_a_id: int, player_b_id: int) -> int:
+        row = self.connection.execute(
+            """
+            SELECT COALESCE(MAX(id), 0) AS game_id
+            FROM games
+            WHERE
+                (player_a_id = ? AND player_b_id = ?)
+                OR
+                (player_a_id = ? AND player_b_id = ?)
+            """,
+            (player_a_id, player_b_id, player_b_id, player_a_id),
+        ).fetchone()
+        return int(row["game_id"])
+
+    def _lock_linked_ratings(self, player_a_id: int, player_b_id: int) -> dict[int, tuple[int, int]]:
+        rows = self.connection.execute(
+            """
+            SELECT telegram_id, elo_rating, elo_games
+            FROM users
+            WHERE telegram_id IN (?, ?)
+            ORDER BY telegram_id
+            FOR UPDATE
+            """,
+            (player_a_id, player_b_id),
+        ).fetchall()
+        ratings = {
+            int(row["telegram_id"]): (int(row["elo_rating"]), int(row["elo_games"]))
+            for row in rows
+        }
+        if set(ratings) != {player_a_id, player_b_id}:
+            raise LookupError("Игрок не найден.")
+        return ratings
+
+    def _append_linked_elo_events(
+        self,
+        game_id: int,
+        player_a_id: int,
+        player_b_id: int,
+        score: ParsedScore,
+        played_at: str,
+        locked_ratings: dict[int, tuple[int, int]],
+    ) -> None:
+        player_a_rating, player_a_games = locked_ratings[player_a_id]
+        player_b_rating, player_b_games = locked_ratings[player_b_id]
+        rating_change = calculate_rating_change(
+            player_a_rating,
+            player_b_rating,
+            player_a_games,
+            player_b_games,
+            player_a_won=score.own_score > score.opponent_score,
+        )
+        player_a_after = player_a_rating + rating_change
+        player_b_after = player_b_rating - rating_change
+        self.connection.execute(
+            "UPDATE users SET elo_rating = ?, elo_games = ? WHERE telegram_id = ?",
+            (player_a_after, player_a_games + 1, player_a_id),
+        )
+        self.connection.execute(
+            "UPDATE users SET elo_rating = ?, elo_games = ? WHERE telegram_id = ?",
+            (player_b_after, player_b_games + 1, player_b_id),
+        )
+        self._insert_elo_event(
+            EloEvent(
+                game_id=game_id,
+                player_id=player_a_id,
+                opponent_id=player_b_id,
+                rating_before=player_a_rating,
+                rating_change=rating_change,
+                rating_after=player_a_after,
+                played_at=played_at,
+            )
+        )
+        self._insert_elo_event(
+            EloEvent(
+                game_id=game_id,
+                player_id=player_b_id,
+                opponent_id=player_a_id,
+                rating_before=player_b_rating,
+                rating_change=-rating_change,
+                rating_after=player_b_after,
+                played_at=played_at,
+            )
+        )
 
     def _get_linked_opponent(self, owner_id: int, opponent_id: int) -> Optional[Opponent]:
-        opponent = self.get_opponent(owner_id, opponent_id)
+        opponent = self._get_opponent_record(owner_id, opponent_id, include_hidden=True)
         if opponent.opponent_user_id is None:
             return None
 
@@ -1173,7 +1441,7 @@ class Database:
         ).fetchone()
         if row is None:
             return None
-        return self.get_opponent(opponent.opponent_user_id, int(row["id"]))
+        return self._get_opponent_record(opponent.opponent_user_id, int(row["id"]), include_hidden=True)
 
     def _upsert_adjustment(
         self,
@@ -1220,7 +1488,7 @@ class Database:
         row = self.connection.execute(
             """
             SELECT 1 FROM opponents
-            WHERE owner_id = ? AND opponent_user_id = ?
+            WHERE owner_id = ? AND opponent_user_id = ? AND is_hidden = FALSE
             """,
             (owner_id, opponent_user_id),
         ).fetchone()
@@ -1257,12 +1525,6 @@ def now_moscow_iso() -> str:
 
 def normalize_invite_code(invite_code: str) -> str:
     return invite_code.strip().replace(" ", "").upper()
-
-
-def require_schema_name(name: str) -> str:
-    if name not in ALLOWED_SCHEMA_NAMES:
-        raise ValueError("Недопустимое имя таблицы или колонки.")
-    return name
 
 
 def require_positive_limit(limit: int, maximum: int) -> int:

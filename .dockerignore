@@ -1,0 +1,13 @@
+.git
+.env
+.venv
+.agents
+__pycache__
+*.pyc
+.pytest_cache
+data
+web/node_modules
+web/dist
+web/mini-app/storybook
+.playwright-mcp
+.DS_Store
