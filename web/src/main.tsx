@@ -26,6 +26,7 @@ import type {
 import { AppIcon } from "./components/AppIcon";
 import { BottomNavigation, MainTab } from "./components/BottomNavigation";
 import { NumericKeypad } from "./components/NumericKeypad";
+import { ProfileAvatarContent, profileAvatarKind } from "./components/ProfileAvatar";
 import { ProgressiveLoadTrigger } from "./components/ProgressiveLoadTrigger";
 import { easeInOut, easeOut } from "./lib/motion";
 import { tma } from "./lib/tma";
@@ -41,12 +42,17 @@ type ScoreReturnTarget = "home" | "opponent";
 type ActionSheet = "actions" | "opponents" | "share" | "accept" | null;
 type OpponentEditSheet = "actions" | "games" | "points" | "reset" | "delete" | null;
 type PendingAction = "score" | "opponent" | "invite" | "rating" | "profile" | "avatar";
+type PaginationRequest = { token: number; inFlight: boolean };
 
 const mainTabPosition: Record<MainTab, number> = {
   stats: 0,
   matches: 1,
   profile: 2,
 };
+
+function isMainTabScreen(screen: Screen): boolean {
+  return screen === "home" || screen === "stats" || screen === "profile";
+}
 
 function scoreValidationError(ownScore: number, opponentScore: number): string | null {
   if (ownScore === opponentScore) return "В завершённой партии не может быть ничьей";
@@ -170,21 +176,23 @@ const previewGames: GamesView = {
   total_pages: 1,
 };
 
+const PREVIEW_PAGE_SIZE = 3;
+
 const previewGamesByOpponent = new Map<number, RecentGame[]>(
   previewOpponents.map((opponent) => [opponent.id, structuredClone(previewGames.games)]),
 );
 let previewGameId = 999;
 const previewSavedGames = new Map<number, { opponentId: number; game: RecentGame; historyGame: HistoryGame }>();
 
-const previewDaily: DailyView = {
-  daily_stats: [
-    { played_on: "2026-07-21", wins: 1, losses: 1 },
-    { played_on: "2026-07-18", wins: 2, losses: 0 },
-    { played_on: "2026-07-12", wins: 1, losses: 2 },
-  ],
-  page: 1,
-  total_pages: 1,
-};
+const previewDailyStats = [
+  { played_on: "2026-07-21", wins: 1, losses: 1 },
+  { played_on: "2026-07-18", wins: 2, losses: 0 },
+  { played_on: "2026-07-12", wins: 1, losses: 2 },
+  { played_on: "2026-07-08", wins: 2, losses: 1 },
+  { played_on: "2026-07-04", wins: 1, losses: 0 },
+  { played_on: "2026-06-29", wins: 0, losses: 2 },
+  { played_on: "2026-06-22", wins: 3, losses: 1 },
+];
 
 function previewPlayedAt(daysAgo: number, hour: number, minute: number): string {
   const value = new Date();
@@ -193,17 +201,26 @@ function previewPlayedAt(daysAgo: number, hour: number, minute: number): string 
   return value.toISOString();
 }
 
-const previewHistory: HistoryView = {
-  games: [
-    { opponent_id: 1, opponent_name: "Мария", played_at: previewPlayedAt(0, 19, 30), own_score: 11, opponent_score: 8, elo_change: 11 },
-    { opponent_id: 2, opponent_name: "Иван", played_at: previewPlayedAt(0, 18, 10), own_score: 9, opponent_score: 11, elo_change: -13 },
-    { opponent_id: 3, opponent_name: "Даша", played_at: previewPlayedAt(3, 20, 5), own_score: 12, opponent_score: 10, elo_change: 0 },
-    { opponent_id: 1, opponent_name: "Мария", played_at: previewPlayedAt(8, 17, 45), own_score: 11, opponent_score: 6, elo_change: 10 },
-    { opponent_id: 2, opponent_name: "Иван", played_at: previewPlayedAt(36, 16, 20), own_score: 7, opponent_score: 11, elo_change: -12 },
-  ],
-  page: 1,
-  total_pages: 1,
-};
+let previewHistoryGames: HistoryGame[] = [
+  { opponent_id: 1, opponent_name: "Мария", played_at: previewPlayedAt(0, 19, 30), own_score: 11, opponent_score: 8, elo_change: 11 },
+  { opponent_id: 2, opponent_name: "Иван", played_at: previewPlayedAt(0, 18, 10), own_score: 9, opponent_score: 11, elo_change: -13 },
+  { opponent_id: 3, opponent_name: "Даша", played_at: previewPlayedAt(3, 20, 5), own_score: 12, opponent_score: 10, elo_change: 0 },
+  { opponent_id: 1, opponent_name: "Мария", played_at: previewPlayedAt(8, 17, 45), own_score: 11, opponent_score: 6, elo_change: 10 },
+  { opponent_id: 2, opponent_name: "Иван", played_at: previewPlayedAt(14, 18, 25), own_score: 11, opponent_score: 9, elo_change: 9 },
+  { opponent_id: 3, opponent_name: "Даша", played_at: previewPlayedAt(21, 19, 5), own_score: 8, opponent_score: 11, elo_change: -10 },
+  { opponent_id: 1, opponent_name: "Мария", played_at: previewPlayedAt(28, 20, 15), own_score: 13, opponent_score: 11, elo_change: 12 },
+  { opponent_id: 2, opponent_name: "Иван", played_at: previewPlayedAt(36, 16, 20), own_score: 7, opponent_score: 11, elo_change: -12 },
+];
+
+function requestedPage(path: string): number {
+  return Math.max(1, Number(new URL(path, window.location.origin).searchParams.get("page") ?? 1));
+}
+
+function pagedPreview<T>(items: T[], page: number, pageSize = PREVIEW_PAGE_SIZE): { items: T[]; totalPages: number } {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const start = (page - 1) * pageSize;
+  return { items: structuredClone(items.slice(start, start + pageSize)), totalPages };
+}
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (LOCAL_PREVIEW) {
@@ -238,17 +255,25 @@ async function previewApi<T>(path: string, options: RequestInit): Promise<T> {
     return { opponents: structuredClone(previewOpponents) } as T;
   }
   if (path.startsWith("/api/games")) {
-    return structuredClone(previewHistory) as T;
+    const page = requestedPage(path);
+    const result = pagedPreview(previewHistoryGames, page);
+    return { games: result.items, page, total_pages: result.totalPages } as T;
   }
   if (path.includes("/stats") || path.includes("/totals/")) {
     return previewStatsForOpponent(path) as T;
   }
   if (path.includes("/games")) {
     const opponentGames = previewGamesByOpponent.get(opponentId) ?? previewGames.games;
-    return { games: structuredClone(opponentGames), page: 1, total_pages: 1 } as T;
+    const url = new URL(path, window.location.origin);
+    const page = requestedPage(path);
+    const limit = Math.max(1, Number(url.searchParams.get("limit") ?? PREVIEW_PAGE_SIZE));
+    const result = pagedPreview(opponentGames, page, limit);
+    return { games: result.items, page, total_pages: result.totalPages } as T;
   }
   if (path.includes("/daily")) {
-    return structuredClone(previewDaily) as T;
+    const page = requestedPage(path);
+    const result = pagedPreview(previewDailyStats, page);
+    return { daily_stats: result.items, page, total_pages: result.totalPages } as T;
   }
   if (path.endsWith("/scores") && method === "POST") {
     const score = payload.score?.match(/^(\d+)[-:](\d+)$/);
@@ -276,7 +301,7 @@ async function previewApi<T>(path: string, options: RequestInit): Promise<T> {
     const opponentGames = previewGamesByOpponent.get(opponent.id) ?? [];
     opponentGames.unshift(game);
     previewGamesByOpponent.set(opponent.id, opponentGames);
-    previewHistory.games.unshift(historyGame);
+    previewHistoryGames.unshift(historyGame);
     opponent.stats.wins += won ? 1 : 0;
     opponent.stats.losses += won ? 0 : 1;
     opponent.stats.points_for += game.own_score;
@@ -311,7 +336,7 @@ async function previewApi<T>(path: string, options: RequestInit): Promise<T> {
       const won = saved.game.own_score > saved.game.opponent_score;
       const opponentGames = previewGamesByOpponent.get(saved.opponentId) ?? [];
       previewGamesByOpponent.set(saved.opponentId, opponentGames.filter((game) => game !== saved.game));
-      previewHistory.games = previewHistory.games.filter((game) => game !== saved.historyGame);
+      previewHistoryGames = previewHistoryGames.filter((game) => game !== saved.historyGame);
       opponent.stats.wins -= won ? 1 : 0;
       opponent.stats.losses -= won ? 0 : 1;
       opponent.stats.points_for -= saved.game.own_score;
@@ -455,16 +480,6 @@ function RollingNumber({ value, className = "", animateOnMount = false }: { valu
   );
 }
 
-function ProfileAvatar({ value }: { value: string | null }) {
-  if (value?.startsWith("data:image/")) {
-    return <img src={value} alt="" />;
-  }
-  if (value) {
-    return <span className="profile-avatar-emoji">{value}</span>;
-  }
-  return <AppIcon name="user" size={62} />;
-}
-
 function historyGroup(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.valueOf())) return "Ранее";
@@ -506,7 +521,14 @@ function historyGameKey(game: HistoryGame): string {
 
 function appendUnique<T>(current: T[], next: T[], key: (item: T) => string): T[] {
   const seen = new Set(current.map(key));
-  return [...current, ...next.filter((item) => !seen.has(key(item)))];
+  const appended: T[] = [];
+  for (const item of next) {
+    const itemKey = key(item);
+    if (seen.has(itemKey)) continue;
+    seen.add(itemKey);
+    appended.push(item);
+  }
+  return [...current, ...appended];
 }
 
 function addGameToDailyView(view: DailyView | null, game: RecentGame): DailyView {
@@ -572,7 +594,11 @@ function App() {
   const [pendingActions, setPendingActions] = useState<ReadonlySet<PendingAction>>(() => new Set());
   const handledStartParam = useRef(false);
   const opponentTabScrollFrame = useRef<number | null>(null);
+  const previousRenderedScreen = useRef<Screen>(screen);
   const opponentRequestId = useRef(0);
+  const historyPageRequest = useRef<PaginationRequest>({ token: 0, inFlight: false });
+  const dailyPageRequest = useRef<PaginationRequest>({ token: 0, inFlight: false });
+  const gamesPageRequest = useRef<PaginationRequest>({ token: 0, inFlight: false });
   const scoreOperationId = useRef<string | null>(null);
 
   const selectedName = selectedOpponent ? opponentName(selectedOpponent) : "Соперник";
@@ -593,6 +619,8 @@ function App() {
   const overlayOpen = Boolean(actionSheet || opponentEditSheet || avatarPickerOpen);
 
   const loadHome = async () => {
+    const historyToken = ++historyPageRequest.current.token;
+    historyPageRequest.current.inFlight = false;
     const [nextProfile, opponentsResponse, historyResponse] = await Promise.all([
       api<Profile>("/api/profile"),
       api<{ opponents: Opponent[] }>("/api/opponents"),
@@ -600,30 +628,57 @@ function App() {
     ]);
     setProfile(nextProfile);
     setOpponents(opponentsResponse.opponents);
-    setHistory(historyResponse);
+    if (historyToken === historyPageRequest.current.token) {
+      setHistory(historyResponse);
+      setHistoryLoadingMore(false);
+      setHistoryLoadError("");
+    }
   };
 
   const loadHistory = async (page = 1, append = false) => {
+    const paging = historyPageRequest.current;
     if (append) {
-      if (historyLoadingMore || (history && history.page >= history.total_pages)) return;
+      if (paging.inFlight || (history && history.page >= history.total_pages)) return;
+      paging.inFlight = true;
       setHistoryLoadingMore(true);
       setHistoryLoadError("");
     }
+    const requestToken = ++paging.token;
+    const scrollSnapshot = append && !historyNewestFirst
+      ? { height: document.documentElement.scrollHeight, top: window.scrollY }
+      : null;
     try {
       const response = await api<HistoryView>(`/api/games?page=${page}`);
-      setHistory((current) => append && current
-        ? { ...response, games: appendUnique(current.games, response.games, historyGameKey) }
-        : response);
+      if (requestToken !== paging.token) return;
+      flushSync(() => {
+        setHistory((current) => append && current
+          ? { ...response, games: appendUnique(current.games, response.games, historyGameKey) }
+          : response);
+      });
+      if (scrollSnapshot) {
+        const heightDelta = document.documentElement.scrollHeight - scrollSnapshot.height;
+        window.scrollTo({ top: scrollSnapshot.top + Math.max(0, heightDelta), behavior: "auto" });
+      }
     } catch (loadError: unknown) {
+      if (requestToken !== paging.token) return;
       if (!append) throw loadError;
       setHistoryLoadError(messageFromError(loadError));
     } finally {
-      if (append) setHistoryLoadingMore(false);
+      if (requestToken === paging.token) {
+        paging.inFlight = false;
+        if (append) setHistoryLoadingMore(false);
+      }
     }
   };
 
   const loadOpponent = async (opponent: Opponent, tab: StatsTab = "summary", page = 1, showScreen = true) => {
     const requestId = ++opponentRequestId.current;
+    dailyPageRequest.current.token += 1;
+    dailyPageRequest.current.inFlight = false;
+    gamesPageRequest.current.token += 1;
+    gamesPageRequest.current.inFlight = false;
+    setDailyLoadingMore(false);
+    setGamesLoadingMore(false);
     setSelectedOpponent(opponent);
     setStatsTab(tab);
     setLastSavedGameId(null);
@@ -647,38 +702,52 @@ function App() {
   };
 
   const loadOpponentDays = async (page: number) => {
-    if (!selectedOpponent || dailyLoadingMore || (daily && daily.page >= daily.total_pages)) return;
+    const paging = dailyPageRequest.current;
+    if (!selectedOpponent || paging.inFlight || (daily && daily.page >= daily.total_pages)) return;
     const requestId = opponentRequestId.current;
+    const requestToken = ++paging.token;
+    paging.inFlight = true;
     setDailyLoadingMore(true);
     setDailyLoadError("");
     try {
       const response = await api<DailyView>(`/api/opponents/${selectedOpponent.id}/daily?page=${page}`);
-      if (requestId !== opponentRequestId.current) return;
+      if (requestId !== opponentRequestId.current || requestToken !== paging.token) return;
       setDaily((current) => current
         ? { ...response, daily_stats: appendUnique(current.daily_stats, response.daily_stats, (item) => item.played_on) }
         : response);
     } catch (loadError: unknown) {
+      if (requestId !== opponentRequestId.current || requestToken !== paging.token) return;
       setDailyLoadError(messageFromError(loadError));
     } finally {
-      setDailyLoadingMore(false);
+      if (requestToken === paging.token) {
+        paging.inFlight = false;
+        setDailyLoadingMore(false);
+      }
     }
   };
 
   const loadOpponentGames = async (page: number) => {
-    if (!selectedOpponent || gamesLoadingMore || (games && games.page >= games.total_pages)) return;
+    const paging = gamesPageRequest.current;
+    if (!selectedOpponent || paging.inFlight || (games && games.page >= games.total_pages)) return;
     const requestId = opponentRequestId.current;
+    const requestToken = ++paging.token;
+    paging.inFlight = true;
     setGamesLoadingMore(true);
     setGamesLoadError("");
     try {
       const response = await api<GamesView>(`/api/opponents/${selectedOpponent.id}/games?page=${page}&limit=10`);
-      if (requestId !== opponentRequestId.current) return;
+      if (requestId !== opponentRequestId.current || requestToken !== paging.token) return;
       setGames((current) => current
         ? { ...response, games: appendUnique(current.games, response.games, recentGameKey) }
         : response);
     } catch (loadError: unknown) {
+      if (requestId !== opponentRequestId.current || requestToken !== paging.token) return;
       setGamesLoadError(messageFromError(loadError));
     } finally {
-      setGamesLoadingMore(false);
+      if (requestToken === paging.token) {
+        paging.inFlight = false;
+        setGamesLoadingMore(false);
+      }
     }
   };
 
@@ -696,6 +765,10 @@ function App() {
     if (screen === "home" || screen === "stats" || screen === "profile") {
       sessionStorage.setItem("ping-tablet:main-tab", screen === "home" ? "matches" : screen);
     }
+  }, [screen]);
+
+  useEffect(() => {
+    previousRenderedScreen.current = screen;
   }, [screen]);
 
   useEffect(() => {
@@ -765,6 +838,12 @@ function App() {
       return;
     }
     const requestId = ++opponentRequestId.current;
+    dailyPageRequest.current.token += 1;
+    dailyPageRequest.current.inFlight = false;
+    gamesPageRequest.current.token += 1;
+    gamesPageRequest.current.inFlight = false;
+    setDailyLoadingMore(false);
+    setGamesLoadingMore(false);
     const [statsResponse, gamesResponse, dailyResponse, chartResponse] = await Promise.all([
       api<OpponentStats>(`/api/opponents/${selectedOpponent.id}/stats`),
       api<GamesView>(`/api/opponents/${selectedOpponent.id}/games?limit=10`),
@@ -1158,7 +1237,6 @@ function App() {
     setError("");
     setScreen(tab === "matches" ? "home" : tab);
     if (tab === "stats") void loadHistory().catch((loadError: unknown) => setError(messageFromError(loadError)));
-    window.scrollTo({ top: 0, behavior: "auto" });
   };
 
   const selectOpponentTab = (tab: StatsTab) => {
@@ -1328,14 +1406,9 @@ function App() {
 
   const canShowNavigation = profile && !loading && (screen === "home" || screen === "stats" || screen === "profile" || screen === "opponent");
   const activeTab: MainTab = screen === "stats" || screen === "profile" ? screen : "matches";
-  const isMainTabScreen = screen === "home" || screen === "stats" || screen === "profile";
-  const mainTabEnterTransform = !isMainTabScreen
-    ? "translateY(4px)"
-    : mainTabDirection < 0
-      ? "translateX(calc(var(--space-page-gutter) * -1))"
-      : mainTabDirection > 0
-        ? "translateX(var(--space-page-gutter))"
-        : "translateY(4px)";
+  const screenMotionDirection = isMainTabScreen(screen) && isMainTabScreen(previousRenderedScreen.current)
+    ? mainTabDirection
+    : 0;
 
   return (
     <MotionConfig reducedMotion="user">
@@ -1364,33 +1437,37 @@ function App() {
               </motion.p>
             ) : null}
           </AnimatePresence>
-          <AnimatePresence initial={false} mode="popLayout">
+          <AnimatePresence initial={false} mode="popLayout" custom={screenMotionDirection}>
             <motion.main
               className="screen"
               key={screen}
-              initial={{
-                opacity: 0,
-                transform: reduceMotion ? "translate(0, 0)" : mainTabEnterTransform,
-              }}
-              animate={{
-                opacity: 1,
-                transform: "translate(0, 0)",
-                transition: {
-                  duration: reduceMotion ? 0.12 : 0.18,
-                  ease: easeOut,
+              custom={screenMotionDirection}
+              variants={{
+                initial: (direction: number) => ({
+                  opacity: 0,
+                  transform: reduceMotion
+                    ? "translateX(0)"
+                    : direction === 0
+                      ? "translateY(4px)"
+                      : `translateX(${direction > 0 ? 14 : -14}px)`,
+                }),
+                animate: {
+                  opacity: 1,
+                  transform: "translate(0, 0)",
                 },
+                exit: (direction: number) => ({
+                  opacity: 0,
+                  transform: reduceMotion
+                    ? "translateX(0)"
+                    : direction === 0
+                      ? "translateY(-3px)"
+                      : `translateX(${direction > 0 ? -14 : 14}px)`,
+                }),
               }}
-              onAnimationComplete={() => {
-                if (mainTabDirection !== 0) setMainTabDirection(0);
-              }}
-              exit={{
-                opacity: 0,
-                transform: reduceMotion ? "translateY(0)" : "translateY(-3px)",
-                transition: {
-                  duration: reduceMotion ? 0.12 : 0.12,
-                  ease: easeOut,
-                },
-              }}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }}
             >
               {screen === "rating" || screen === "levels" || screen === "edit" || screen === "confirm" ? (
                 <PageHeader title={pageTitle(screen)} onBack={goBack} />
@@ -1399,6 +1476,7 @@ function App() {
             </motion.main>
           </AnimatePresence>
 
+        {canShowNavigation ? <ProgressiveBottomBlur /> : null}
         {canShowNavigation ? (
           <div className="bottom-toolbar-slot">
             <motion.div
@@ -1624,12 +1702,8 @@ function HeaderProfileAvatar({ value, back }: { value: string | null; back: bool
   const morphTransition = reduceMotion
     ? { duration: 0.12, ease: easeOut }
     : { duration: 0.24, ease: easeInOut };
-  const customAvatar = value?.startsWith("data:image/")
-    ? <img src={value} alt="" />
-    : value
-      ? <span className="profile-avatar-emoji">{value}</span>
-      : null;
-  const showDefaultAvatar = !back && !customAvatar;
+  const avatarKind = profileAvatarKind(value);
+  const hasCustomAvatar = avatarKind !== "default";
 
   return (
     <motion.span
@@ -1643,33 +1717,29 @@ function HeaderProfileAvatar({ value, back }: { value: string | null; back: bool
         animate={{ opacity: back ? 0 : 1, transform: reduceMotion || !back ? "scale(1)" : "scale(0.72)" }}
         transition={morphTransition}
       />
-      {customAvatar ? (
+      {hasCustomAvatar ? (
         <motion.span
           className="header-leading-custom-avatar"
           animate={{ opacity: back ? 0 : 1, transform: reduceMotion || !back ? "scale(1)" : "scale(0.72)" }}
           transition={morphTransition}
         >
-          {customAvatar}
+          <ProfileAvatarContent value={value} defaultIconSize={22} />
         </motion.span>
       ) : null}
       <motion.svg className="header-leading-morph-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
-        <motion.circle
-          cx="12"
-          cy="8"
-          r="5"
-          animate={{ opacity: showDefaultAvatar ? 1 : 0, pathLength: showDefaultAvatar ? 1 : 0, transform: reduceMotion || showDefaultAvatar ? "scale(1)" : "scale(0.72)" }}
-          transition={morphTransition}
-        />
-        <motion.path
-          d="M20 21a8 8 0 0 0-16 0"
-          animate={{ opacity: showDefaultAvatar ? 1 : 0, pathLength: showDefaultAvatar ? 1 : 0, transform: reduceMotion || showDefaultAvatar ? "scale(1)" : "scale(0.72)" }}
-          transition={morphTransition}
-        />
-        <motion.path
-          d="m15 18-6-6 6-6"
-          animate={{ opacity: back ? 1 : 0, pathLength: back ? 1 : 0, transform: reduceMotion || back ? "scale(1)" : "scale(0.72)" }}
-          transition={morphTransition}
-        />
+        {back ? (
+          <motion.path
+            d="m15 18-6-6 6-6"
+            initial={{ opacity: 0, pathLength: 0, transform: reduceMotion ? "scale(1)" : "scale(0.72)" }}
+            animate={{ opacity: 1, pathLength: 1, transform: "scale(1)" }}
+            transition={morphTransition}
+          />
+        ) : !hasCustomAvatar ? (
+          <>
+            <motion.circle cx="12" cy="8" r="5" initial={{ opacity: 0, pathLength: 0 }} animate={{ opacity: 1, pathLength: 1 }} transition={morphTransition} />
+            <motion.path d="M20 21a8 8 0 0 0-16 0" initial={{ opacity: 0, pathLength: 0 }} animate={{ opacity: 1, pathLength: 1 }} transition={morphTransition} />
+          </>
+        ) : null}
       </motion.svg>
     </motion.span>
   );
@@ -1833,7 +1903,6 @@ function HistoryScreen({
         loading={loadingMore}
         onLoadMore={onLoadMore}
       />
-      <ProgressiveBottomBlur />
     </section>
   );
 }
@@ -1952,7 +2021,6 @@ function OpponentScreen(props: {
           {tabContent}
         </motion.div>
       </AnimatePresence>
-      {props.tab === "days" || props.tab === "games" ? <ProgressiveBottomBlur /> : null}
       {props.lastSavedGameId !== null ? <button className="text-button undo-button" type="button" onClick={props.onUndo} disabled={props.submitting}>Отменить последний счёт</button> : null}
     </>
   );
@@ -2335,7 +2403,7 @@ function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: s
             layoutId="profile-avatar-surface"
             transition={{ layout: reduceMotion ? { duration: 0 } : { duration: 0.24, ease: easeInOut } }}
           >
-            <ProfileAvatar value={profile.user.avatar_value} />
+            <ProfileAvatarContent value={profile.user.avatar_value} />
           </motion.span>
           {props.editing ? <motion.button className="profile-avatar-edit modal-icon-button" type="button" aria-label="Изменить аватар" initial={{ opacity: 0, transform: "scale(0.94)" }} animate={{ opacity: 1, transform: "scale(1)" }} transition={{ duration: 0.18, ease: easeOut }} onClick={props.onAvatarEdit}><AppIcon name="pencil" size={14} /></motion.button> : null}
         </div>
@@ -2673,8 +2741,8 @@ function OpponentEditMenu(props: {
   const touchedPairSides = useRef<Set<ScoreSide>>(new Set());
   const titles: Record<Exclude<OpponentEditSheet, null>, string> = {
     actions: "Изменить",
-    games: "Итог матчей",
-    points: "Итог мячей",
+    games: "Изменить счёт",
+    points: "Изменить мячи",
     reset: "Сбросить статистику",
     delete: "Удалить соперника",
   };
@@ -2755,15 +2823,14 @@ function OpponentEditMenu(props: {
                   {mode === "actions" ? (
                     <div className="action-list opponent-edit-list">
                       <button type="button" onClick={() => props.onMode("games")}><span className="action-icon action-icon-blue"><AppIcon name="award" size={25} /></span><span><strong>Изменить счёт</strong><small>Обновить общий итог матчей</small></span></button>
-                      <button type="button" onClick={() => props.onMode("points")}><span className="action-icon action-icon-green"><AppIcon name="circle-pile" size={25} /></span><span><strong>Изменить мячи</strong><small>Обновить общий итог мячей</small></span></button>
+                      <button type="button" onClick={() => props.onMode("points")}><span className="action-icon action-icon-green"><AppIcon name="circle-pile" size={25} /></span><span><strong>Изменить мячи</strong><small>Обновить количество мячей</small></span></button>
                       <button type="button" onClick={() => props.onMode("reset")}><span className="action-icon action-icon-gray"><AppIcon name="refresh" size={25} /></span><span><strong>Сбросить статистику</strong><small>Обнулить только у себя</small></span></button>
                       <button type="button" onClick={() => props.onMode("delete")}><span className="action-icon action-icon-red"><AppIcon name="trash" size={24} /></span><span><strong>Удалить соперника</strong><small>Убрать только из своего списка</small></span></button>
                     </div>
                   ) : null}
                   {mode === "games" ? (
                     <div className="opponent-edit-form">
-                      <label htmlFor="opponent-games-total">Общий счёт с {props.opponentName}</label>
-                      <div className="pair-keypad-switch" id="opponent-games-total" role="tablist" aria-label="Чей итог изменить">
+                      <div className="pair-keypad-switch" role="tablist" aria-label={`Счёт матчей: ты и ${props.opponentName}`}>
                         <button className={pairSide === "own" ? "pair-keypad-side pair-keypad-side-active" : "pair-keypad-side"} type="button" role="tab" aria-selected={pairSide === "own"} onClick={() => setPairSide("own")}><span>Ты</span><strong>{pairOwn || "0"}</strong></button>
                         <button className={pairSide === "opponent" ? "pair-keypad-side pair-keypad-side-active" : "pair-keypad-side"} type="button" role="tab" aria-selected={pairSide === "opponent"} onClick={() => setPairSide("opponent")}><span>{props.opponentName}</span><strong>{pairOpponent || "0"}</strong></button>
                       </div>
@@ -2773,8 +2840,7 @@ function OpponentEditMenu(props: {
                   ) : null}
                   {mode === "points" ? (
                     <div className="opponent-edit-form">
-                      <label htmlFor="opponent-points-total">Общий итог мячей</label>
-                      <div className="pair-keypad-switch" id="opponent-points-total" role="tablist" aria-label="Чей итог изменить">
+                      <div className="pair-keypad-switch" role="tablist" aria-label={`Счёт мячей: ты и ${props.opponentName}`}>
                         <button className={pairSide === "own" ? "pair-keypad-side pair-keypad-side-active" : "pair-keypad-side"} type="button" role="tab" aria-selected={pairSide === "own"} onClick={() => setPairSide("own")}><span>Ты</span><strong>{pairOwn || "0"}</strong></button>
                         <button className={pairSide === "opponent" ? "pair-keypad-side pair-keypad-side-active" : "pair-keypad-side"} type="button" role="tab" aria-selected={pairSide === "opponent"} onClick={() => setPairSide("opponent")}><span>{props.opponentName}</span><strong>{pairOpponent || "0"}</strong></button>
                       </div>

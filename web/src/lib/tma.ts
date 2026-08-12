@@ -11,7 +11,6 @@ type TelegramRuntime = {
   initDataUnsafe?: { start_param?: string };
   themeParams?: Record<string, string | undefined>;
   colorScheme?: "light" | "dark";
-  isFullscreen?: boolean;
   viewportHeight?: number;
   viewportStableHeight?: number;
   safeAreaInset?: { top?: number; right?: number; bottom?: number; left?: number };
@@ -20,7 +19,6 @@ type TelegramRuntime = {
   HapticFeedback?: { selectionChanged(): void; impactOccurred(style: HapticImpact): void; notificationOccurred(type: HapticNotification): void };
   ready(): void;
   expand(): void;
-  requestFullscreen?(): void;
   setHeaderColor?(color: string): void;
   isVersionAtLeast?(version: string): boolean;
   onEvent(event: string, callback: () => void): void;
@@ -73,28 +71,18 @@ export const tma = {
   prepare: (): (() => void) => {
     runtime.ready();
     runtime.expand();
-    if (supports("8.0")) {
-      try {
-        runtime.requestFullscreen?.();
-      } catch {
-        // `expand()` above remains the supported fallback when a client reports
-        // a newer version but does not implement fullscreen correctly.
-      }
-    }
     applyAppearance();
     const update = () => applyAppearance();
     runtime.onEvent("themeChanged", update);
     runtime.onEvent("viewportChanged", update);
     runtime.onEvent("safeAreaChanged", update);
     runtime.onEvent("contentSafeAreaChanged", update);
-    runtime.onEvent("fullscreenChanged", update);
     window.addEventListener("resize", update);
     return () => {
       runtime.offEvent("themeChanged", update);
       runtime.offEvent("viewportChanged", update);
       runtime.offEvent("safeAreaChanged", update);
       runtime.offEvent("contentSafeAreaChanged", update);
-      runtime.offEvent("fullscreenChanged", update);
       window.removeEventListener("resize", update);
     };
   },
