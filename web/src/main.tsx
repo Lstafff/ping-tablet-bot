@@ -6,7 +6,6 @@ import { Drawer } from "vaul";
 import avatarEmojis from "./avatar-emojis.json";
 
 import "@fontsource-variable/nunito/wght.css";
-import "@fontsource/noto-color-emoji/400.css";
 
 import { requestApi } from "./api/client";
 import type {
@@ -680,6 +679,10 @@ function App() {
     setDailyLoadingMore(false);
     setGamesLoadingMore(false);
     setSelectedOpponent(opponent);
+    setOpponentStats(null);
+    setDaily(null);
+    setGames(null);
+    setChartGames([]);
     setStatsTab(tab);
     setLastSavedGameId(null);
     setDailyLoadError("");
@@ -1288,7 +1291,7 @@ function App() {
 
   const page = (() => {
     if (loading) {
-      return <LoadingScreen />;
+      return null;
     }
     if (!tma.isTelegram() && !LOCAL_PREVIEW) {
       return <TelegramOnlyScreen />;
@@ -1344,7 +1347,10 @@ function App() {
     if (screen === "levels") {
       return <LevelsScreen profile={profile} />;
     }
-    if (screen === "opponent" && selectedOpponent && opponentStats) {
+    if (screen === "opponent" && selectedOpponent) {
+      if (!opponentStats) {
+        return <OpponentOpeningScreen opponent={selectedOpponent} />;
+      }
       return (
         <OpponentScreen
           opponent={selectedOpponent}
@@ -1353,9 +1359,6 @@ function App() {
           daily={daily}
           games={games}
           chartGames={chartGames}
-          lastSavedGameId={lastSavedGameId}
-          submitting={scoreSubmitting}
-          onUndo={() => void undoScore()}
           onTabChange={selectOpponentTab}
           dailyLoadingMore={dailyLoadingMore}
           dailyLoadError={dailyLoadError}
@@ -1490,8 +1493,11 @@ function App() {
                 onSelect={selectMainTab}
                 actionLabel={screen === "profile" && profileEditing ? "Сохранить" : screen === "opponent" ? "Добавить счёт" : undefined}
                 actionForm={screen === "profile" && profileEditing ? "profile-name-form" : undefined}
-                actionDisabled={screen === "profile" && profileEditing ? profileSubmitting || !profileNameInput.trim() : false}
+                actionDisabled={screen === "profile" && profileEditing ? profileSubmitting || !profileNameInput.trim() : screen === "opponent" ? !opponentStats || scoreSubmitting : false}
                 onAction={screen === "opponent" ? () => openScore("opponent") : undefined}
+                auxiliaryActionLabel={screen === "opponent" && lastSavedGameId !== null ? "Отменить последний счёт" : undefined}
+                auxiliaryActionDisabled={scoreSubmitting}
+                onAuxiliaryAction={screen === "opponent" && lastSavedGameId !== null ? () => void undoScore() : undefined}
               />
             </motion.div>
           </div>
@@ -1914,9 +1920,6 @@ function OpponentScreen(props: {
   daily: DailyView | null;
   games: GamesView | null;
   chartGames: RecentGame[];
-  lastSavedGameId: number | null;
-  submitting: boolean;
-  onUndo(): void;
   onTabChange(tab: StatsTab): void;
   dailyLoadingMore: boolean;
   dailyLoadError: string;
@@ -1975,8 +1978,8 @@ function OpponentScreen(props: {
         <MorphingHeading>{opponentName(opponent)}</MorphingHeading>
         <div className="opponent-scoreline" aria-label={`Побед ${stats.stats.wins}, поражений ${stats.stats.losses}`}>
           <ScorePair
-            left={<strong><RollingNumber value={stats.stats.wins} animateOnMount /></strong>}
-            right={<strong><RollingNumber value={stats.stats.losses} animateOnMount /></strong>}
+            left={<strong><RollingNumber value={stats.stats.wins} /></strong>}
+            right={<strong><RollingNumber value={stats.stats.losses} /></strong>}
           />
         </div>
         <p><strong>{winRate(stats.stats)}%</strong> побед · {gamesCount(stats.stats)} партий</p>
@@ -2021,8 +2024,24 @@ function OpponentScreen(props: {
           {tabContent}
         </motion.div>
       </AnimatePresence>
-      {props.lastSavedGameId !== null ? <button className="text-button undo-button" type="button" onClick={props.onUndo} disabled={props.submitting}>Отменить последний счёт</button> : null}
     </>
+  );
+}
+
+function OpponentOpeningScreen({ opponent }: { opponent: Opponent }) {
+  return (
+    <section className="opponent-hero opponent-hero-pending" aria-busy="true">
+      <span className="avatar avatar-opponent" aria-hidden="true">{initials(opponentName(opponent))}</span>
+      <MorphingHeading>{opponentName(opponent)}</MorphingHeading>
+      {opponent.stats ? (
+        <>
+          <div className="opponent-scoreline" aria-label={`Побед ${opponent.stats.wins}, поражений ${opponent.stats.losses}`}>
+            <ScorePair left={<strong>{opponent.stats.wins}</strong>} right={<strong>{opponent.stats.losses}</strong>} />
+          </div>
+          <p>{gamesCount(opponent.stats)} партий</p>
+        </>
+      ) : null}
+    </section>
   );
 }
 
@@ -2486,7 +2505,7 @@ function AvatarPicker(props: { open: boolean; submitting: boolean; feedback: str
       {props.open ? (
         <motion.div className="avatar-picker-overlay" role="presentation" onClick={props.onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }}>
           <motion.section className="avatar-picker" role="dialog" aria-modal="true" aria-label="Выбрать аватар" onClick={(event) => event.stopPropagation()} initial={{ opacity: 0, transform: "translateY(24px) scale(0.98)" }} animate={{ opacity: 1, transform: "translateY(0) scale(1)" }} exit={{ opacity: 0, transform: "translateY(18px) scale(0.99)" }} transition={{ type: "spring", bounce: 0, duration: 0.3 }}>
-            <header><MorphingHeading as="h2">Выбрать аватар</MorphingHeading><button className="modal-icon-button" type="button" aria-label="Закрыть" onClick={props.onClose}><AppIcon name="x" size={14} /></button></header>
+            <header><MorphingHeading as="h2">Выбрать аватар</MorphingHeading><button className="modal-icon-button" type="button" aria-label="Закрыть" onClick={props.onClose}><AppIcon name="x" size={20} /></button></header>
             {props.feedback ? <p className="inline-action-error" role="alert">{props.feedback}</p> : null}
             <div
               className="avatar-emoji-grid"
@@ -2680,7 +2699,7 @@ function ActionMenu(props: {
                       animate={{ opacity: 1, transform: "scale(1)" }}
                       transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }}
                     >
-                      <AppIcon name="x" size={16} />
+                      <AppIcon name="arrow-left" size={20} />
                     </motion.button>
                   </header>
                   <motion.div
@@ -2694,7 +2713,6 @@ function ActionMenu(props: {
                       {!props.opponents.length ? <p className="muted-copy">Сначала добавь соперника по коду.</p> : null}
                     </div> : null}
                     {props.mode === "share" ? <div className="invite-sheet">
-                      <span>Твой код</span>
                       <strong>{props.code || "…"}</strong>
                       <div className="invite-actions">
                         <button className="sheet-primary-button" type="button" onClick={props.onCopyInvite} disabled={!props.code}>Скопировать</button>
@@ -2808,7 +2826,7 @@ function OpponentEditMenu(props: {
                 animate={{ opacity: 1, transform: "rotate(0deg) scale(1)" }}
                 transition={{ duration: 0.18, ease: easeOut }}
               >
-                <AppIcon name={isRoot ? "x" : "arrow-left"} size={16} />
+                <AppIcon name={isRoot ? "x" : "arrow-left"} size={20} />
               </motion.span>
             </button>
           </header>
@@ -2907,10 +2925,6 @@ function TabButton({ active, children, indicatorId, onClick }: { active: boolean
       <span className="tab-button-label">{children}</span>
     </button>
   );
-}
-
-function LoadingScreen() {
-  return <section className="loading-screen"><p className="eyebrow">пинг понг каунтер</p><MorphingHeading>Загружаем матч</MorphingHeading></section>;
 }
 
 function TelegramOnlyScreen() {

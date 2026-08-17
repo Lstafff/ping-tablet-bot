@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { devices, expect, test, type Locator, type Page } from "@playwright/test";
 
 async function loadUntilCount(page: Page, rows: Locator, expectedCount: number) {
   for (let attempt = 0; attempt < 12 && await rows.count() < expectedCount; attempt += 1) {
@@ -11,9 +11,11 @@ async function loadUntilCount(page: Page, rows: Locator, expectedCount: number) 
 test("opens an opponent and records a score through the Vaul drawer", async ({ page }) => {
   await page.goto("/");
 
+  await expect(page.getByText("Загружаем матч")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "пинг понг каунтер" })).toBeVisible();
   await page.getByRole("button", { name: /Мария/ }).click();
   await expect(page.getByRole("heading", { name: "Мария" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Отменить последний счёт" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Добавить счёт" }).click();
   await expect(page.getByRole("dialog", { name: "Добавить счёт" })).toBeVisible();
@@ -29,7 +31,14 @@ test("opens an opponent and records a score through the Vaul drawer", async ({ p
   await page.getByRole("button", { name: "Сохранить" }).click();
 
   await expect(page.getByRole("dialog", { name: "Добавить счёт" })).toBeHidden();
-  await expect(page.getByRole("button", { name: "Отменить последний счёт" })).toBeVisible();
+  const addScoreButton = page.getByRole("button", { name: "Добавить счёт" });
+  const undoScoreButton = page.getByRole("button", { name: "Отменить последний счёт" });
+  await expect(undoScoreButton).toBeVisible();
+  const addScoreBox = await addScoreButton.boundingBox();
+  const undoScoreBox = await undoScoreButton.boundingBox();
+  expect(undoScoreBox?.x ?? 0).toBeGreaterThan(addScoreBox?.x ?? Number.POSITIVE_INFINITY);
+  await undoScoreButton.click();
+  await expect(undoScoreButton).toHaveCount(0);
 });
 
 test("appends every progressive history batch without replacing existing rows", async ({ page }) => {
@@ -68,4 +77,30 @@ test("keeps the main tab indicator on one horizontal track", async ({ page }) =>
   expect(positions[0].x).toBeLessThan(positions[1].x);
   expect(positions[1].x).toBeLessThan(positions[2].x);
   expect(positions[3].x).toBeCloseTo(positions[0].x, 2);
+});
+
+test.describe("Android avatar emoji fallback", () => {
+  test.use({
+    viewport: devices["Pixel 7"].viewport,
+    userAgent: devices["Pixel 7"].userAgent,
+    deviceScaleFactor: devices["Pixel 7"].deviceScaleFactor,
+    isMobile: devices["Pixel 7"].isMobile,
+    hasTouch: devices["Pixel 7"].hasTouch,
+  });
+
+  test("keeps a selected emoji visible in the profile and compact header avatar", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Профиль" }).click();
+    await page.getByRole("button", { name: /Настройки/ }).click();
+    await page.getByRole("button", { name: "Изменить аватар" }).click();
+    await page.getByRole("button", { name: "Эмодзи 😀" }).click();
+
+    const profileEmoji = page.locator(".profile-hero .profile-avatar-emoji");
+    await expect(profileEmoji).toHaveText("😀");
+    await expect(profileEmoji).toHaveCSS("font-family", /Noto Color Emoji/);
+
+    await page.getByRole("button", { name: "Сохранить" }).click();
+    await page.getByRole("button", { name: "История" }).click();
+    await expect(page.locator(".header-profile-avatar .profile-avatar-emoji")).toHaveText("😀");
+  });
 });

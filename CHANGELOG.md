@@ -7,7 +7,7 @@
 ### Added
 
 - **Phase 4 frontend quality gates.** ESLint, focused Vitest component tests and a mobile Playwright smoke path now run with the existing production build in `scripts/verify.sh` and CI. The narrow suite covers progressive loading and the critical Vaul score-entry path without introducing a coverage target.
-- **Telegram App entrypoint.** The bot registers a persistent `App` menu button beside the Telegram composer and requests Mini App fullscreen on supported clients; older clients retain the safe expanded fallback.
+- **Telegram App entrypoint.** The bot registers a persistent `App` menu button beside the Telegram composer and opens the Mini App in Telegram's standard expanded format.
 - **Phase 3 repository control plane.** Добавлены краткие правила агента, карта фактической архитектуры, backlog, Product Memory и реестр pinned upstream Skills. Раньше durable context был распределён между кодом и чатами; теперь будущая работа может загружать только релевантные документы и не выдавать planned architecture за current.
 - **Evidence-based Phase 3 audit.** Зафиксированы сильные стороны, подтверждённые риски, pre-tournament readiness и последовательность безопасных slices. Это сохраняет работающий `TennisService` и текущую UI-систему вместо большого rewrite.
 - **Security baseline.** Запечатан standard scan с тремя medium availability findings; auth bypass, unrelated-object IDOR, injection и secret leakage не подтверждены. Shared linked-history reset вынесен в product policy, а не объявлен vulnerability без доказанной модели владения.
@@ -20,7 +20,7 @@
 ### Changed
 
 - **Mini App mobile interaction pass.** History and opponent tables load progressively, opponent score entry uses a bounded Vaul drawer and an in-app numeric keypad, edit totals use the same keypad pattern, opponent tabs transition with restrained spatial continuity, and the bottom tabbar morphs into the context action without spring overshoot or glow.
-- **Temporary debug typography and emoji rendering.** The frontend bundles SF Pro Rounded as the primary debug UI font. Avatar emoji prefer Apple Color Emoji where the system provides it and use the bundled Noto Color Emoji fallback elsewhere, avoiding invisible color glyphs in Apple WebViews.
+- **Temporary debug typography and emoji rendering.** The frontend bundles SF Pro Rounded as the primary debug UI font. Avatar, level and picker emoji now use each platform's native color emoji stack; the bundled Noto webfont was removed because it could shadow Android WebView's native font and leave glyphs invisible. A uniform Apple-style set still requires a separately licensed asset source.
 - README и `.env.example` теперь описывают bot, FastAPI, Mini App и фактически используемые WebApp variables. Неопределённая production topology названа явно, а локальная Web-сборка больше не выглядит доказательством полного deploy.
 - **Linked reset/delete semantics.** Сброс и удаление теперь меняют только состояние инициатора; данные второй стороны сохраняются и восстанавливают зеркало после новой партии. Если данные очищены у обоих, следующая партия начинает счёт с нуля. Undo одной партии остаётся shared correction её создателя.
 - **Bounded score/history paths.** Обычный linked score обновляет две Elo-записи инкрементально, а общая история пагинируется SQL-запросом. Полные rebuild остаются только на редких destructive corrections.
@@ -31,6 +31,9 @@
 
 ### Fixed
 
+- Initial data loading no longer shows the branded «Загружаем матч» screen. Opening an opponent renders cached opponent identity and score while fresh data arrives instead of remounting and reanimating the home score.
+- Undo for the most recently saved score is now an icon action immediately to the right of «Добавить счёт» and disappears again after the undo completes.
+- Invite sharing no longer repeats the «Твой код» label, modal close/back icons are larger, and nested action sheets use an actual back arrow instead of a close icon.
 - Кнопки и tabbar больше не допускают выделение текста, touch highlight или прилипший outline; tab indicator no longer springs or rebounds against its edges.
 - Мини-аватар использует ту же геометрию, что и основной профиль, корректно скрывает дефолтный контур при выбранном avatar emoji, а режим настроек сохраняет центральную ось аватара, имени и Telegram username.
 - Модальные и action-sheet поверхности сохраняют боковые отступы и увеличенное скругление; ввод кода не разворачивает диалог на весь экран, а низкий viewport не выводит кнопку Vaul за интерактивную область.

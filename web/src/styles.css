@@ -729,12 +729,6 @@ h2 {
   background: var(--color-danger);
 }
 
-.undo-button {
-  width: 100%;
-  padding: 8px 0 22px;
-  text-align: center;
-}
-
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -887,7 +881,9 @@ h2 {
   width: 100%;
   height: 100%;
   place-items: center;
-  font-family: "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+  font-family: var(--font-family-emoji);
+  font-synthesis: none;
+  font-variant-emoji: emoji;
   font-size: var(--font-size-display-avatar);
   line-height: var(--line-height-single);
   transform: translateY(3px);
@@ -1244,7 +1240,9 @@ h2 {
   width: 44px;
   height: 44px;
   place-items: center;
-  font-family: "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+  font-family: var(--font-family-emoji);
+  font-synthesis: none;
+  font-variant-emoji: emoji;
   border-radius: 50%;
   font-size: var(--font-size-title-2);
 }
@@ -1473,10 +1471,23 @@ h2 {
   -webkit-tap-highlight-color: transparent;
 }
 
-.nav-save-button {
+.nav-action-row {
   position: absolute;
   z-index: 3;
   inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  pointer-events: none;
+}
+
+.nav-action-row-with-auxiliary {
+  grid-template-columns: minmax(0, 1fr) 68px;
+}
+
+.nav-save-button {
+  position: relative;
+  z-index: 3;
   display: grid;
   min-height: 68px;
   place-items: center;
@@ -1486,6 +1497,24 @@ h2 {
   padding: 0;
   background: transparent;
   color: var(--color-on-accent);
+  pointer-events: auto;
+}
+
+.nav-auxiliary-button {
+  display: grid;
+  min-height: 68px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nav-auxiliary-button:disabled {
+  color: var(--color-control-disabled-text);
 }
 
 .nav-save-surface {
@@ -1526,13 +1555,15 @@ h2 {
 }
 
 .nav-button:focus-visible,
-.nav-save-button:focus-visible {
+.nav-save-button:focus-visible,
+.nav-auxiliary-button:focus-visible {
   outline: 0;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .nav-button:focus-visible .nav-button-content,
-  .nav-save-button:focus-visible .nav-button-content {
+  .nav-save-button:focus-visible .nav-button-content,
+  .nav-auxiliary-button:focus-visible {
     color: var(--color-focus-ring);
   }
 
@@ -2647,7 +2678,9 @@ h2 {
   border: 0;
   border-radius: 12px;
   background: transparent;
-  font-family: "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+  font-family: var(--font-family-emoji);
+  font-synthesis: none;
+  font-variant-emoji: emoji;
   font-size: 27px;
   line-height: 1;
   transition: transform var(--duration-press) var(--ease-out), background-color var(--duration-press) var(--ease-out);
@@ -2725,10 +2758,14 @@ h2 {
   color: var(--color-tray-text);
 }
 
-.modal-icon-button .app-icon,
-.profile-avatar-edit .app-icon {
+.modal-icon-button .app-icon {
   width: var(--size-modal-control-icon);
   height: var(--size-modal-control-icon);
+}
+
+.profile-avatar-edit .app-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .action-header-icon {
@@ -2933,7 +2970,6 @@ h2 {
   padding: 8px 16px 18px;
 }
 
-.invite-sheet > span,
 .invite-sheet label {
   color: var(--color-tray-text-secondary);
   font-size: var(--font-size-subheadline);

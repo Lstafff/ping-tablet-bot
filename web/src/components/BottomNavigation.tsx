@@ -27,6 +27,9 @@ export function BottomNavigation({
   actionDisabled = false,
   actionForm,
   onAction,
+  auxiliaryActionLabel,
+  auxiliaryActionDisabled = false,
+  onAuxiliaryAction,
 }: {
   active: MainTab;
   onSelect(tab: MainTab): void;
@@ -34,6 +37,9 @@ export function BottomNavigation({
   actionDisabled?: boolean;
   actionForm?: string;
   onAction?(): void;
+  auxiliaryActionLabel?: string;
+  auxiliaryActionDisabled?: boolean;
+  onAuxiliaryAction?(): void;
 }) {
   const reduceMotion = useReducedMotion();
   const actionVisible = Boolean(actionLabel);
@@ -86,36 +92,52 @@ export function BottomNavigation({
           </motion.div>
           <AnimatePresence initial={false}>
             {actionVisible ? (
-              <motion.button
-                className="nav-save-button"
-                type={actionForm ? "submit" : "button"}
-                form={actionForm}
-                aria-label={actionLabel}
-                title={actionLabel}
-                disabled={actionDisabled}
-                onClick={actionForm ? undefined : onAction}
+              <motion.div
+                className={auxiliaryActionLabel ? "nav-action-row nav-action-row-with-auxiliary" : "nav-action-row"}
                 initial={{ opacity: 1 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 1 }}
               >
-                <motion.span
-                  className="nav-save-surface"
-                  aria-hidden="true"
-                  initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
-                  animate={{ opacity: 1, transform: "scale(1)" }}
-                  exit={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
-                  transition={actionMorphTransition}
-                />
-                <motion.span
-                  className="nav-button-content nav-button-save-label"
-                  initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
-                  animate={{ opacity: 1, transform: "scale(1)" }}
-                  exit={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
-                  transition={{ duration: reduceMotion ? 0.12 : 0.12, delay: reduceMotion ? 0 : 0.06, ease: easeOut }}
+                <motion.button
+                  className="nav-save-button"
+                  type={actionForm ? "submit" : "button"}
+                  form={actionForm}
+                  aria-label={actionLabel}
+                  title={actionLabel}
+                  disabled={actionDisabled}
+                  onClick={actionForm ? undefined : onAction}
                 >
-                  {actionLabel}
-                </motion.span>
-              </motion.button>
+                  <motion.span
+                    className="nav-save-surface"
+                    aria-hidden="true"
+                    initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
+                    animate={{ opacity: 1, transform: "scale(1)" }}
+                    exit={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
+                    transition={actionMorphTransition}
+                  />
+                  <motion.span
+                    className="nav-button-content nav-button-save-label"
+                    initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
+                    animate={{ opacity: 1, transform: "scale(1)" }}
+                    exit={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
+                    transition={{ duration: reduceMotion ? 0.12 : 0.12, delay: reduceMotion ? 0 : 0.06, ease: easeOut }}
+                  >
+                    {actionLabel}
+                  </motion.span>
+                </motion.button>
+                {auxiliaryActionLabel ? (
+                  <button
+                    className="nav-auxiliary-button"
+                    type="button"
+                    aria-label={auxiliaryActionLabel}
+                    title={auxiliaryActionLabel}
+                    disabled={auxiliaryActionDisabled}
+                    onClick={onAuxiliaryAction}
+                  >
+                    <AppIcon name="refresh" aria-hidden="true" size={25} />
+                  </button>
+                ) : null}
+              </motion.div>
             ) : null}
           </AnimatePresence>
       </nav>

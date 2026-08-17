@@ -3,6 +3,7 @@
 
   /* Typography is independent from both theme and accent selection. */
   --font-family-ui: "Tennis SF Pro Rounded Debug", "SF Pro Rounded", ui-rounded, "Nunito Variable", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-family-emoji: "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", "Twemoji Mozilla", emoji, sans-serif;
   /* iOS-inspired type scale. rem keeps browser text scaling available. */
   --font-size-caption-2: 0.6875rem;      /* 11 */
   --font-size-caption: 0.8125rem;        /* 13 */
@@ -140,7 +141,7 @@
   --space-page-gutter: 26px;
   --size-action-control: 56px;
   --size-modal-control: 36px;
-  --size-modal-control-icon: 16px;
+  --size-modal-control-icon: 20px;
   --size-page-header: 44px;
 
   /* Shared motion language. */
