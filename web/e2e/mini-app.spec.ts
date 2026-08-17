@@ -1,6 +1,7 @@
 import { devices, expect, test, type Locator, type Page } from "@playwright/test";
 
 async function loadUntilCount(page: Page, rows: Locator, expectedCount: number) {
+  await page.waitForTimeout(220);
   for (let attempt = 0; attempt < 12 && await rows.count() < expectedCount; attempt += 1) {
     await page.evaluate(() => document.querySelector(".progressive-load")?.scrollIntoView({ block: "center" }));
     await page.waitForTimeout(100);
@@ -15,7 +16,19 @@ test("opens an opponent and records a score through the Vaul drawer", async ({ p
   await expect(page.getByRole("heading", { name: "пинг понг каунтер" })).toBeVisible();
   await page.getByRole("button", { name: /Мария/ }).click();
   await expect(page.getByRole("heading", { name: "Мария" })).toBeVisible();
+  await expect(page.locator(".opponent-scoreline .rolling-number")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Отменить последний счёт" })).toHaveCount(0);
+
+  const activityCalendarBox = await page.locator(".activity-calendar").boundingBox();
+  const todayBox = await page.locator(".match-activity-footer > span:last-child").boundingBox();
+  expect(todayBox && activityCalendarBox ? todayBox.x + todayBox.width : 0)
+    .toBeCloseTo(activityCalendarBox ? activityCalendarBox.x + activityCalendarBox.width : Number.POSITIVE_INFINITY, 1);
+
+  await page.getByRole("button", { name: "Редактировать" }).click();
+  const editDialog = page.getByRole("dialog", { name: "Изменить" });
+  await expect(editDialog).toBeVisible();
+  await expect(editDialog).toHaveCSS("transform", "none");
+  await editDialog.getByRole("button", { name: "Закрыть" }).click();
 
   await page.getByRole("button", { name: "Добавить счёт" }).click();
   await expect(page.getByRole("dialog", { name: "Добавить счёт" })).toBeVisible();
@@ -24,6 +37,9 @@ test("opens an opponent and records a score through the Vaul drawer", async ({ p
   expect(drawerBox?.x).toBe(0);
   expect(drawerBox?.width).toBe(390);
   expect(drawerBox?.height ?? 844).toBeLessThan(844);
+  const handleBox = await page.locator(".score-drawer-handle").boundingBox();
+  expect(handleBox && drawerBox ? handleBox.x + handleBox.width / 2 : 0)
+    .toBeCloseTo(drawerBox ? drawerBox.x + drawerBox.width / 2 : Number.POSITIVE_INFINITY, 1);
   await page.getByRole("button", { name: "1", exact: true }).click();
   await page.getByRole("button", { name: "1", exact: true }).click();
   await page.getByRole("button", { name: "Дальше" }).click();
@@ -77,6 +93,43 @@ test("keeps the main tab indicator on one horizontal track", async ({ page }) =>
   expect(positions[0].x).toBeLessThan(positions[1].x);
   expect(positions[1].x).toBeLessThan(positions[2].x);
   expect(positions[3].x).toBeCloseTo(positions[0].x, 2);
+});
+
+test("keeps history chrome sticky and restores a previously scrolled position before paint", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "История" }).click();
+  await loadUntilCount(page, page.locator(".history-row"), 8);
+
+  const header = page.locator(".page-header-sticky");
+  await expect(header).toHaveCSS("position", "sticky");
+  const headerBefore = await header.boundingBox();
+  await page.evaluate(() => window.scrollTo({ top: Math.min(420, document.documentElement.scrollHeight), behavior: "auto" }));
+  const rememberedScroll = await page.evaluate(() => window.scrollY);
+  expect(rememberedScroll).toBeGreaterThan(100);
+  const headerAfter = await header.boundingBox();
+  expect(headerAfter?.y).toBeCloseTo(headerBefore?.y ?? Number.POSITIVE_INFINITY, 1);
+
+  const stickyTop = (headerAfter?.y ?? 0) + (headerAfter?.height ?? 0) + 8;
+  const groupTops = await page.locator(".history-group-heading").evaluateAll((headings) => headings.map((heading) => heading.getBoundingClientRect().top));
+  expect(groupTops.some((top) => Math.abs(top - stickyTop) <= 2)).toBe(true);
+
+  await page.getByRole("button", { name: "Профиль" }).click();
+  await page.getByRole("button", { name: "История" }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(rememberedScroll, -1);
+});
+
+test("opens profile subpages without a screen opacity flash", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Профиль" }).click();
+
+  await page.getByRole("button", { name: /Рейтинг/ }).click();
+  await expect(page.locator("main.screen")).toHaveCount(1);
+  await expect(page.locator("main.screen")).toHaveCSS("opacity", "1");
+  await page.getByRole("button", { name: "Назад" }).click();
+
+  await page.getByRole("button", { name: /Уровень/ }).click();
+  await expect(page.locator("main.screen")).toHaveCount(1);
+  await expect(page.locator("main.screen")).toHaveCSS("opacity", "1");
 });
 
 test.describe("Android avatar emoji fallback", () => {

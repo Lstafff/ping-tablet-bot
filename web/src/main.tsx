@@ -1,5 +1,5 @@
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { FormEvent, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import ReactDOM from "react-dom/client";
 import { Drawer } from "vaul";
@@ -774,13 +774,12 @@ function App() {
     previousRenderedScreen.current = screen;
   }, [screen]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const restoresScroll = screen === "home" || screen === "stats" || screen === "profile";
     const key = `ping-tablet:scroll:${screen}`;
     const saved = restoresScroll ? Number(sessionStorage.getItem(key) ?? 0) : 0;
-    const frame = window.requestAnimationFrame(() => window.scrollTo({ top: saved, behavior: "auto" }));
+    window.scrollTo({ top: saved, behavior: "auto" });
     return () => {
-      window.cancelAnimationFrame(frame);
       if (restoresScroll) sessionStorage.setItem(key, String(window.scrollY));
     };
   }, [screen]);
@@ -1409,7 +1408,8 @@ function App() {
 
   const canShowNavigation = profile && !loading && (screen === "home" || screen === "stats" || screen === "profile" || screen === "opponent");
   const activeTab: MainTab = screen === "stats" || screen === "profile" ? screen : "matches";
-  const screenMotionDirection = isMainTabScreen(screen) && isMainTabScreen(previousRenderedScreen.current)
+  const savedHistoryScroll = screen === "stats" ? Number(sessionStorage.getItem("ping-tablet:scroll:stats") ?? 0) : 0;
+  const screenMotionDirection = isMainTabScreen(screen) && isMainTabScreen(previousRenderedScreen.current) && savedHistoryScroll <= 0
     ? mainTabDirection
     : 0;
 
@@ -1420,6 +1420,7 @@ function App() {
           {profile && (screen === "home" || screen === "stats" || screen === "opponent") ? (
             <PageHeader
               title={screen === "home" ? "пинг понг каунтер" : screen === "stats" ? "история" : "статистика"}
+              sticky={screen === "stats"}
               onBack={screen === "opponent" ? goBack : undefined}
               profileAvatar={profile.user.avatar_value}
               sortNewestFirst={screen === "stats" ? historyNewestFirst : undefined}
@@ -1447,11 +1448,11 @@ function App() {
               custom={screenMotionDirection}
               variants={{
                 initial: (direction: number) => ({
-                  opacity: 0,
+                  opacity: direction === 0 ? 1 : 0,
                   transform: reduceMotion
                     ? "translateX(0)"
                     : direction === 0
-                      ? "translateY(4px)"
+                      ? "translateX(0)"
                       : `translateX(${direction > 0 ? 14 : -14}px)`,
                 }),
                 animate: {
@@ -1459,12 +1460,13 @@ function App() {
                   transform: "translate(0, 0)",
                 },
                 exit: (direction: number) => ({
-                  opacity: 0,
+                  opacity: direction === 0 ? 1 : 0,
                   transform: reduceMotion
                     ? "translateX(0)"
                     : direction === 0
-                      ? "translateY(-3px)"
+                      ? "translateX(0)"
                       : `translateX(${direction > 0 ? -14 : 14}px)`,
+                  transition: direction === 0 ? { duration: 0 } : undefined,
                 }),
               }}
               initial="initial"
@@ -1607,15 +1609,58 @@ function MorphingHeading({
   className?: string;
   morphId?: string;
 }) {
-  const reduceMotion = useReducedMotion();
-  const generatedId = useId().replace(/:/g, "");
-  const headingId = morphId ?? `heading-${generatedId}`;
-  const Heading = as === "h2" ? motion.h2 : motion.h1;
   const StaticHeading = as === "h2" ? "h2" : "h1";
 
   if (!morphId) {
     return <StaticHeading className={className}>{children}</StaticHeading>;
   }
+  return <WaveHeaderTitle as={as} className={className}>{children}</WaveHeaderTitle>;
+}
+
+function WaveHeaderTitle({ as = "h1", children, className }: { as?: "h1" | "h2"; children: string; className?: string }) {
+  const reduceMotion = useReducedMotion();
+  const Heading = as === "h2" ? motion.h2 : motion.h1;
+  const glyphs = Array.from(children);
+
+  return (
+    <Heading className={className} aria-label={children}>
+      <span className="screen-title-copy" aria-hidden="true">
+        <AnimatePresence initial={false} mode="popLayout">
+          <motion.span className="screen-title-wave" key={children}>
+            {glyphs.map((glyph, index) => (
+              <motion.span
+                className="screen-title-glyph"
+                key={`${children}-${index}-${glyph}`}
+                initial={{ opacity: 0, transform: reduceMotion ? "translateY(0)" : "translateY(100%)" }}
+                animate={{ opacity: 1, transform: "translateY(0)" }}
+                exit={{ opacity: 0, transform: reduceMotion ? "translateY(0)" : "translateY(-100%)" }}
+                transition={{ duration: reduceMotion ? 0.12 : 0.16, delay: reduceMotion ? 0 : index * 0.007, ease: easeOut }}
+              >
+                {glyph === " " ? "\u00a0" : glyph}
+              </motion.span>
+            ))}
+          </motion.span>
+        </AnimatePresence>
+      </span>
+    </Heading>
+  );
+}
+
+export function LegacyMorphingHeaderTitle({
+  as = "h1",
+  children,
+  className,
+  morphId,
+}: {
+  as?: "h1" | "h2";
+  children: string;
+  className?: string;
+  morphId?: string;
+}) {
+  const reduceMotion = useReducedMotion();
+  const generatedId = useId().replace(/:/g, "");
+  const headingId = morphId ?? `heading-${generatedId}`;
+  const Heading = as === "h2" ? motion.h2 : motion.h1;
   const glyphs = Array.from(children).map((glyph, index) => ({
     glyph,
     slotId: `${headingId}-slot-${index}`,
@@ -1760,9 +1805,9 @@ function HeaderProfileMorph({ value, onBack }: { value: string | null; onBack?()
   );
 }
 
-function PageHeader({ title, onBack, profileAvatar, sortNewestFirst, onSort }: { title: string; onBack?(): void; profileAvatar?: string | null; sortNewestFirst?: boolean; onSort?(): void }) {
+function PageHeader({ title, sticky = false, onBack, profileAvatar, sortNewestFirst, onSort }: { title: string; sticky?: boolean; onBack?(): void; profileAvatar?: string | null; sortNewestFirst?: boolean; onSort?(): void }) {
   return (
-    <header className="page-header">
+    <header className={sticky ? "page-header page-header-sticky" : "page-header"}>
       {profileAvatar !== undefined ? (
         <HeaderProfileMorph value={profileAvatar} onBack={onBack} />
       ) : onBack ? (
@@ -1944,15 +1989,13 @@ function OpponentScreen(props: {
     <>
       <StatsSummary stats={stats.extended_stats} />
       {!props.editingOpen ? (
-        <motion.button
+        <button
           className="secondary-button opponent-edit-inline"
           type="button"
-          layoutId="opponent-edit-flow-surface"
           onClick={props.onEdit}
-          transition={{ layout: reduceMotion ? { duration: 0 } : { duration: 0.24, ease: easeInOut } }}
         >
           Редактировать
-        </motion.button>
+        </button>
       ) : <span className="opponent-edit-inline-placeholder" aria-hidden="true" />}
     </>
   ) : props.tab === "days" ? (
@@ -1978,8 +2021,8 @@ function OpponentScreen(props: {
         <MorphingHeading>{opponentName(opponent)}</MorphingHeading>
         <div className="opponent-scoreline" aria-label={`Побед ${stats.stats.wins}, поражений ${stats.stats.losses}`}>
           <ScorePair
-            left={<strong><RollingNumber value={stats.stats.wins} /></strong>}
-            right={<strong><RollingNumber value={stats.stats.losses} /></strong>}
+            left={<strong>{stats.stats.wins}</strong>}
+            right={<strong>{stats.stats.losses}</strong>}
           />
         </div>
         <p><strong>{winRate(stats.stats)}%</strong> побед · {gamesCount(stats.stats)} партий</p>
@@ -2811,9 +2854,6 @@ function OpponentEditMenu(props: {
         aria-modal="true"
         aria-label={titles[mode]}
         onClick={(event) => event.stopPropagation()}
-        layout
-        layoutId="opponent-edit-flow-surface"
-        transition={{ layout: reduceMotion ? { duration: 0 } : { duration: 0.24, ease: easeInOut } }}
       >
         <div className="action-sheet-content">
           <header>

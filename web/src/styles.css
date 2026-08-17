@@ -63,6 +63,7 @@ input:focus-visible {
 }
 
 .app-shell {
+  --sticky-page-top: max(22px, env(safe-area-inset-top), var(--tma-safe-top));
   width: min(100%, 430px);
   min-height: var(--tma-viewport-height, 100dvh);
   overflow-x: clip;
@@ -109,6 +110,13 @@ input:focus-visible {
   margin-bottom: 8px;
 }
 
+.page-header-sticky {
+  position: sticky;
+  z-index: 8;
+  top: var(--sticky-page-top);
+  background: var(--color-canvas);
+}
+
 .page-header button,
 .page-header > span {
   display: grid;
@@ -147,10 +155,18 @@ input:focus-visible {
 }
 
 .screen-title-copy {
-  display: flex;
+  display: grid;
   grid-area: 1 / 1;
   justify-content: center;
+  overflow: hidden;
   transform-origin: center;
+}
+
+.screen-title-wave {
+  display: flex;
+  grid-area: 1 / 1;
+  min-width: 0;
+  justify-content: center;
 }
 
 .screen-title-slot {
@@ -160,6 +176,7 @@ input:focus-visible {
 }
 
 .screen-title-glyph {
+  display: inline-block;
   grid-area: 1 / 1;
 }
 
@@ -1605,8 +1622,12 @@ h2 {
 }
 
 .history-group-heading {
+  position: sticky;
+  z-index: 6;
+  top: calc(var(--sticky-page-top) + var(--size-page-header) + 8px);
   display: flex;
   justify-content: flex-start;
+  background: var(--color-canvas);
 }
 
 .history-page-heading h1 {
@@ -2018,6 +2039,17 @@ h2 {
   font-weight: var(--font-weight-medium);
 }
 
+.match-activity-footer > span:first-child {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.match-activity-footer > span:last-child {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+}
+
 .activity-legend {
   display: flex;
   grid-column: 1 / -1;
@@ -2204,13 +2236,14 @@ h2 {
   box-shadow: var(--shadow-tray);
 }
 
-.score-drawer-handle {
+.score-drawer-content [data-vaul-handle].score-drawer-handle {
   position: absolute;
   z-index: 2;
   top: 9px;
   left: 50%;
   width: 42px;
   height: 5px;
+  margin: 0;
   border-radius: 999px;
   background: var(--color-dark-separator);
   transform: translateX(-50%);
