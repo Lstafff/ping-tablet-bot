@@ -876,6 +876,18 @@ function App() {
     void loadOpponent(opponent, tab, page).catch((loadError: unknown) => setError(messageFromError(loadError)));
   };
 
+  const openHistoryOpponent = (game: HistoryGame) => {
+    const knownOpponent = opponents.find((opponent) => opponent.id === game.opponent_id);
+    const fallbackOpponent: Opponent = {
+      id: game.opponent_id,
+      name: game.opponent_name,
+      first_name: game.opponent_name.startsWith("@") ? null : game.opponent_name,
+      username: game.opponent_name.startsWith("@") ? game.opponent_name.slice(1) : null,
+      elo_rating: null,
+    };
+    openOpponent(knownOpponent ?? fallbackOpponent);
+  };
+
   const submitScore = async () => {
     if (!selectedOpponent) {
       return;
@@ -1238,7 +1250,7 @@ function App() {
     setAvatarPickerOpen(false);
     setError("");
     setScreen(tab === "matches" ? "home" : tab);
-    if (tab === "stats") void loadHistory().catch((loadError: unknown) => setError(messageFromError(loadError)));
+    if (tab === "stats" && !history) void loadHistory().catch((loadError: unknown) => setError(messageFromError(loadError)));
   };
 
   const selectOpponentTab = (tab: StatsTab) => {
@@ -1328,6 +1340,7 @@ function App() {
           loadingMore={historyLoadingMore}
           loadError={historyLoadError}
           onLoadMore={() => void loadHistory((history?.page ?? 1) + 1, true)}
+          onOpenOpponent={openHistoryOpponent}
         />
       );
     }
@@ -1634,7 +1647,7 @@ function WaveHeaderTitle({ as = "h1", children, className }: { as?: "h1" | "h2";
                 initial={{ opacity: 0, transform: reduceMotion ? "translateY(0)" : "translateY(100%)" }}
                 animate={{ opacity: 1, transform: "translateY(0)" }}
                 exit={{ opacity: 0, transform: reduceMotion ? "translateY(0)" : "translateY(-100%)" }}
-                transition={{ duration: reduceMotion ? 0.12 : 0.16, delay: reduceMotion ? 0 : index * 0.007, ease: easeOut }}
+                transition={{ duration: 0.12, delay: reduceMotion ? 0 : index * 0.003, ease: easeOut }}
               >
                 {glyph === " " ? "\u00a0" : glyph}
               </motion.span>
@@ -1757,11 +1770,9 @@ function HeaderProfileAvatar({ value, back }: { value: string | null; back: bool
   const hasCustomAvatar = avatarKind !== "default";
 
   return (
-    <motion.span
+    <span
       className={`header-profile-avatar header-leading-surface${back ? " header-leading-surface-back" : ""}`}
       aria-hidden="true"
-      layoutId="profile-avatar-surface"
-      transition={{ layout: reduceMotion ? { duration: 0 } : { duration: 0.24, ease: easeInOut } }}
     >
       <motion.span
         className="header-leading-avatar-background"
@@ -1792,7 +1803,7 @@ function HeaderProfileAvatar({ value, back }: { value: string | null; back: bool
           </>
         ) : null}
       </motion.svg>
-    </motion.span>
+    </span>
   );
 }
 
@@ -1900,26 +1911,24 @@ function HistoryScreen({
   loadingMore,
   loadError,
   onLoadMore,
+  onOpenOpponent,
 }: {
   newestFirst: boolean;
   view: HistoryView | null;
   loadingMore: boolean;
   loadError: string;
   onLoadMore(): void;
+  onOpenOpponent(game: HistoryGame): void;
 }) {
-  const reduceMotion = useReducedMotion();
   const sortedGames = [...(view?.games ?? [])].sort((left, right) => {
     const delta = new Date(right.played_at).valueOf() - new Date(left.played_at).valueOf();
     return newestFirst ? delta : -delta;
   });
   const groups = groupHistory(sortedGames);
-  const reorderTransition = reduceMotion
-    ? { duration: 0 }
-    : { type: "spring" as const, stiffness: 420, damping: 38, mass: 0.8 };
   return (
     <section className="history-screen">
-      {groups.length ? <LayoutGroup id="history-sort-order">{groups.map((group) => (
-        <motion.section className="history-group" key={group.label} layout="position" transition={{ layout: reorderTransition }}>
+      {groups.length ? groups.map((group) => (
+        <section className="history-group" key={group.label}>
           <div className="history-group-heading">
             <MorphingHeading as="h2">{group.label}</MorphingHeading>
           </div>
@@ -1927,7 +1936,12 @@ function HistoryScreen({
             {group.games.map((game) => {
               const won = game.own_score > game.opponent_score;
               return (
-                <motion.article className="history-row" key={`${game.opponent_id}-${game.played_at}`} layout="position" transition={{ layout: reorderTransition }}>
+                <button
+                  className="history-row"
+                  type="button"
+                  key={`${game.opponent_id}-${game.played_at}`}
+                  onClick={() => onOpenOpponent(game)}
+                >
                   <span className="history-avatar" aria-hidden="true">
                     {initials(game.opponent_name)}
                     <i className={won ? "history-badge history-badge-win" : "history-badge history-badge-loss"}>
@@ -1942,12 +1956,12 @@ function HistoryScreen({
                     <strong className={won ? "history-score result-win" : "history-score result-loss"}><ScorePair left={game.own_score} right={game.opponent_score} /></strong>
                     <EloDeltaBadge value={game.elo_change} />
                   </span>
-                </motion.article>
+                </button>
               );
             })}
           </div>
-        </motion.section>
-      ))}</LayoutGroup> : <p className="muted-copy history-empty">Здесь появятся сыгранные матчи.</p>}
+        </section>
+      )) : <p className="muted-copy history-empty">Здесь появятся сыгранные матчи.</p>}
       <ProgressiveLoadTrigger
         error={loadError}
         hasMore={(view?.page ?? 1) < (view?.total_pages ?? 1)}
@@ -2449,7 +2463,6 @@ function GamesTable({ view, loadingMore, loadError, onLoadMore }: { view: GamesV
 
 function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: string; submitting: boolean; onRating(): void; onLevel(): void; onEdit(): void; onAvatarEdit(): void; onNameInput(value: string): void; onSaveName(event: FormEvent<HTMLFormElement>): void }) {
   const { profile } = props;
-  const reduceMotion = useReducedMotion();
   const nameInputRef = useRef<HTMLInputElement>(null);
   const startEditing = () => {
     flushSync(() => props.onEdit());
@@ -2459,14 +2472,12 @@ function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: s
     <>
       <section className="profile-hero family-profile-hero">
         <div className="profile-avatar-wrap">
-          <motion.span
+          <span
             className="profile-avatar"
             aria-hidden="true"
-            layoutId="profile-avatar-surface"
-            transition={{ layout: reduceMotion ? { duration: 0 } : { duration: 0.24, ease: easeInOut } }}
           >
             <ProfileAvatarContent value={profile.user.avatar_value} />
-          </motion.span>
+          </span>
           {props.editing ? <motion.button className="profile-avatar-edit modal-icon-button" type="button" aria-label="Изменить аватар" initial={{ opacity: 0, transform: "scale(0.94)" }} animate={{ opacity: 1, transform: "scale(1)" }} transition={{ duration: 0.18, ease: easeOut }} onClick={props.onAvatarEdit}><AppIcon name="pencil" size={14} /></motion.button> : null}
         </div>
         {props.editing ? <form id="profile-name-form" className="profile-name-form" onSubmit={props.onSaveName}>

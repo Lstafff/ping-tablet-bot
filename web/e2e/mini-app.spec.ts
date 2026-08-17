@@ -66,7 +66,7 @@ test("appends every progressive history batch without replacing existing rows", 
   await expect(historyRows.filter({ hasText: "Мария" }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Матчи" }).click();
-  await page.getByRole("button", { name: /Мария/ }).click();
+  await page.locator(".opponent-card").filter({ hasText: "Мария" }).click();
   await page.getByRole("tab", { name: "По дням" }).click();
   await loadUntilCount(page, page.locator(".opponent-tab-content .table-row"), 7);
 
@@ -83,6 +83,7 @@ test("keeps the main tab indicator on one horizontal track", async ({ page }) =>
     await page.getByRole("button", { name: tab }).click();
     await expect(page.getByRole("button", { name: tab })).toHaveAttribute("aria-current", "page");
     await page.waitForTimeout(220);
+    await expect(page.locator(".page-header .screen-title-wave")).toHaveCount(tab === "Профиль" ? 0 : 1);
     const box = await pill.boundingBox();
     if (!box) throw new Error("Не удалось измерить индикатор tabbar");
     positions.push({ x: box.x, y: box.y, height: box.height });
@@ -102,20 +103,90 @@ test("keeps history chrome sticky and restores a previously scrolled position be
 
   const header = page.locator(".page-header-sticky");
   await expect(header).toHaveCSS("position", "sticky");
+  const stickyBackgrounds = await page.locator(".page-header-sticky, .history-group-heading").evaluateAll((elements) => elements.map((element) => getComputedStyle(element, "::before").backgroundColor));
+  expect(stickyBackgrounds.every((color) => color !== "rgba(0, 0, 0, 0)" && color !== "transparent")).toBe(true);
+
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "auto" }));
   const headerBefore = await header.boundingBox();
+  if (!headerBefore) throw new Error("Не удалось измерить закреплённый хэдер");
+  const stickyTop = headerBefore.y + headerBefore.height + 8;
+  const firstGroup = page.locator(".history-group").first();
+  const firstHeading = firstGroup.locator(".history-group-heading");
+  const firstGroupMetrics = await firstGroup.evaluate((group) => {
+    const heading = group.querySelector<HTMLElement>(".history-group-heading");
+    if (!heading) throw new Error("Не найден заголовок периода");
+    const groupRect = group.getBoundingClientRect();
+    return {
+      bottom: groupRect.bottom + window.scrollY,
+      headingHeight: heading.getBoundingClientRect().height,
+    };
+  });
+  const releaseScroll = firstGroupMetrics.bottom - firstGroupMetrics.headingHeight - stickyTop + 18;
+  await page.evaluate((top) => window.scrollTo({ top, behavior: "auto" }), releaseScroll);
+  const releasedHeadingBox = await firstHeading.boundingBox();
+  const releasedGroupBox = await firstGroup.boundingBox();
+  const releasedHeadingBottom = releasedHeadingBox ? releasedHeadingBox.y + releasedHeadingBox.height : Number.POSITIVE_INFINITY;
+  const releasedGroupBottom = releasedGroupBox ? releasedGroupBox.y + releasedGroupBox.height : 0;
+  expect(releasedHeadingBottom).toBeLessThanOrEqual(releasedGroupBottom + 1);
+  expect(releasedHeadingBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(stickyTop - 8);
+
   await page.evaluate(() => window.scrollTo({ top: Math.min(420, document.documentElement.scrollHeight), behavior: "auto" }));
   const rememberedScroll = await page.evaluate(() => window.scrollY);
   expect(rememberedScroll).toBeGreaterThan(100);
   const headerAfter = await header.boundingBox();
   expect(headerAfter?.y).toBeCloseTo(headerBefore?.y ?? Number.POSITIVE_INFINITY, 1);
 
-  const stickyTop = (headerAfter?.y ?? 0) + (headerAfter?.height ?? 0) + 8;
   const groupTops = await page.locator(".history-group-heading").evaluateAll((headings) => headings.map((heading) => heading.getBoundingClientRect().top));
   expect(groupTops.some((top) => Math.abs(top - stickyTop) <= 2)).toBe(true);
 
   await page.getByRole("button", { name: "Профиль" }).click();
+  await expect(page.getByRole("button", { name: "Профиль" })).toHaveAttribute("aria-current", "page");
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("ping-tablet:scroll:stats"))).toBe(String(rememberedScroll));
   await page.getByRole("button", { name: "История" }).click();
+  await expect(page.getByRole("button", { name: "История" })).toHaveAttribute("aria-current", "page");
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(rememberedScroll, -1);
+});
+
+test("keeps the compact avatar stationary across main tabs", async ({ page }) => {
+  await page.goto("/");
+  const avatar = page.locator(".header-profile-avatar");
+  await expect(avatar).toBeVisible();
+  const homeBox = await avatar.boundingBox();
+  if (!homeBox) throw new Error("Не удалось измерить аватар в хэдере");
+
+  await page.getByRole("button", { name: "История" }).click();
+  await expect(avatar).toBeVisible();
+  await expect(avatar).toHaveCSS("transform", "none");
+  const historyBox = await avatar.boundingBox();
+  expect(historyBox?.x).toBeCloseTo(homeBox.x, 1);
+  expect(historyBox?.y).toBeCloseTo(homeBox.y, 1);
+
+  await page.getByRole("button", { name: "Профиль" }).click();
+  await expect(avatar).toHaveCount(0);
+  await page.getByRole("button", { name: "Матчи" }).click();
+  await expect(avatar).toBeVisible();
+  await expect(avatar).toHaveCSS("transform", "none");
+  const profileToMatchesBox = await avatar.boundingBox();
+
+  await page.getByRole("button", { name: "Профиль" }).click();
+  await page.getByRole("button", { name: "История" }).click();
+  await expect(avatar).toBeVisible();
+  await expect(avatar).toHaveCSS("transform", "none");
+  const profileToHistoryBox = await avatar.boundingBox();
+  expect(profileToHistoryBox?.x).toBeCloseTo(profileToMatchesBox?.x ?? Number.POSITIVE_INFINITY, 1);
+  expect(profileToHistoryBox?.y).toBeCloseTo(profileToMatchesBox?.y ?? Number.POSITIVE_INFINITY, 1);
+});
+
+test("opens the matching opponent from general history", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "История" }).click();
+
+  const mariaMatch = page.getByRole("button", { name: /Победа Мария/ }).first();
+  await expect(mariaMatch).toBeVisible();
+  await mariaMatch.click();
+
+  await expect(page.getByRole("heading", { name: "Мария" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "статистика" })).toBeVisible();
 });
 
 test("opens profile subpages without a screen opacity flash", async ({ page }) => {

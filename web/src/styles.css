@@ -64,6 +64,8 @@ input:focus-visible {
 
 .app-shell {
   --sticky-page-top: max(22px, env(safe-area-inset-top), var(--tma-safe-top));
+  --sticky-page-gutter-left: max(var(--space-page-gutter), env(safe-area-inset-left), var(--tma-safe-left));
+  --sticky-page-gutter-right: max(var(--space-page-gutter), env(safe-area-inset-right), var(--tma-safe-right));
   width: min(100%, 430px);
   min-height: var(--tma-viewport-height, 100dvh);
   overflow-x: clip;
@@ -114,7 +116,19 @@ input:focus-visible {
   position: sticky;
   z-index: 8;
   top: var(--sticky-page-top);
+  isolation: isolate;
+  background: transparent;
+}
+
+.page-header-sticky::before {
+  position: absolute;
+  z-index: -1;
+  top: calc(-1 * var(--sticky-page-top));
+  right: calc(-1 * var(--sticky-page-gutter-right));
+  bottom: -8px;
+  left: calc(-1 * var(--sticky-page-gutter-left));
   background: var(--color-canvas);
+  content: "";
 }
 
 .page-header button,
@@ -1627,7 +1641,19 @@ h2 {
   top: calc(var(--sticky-page-top) + var(--size-page-header) + 8px);
   display: flex;
   justify-content: flex-start;
+  isolation: isolate;
+  background: transparent;
+}
+
+.history-group-heading::before {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  right: calc(-1 * var(--sticky-page-gutter-right));
+  bottom: -10px;
+  left: calc(-1 * var(--sticky-page-gutter-left));
   background: var(--color-canvas);
+  content: "";
 }
 
 .history-page-heading h1 {
@@ -1766,6 +1792,10 @@ h2 {
   margin-top: 34px;
 }
 
+.history-group {
+  position: relative;
+}
+
 .history-group h2 {
   font-size: var(--font-size-title-3);
 }
@@ -1777,10 +1807,17 @@ h2 {
 
 .history-row {
   display: grid;
+  width: 100%;
   grid-template-columns: 58px minmax(0, 1fr) auto;
   min-height: 76px;
   align-items: center;
   gap: 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
 
 .history-avatar {

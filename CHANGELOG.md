@@ -19,6 +19,7 @@
 
 ### Changed
 
+- **History match navigation.** Каждый матч в общей истории теперь открывает статистику соответствующего соперника; строка остаётся целиком доступной кнопкой вместо отдельного вложенного действия.
 - **Header title transition.** Main headers now replace text with a restrained vertical per-letter wave: the old title leaves upward and the new title enters from below. The earlier slot-layout morph remains exported as `LegacyMorphingHeaderTitle` for later experiments, but was removed from the active path because its layout interpolation made routine navigation feel unstable.
 - **Mini App mobile interaction pass.** History and opponent tables load progressively, opponent score entry uses a bounded Vaul drawer and an in-app numeric keypad, edit totals use the same keypad pattern, opponent tabs transition with restrained spatial continuity, and the bottom tabbar morphs into the context action without spring overshoot or glow.
 - **Temporary debug typography and emoji rendering.** The frontend bundles SF Pro Rounded as the primary debug UI font. Avatar, level and picker emoji now use each platform's native color emoji stack; the bundled Noto webfont was removed because it could shadow Android WebView's native font and leave glyphs invisible. A uniform Apple-style set still requires a separately licensed asset source.
@@ -32,6 +33,8 @@
 
 ### Fixed
 
+- История получила сплошной непрозрачный sticky-слой под page header и заголовками периодов. Заголовок периода теперь ограничен собственной группой и уходит вместе с последним матчем; возврат во вкладку не заменяет уже прогруженную историю первой страницей и сохраняет позицию скролла.
+- Компактный аватар больше не участвует в shared-layout переходе с большим профильным аватаром и остаётся неподвижным между главными вкладками. Волна заголовка укладывается в 180 ms экранного перехода, поэтому хвост предыдущего текста не остаётся на новом экране.
 - Opponent/edit/profile navigation no longer stretches «Редактировать», animates a readable opponent score, or leaves overlapping screens during non-tab transitions. History restores saved scroll before paint and skips its whole-screen slide when returning to a previously scrolled position.
 - History now keeps its page header and current period heading visible while scrolling; the activity endpoint label is anchored to the right edge, and the Vaul score-drawer handle is centered with one unambiguous positioning rule.
 - The progressive-loading browser check now waits past the existing opponent-tab exit transition before counting rows; this removes a test-only race where outgoing and incoming tables briefly appeared together, without changing product behavior.
