@@ -33,6 +33,8 @@ class Opponent:
     opponent_user_id: Optional[int]
     first_name: Optional[str] = None
     username: Optional[str] = None
+    display_name: Optional[str] = None
+    avatar_value: Optional[str] = None
     elo_rating: Optional[int] = None
     history_start_game_id: int = 0
     is_hidden: bool = False
@@ -111,6 +113,9 @@ def display_user_name(first_name: str, username: Optional[str]) -> str:
 
 
 def opponent_title(opponent: Opponent) -> str:
+    if opponent.display_name:
+        return opponent.display_name
+
     if opponent.username:
         return username_label(opponent.username)
 

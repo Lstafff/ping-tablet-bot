@@ -38,6 +38,8 @@ export type Opponent = {
   name: string;
   first_name: string | null;
   username: string | null;
+  display_name: string | null;
+  avatar_value: string | null;
   elo_rating: number | null;
   stats?: Stats;
 };

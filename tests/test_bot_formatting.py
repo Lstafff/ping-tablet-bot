@@ -6,6 +6,19 @@ from app.domain import Opponent
 
 
 class BotFormattingTest(unittest.TestCase):
+    def test_linked_opponent_title_prefers_shared_display_name(self) -> None:
+        opponent = Opponent(
+            id=1,
+            owner_id=1,
+            name="@old",
+            opponent_user_id=2,
+            first_name="Тест",
+            username="test",
+            display_name="Новое имя",
+        )
+
+        self.assertEqual(texts.opponent_title(opponent), "Новое имя")
+
     def test_linked_opponent_title_includes_username(self) -> None:
         opponent = Opponent(
             id=1,

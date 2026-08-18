@@ -569,6 +569,8 @@ def opponent_response(opponent: Opponent, stats: Optional[Stats] = None) -> dict
         "name": opponent.name,
         "first_name": opponent.first_name,
         "username": opponent.username,
+        "display_name": opponent.display_name,
+        "avatar_value": opponent.avatar_value,
         "elo_rating": opponent.elo_rating,
     }
     if stats is not None:

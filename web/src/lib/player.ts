@@ -1,6 +1,9 @@
 import type { Opponent, Stats } from "../api/types";
 
 export function opponentName(opponent: Opponent): string {
+  if (opponent.display_name) {
+    return opponent.display_name;
+  }
   if (opponent.first_name) {
     return opponent.first_name;
   }

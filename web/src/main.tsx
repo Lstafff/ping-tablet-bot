@@ -29,6 +29,7 @@ import { NumericKeypad } from "./components/NumericKeypad";
 import { ProfileAvatarContent, profileAvatarKind } from "./components/ProfileAvatar";
 import { ProgressiveLoadTrigger } from "./components/ProgressiveLoadTrigger";
 import { EloDeltaBadge, ScorePair } from "./components/ScoreDisplay";
+import { SegmentedControl } from "./components/SegmentedControl";
 import { OpponentOpeningScreen, OpponentScreen, type StatsTab } from "./features/opponent/OpponentFlow";
 import { easeInOut, easeOut } from "./lib/motion";
 import { gamesCount, initials, opponentName, winRate } from "./lib/player";
@@ -36,7 +37,7 @@ import { tma } from "./lib/tma";
 import "./tokens.css";
 import "./styles.css";
 
-type Screen = "home" | "stats" | "profile" | "rating" | "levels" | "opponent" | "score" | "edit" | "confirm";
+type Screen = "home" | "stats" | "profile" | "levels" | "opponent" | "score" | "edit" | "confirm";
 type ConfirmAction = "reset" | "delete";
 type InviteMode = "share" | "accept";
 type ScoreSide = "own" | "opponent";
@@ -45,6 +46,8 @@ type ActionSheet = "actions" | "opponents" | "share" | "accept" | null;
 type OpponentEditSheet = "actions" | "games" | "points" | "reset" | "delete" | null;
 type PendingAction = "score" | "opponent" | "invite" | "rating" | "profile" | "avatar";
 type PaginationRequest = { token: number; inFlight: boolean };
+type RatingFeedback = { tone: "success" | "error"; message: string } | null;
+type ScreenMotion = { kind: "none" } | { kind: "tab"; direction: -1 | 1 } | { kind: "back" };
 
 const mainTabPosition: Record<MainTab, number> = {
   stats: 0,
@@ -82,6 +85,15 @@ function levelIndexFor(profile: Profile): number {
     (index, level, levelIndex) => profile.user.elo_rating >= level.threshold ? levelIndex : index,
     0,
   );
+}
+
+function isPreviewFntRating(value: string): boolean {
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:" && ["ttfr.ru", "www.ttfr.ru", "rttf.ru", "www.rttf.ru"].includes(url.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
 }
 
 function calculatePreviewEloChange(playerRating: number, opponentRating: number, games: number, won: boolean): number {
@@ -126,9 +138,9 @@ const previewProfile: Profile = {
 };
 
 const previewOpponents: Opponent[] = [
-  { id: 1, name: "Мария", first_name: "Мария", username: "maria", elo_rating: 680, stats: { wins: 24, losses: 13, points_for: 416, points_against: 359 } },
-  { id: 2, name: "Иван", first_name: "Иван", username: "ivan", elo_rating: 750, stats: { wins: 18, losses: 17, points_for: 358, points_against: 349 } },
-  { id: 3, name: "Даша", first_name: "Даша", username: null, elo_rating: null, stats: { wins: 16, losses: 7, points_for: 244, points_against: 228 } },
+  { id: 1, name: "Мария", first_name: "Мария", username: "maria", display_name: null, avatar_value: "🏓", elo_rating: 680, stats: { wins: 24, losses: 13, points_for: 416, points_against: 359 } },
+  { id: 2, name: "Иван", first_name: "Иван", username: "ivan", display_name: null, avatar_value: null, elo_rating: 750, stats: { wins: 18, losses: 17, points_for: 358, points_against: 349 } },
+  { id: 3, name: "Даша", first_name: "Даша", username: null, display_name: null, avatar_value: null, elo_rating: null, stats: { wins: 16, losses: 7, points_for: 244, points_against: 228 } },
 ];
 
 const previewOpponentStats: OpponentStats = {
@@ -379,10 +391,17 @@ async function previewApi<T>(path: string, options: RequestInit): Promise<T> {
     return { status: "already_connected", accepted: false } as T;
   }
   if (path === "/api/rating" && method === "POST") {
-    return { ...structuredClone(previewProfile), user: { ...previewProfile.user, rating: payload.value ?? null } } as T;
+    const ratingIsFnt = isPreviewFntRating(payload.value ?? "");
+    previewProfile.user.rating = ratingIsFnt ? "1409" : payload.value ?? null;
+    previewProfile.user.rating_is_fnt = ratingIsFnt;
+    previewProfile.player_level = ratingIsFnt ? "Профик" : playerLevels[levelIndexFor(previewProfile)].name;
+    return structuredClone(previewProfile) as T;
   }
   if (path === "/api/rating" && method === "DELETE") {
-    return { ...structuredClone(previewProfile), user: { ...previewProfile.user, rating: null } } as T;
+    previewProfile.user.rating = null;
+    previewProfile.user.rating_is_fnt = false;
+    previewProfile.player_level = playerLevels[levelIndexFor(previewProfile)].name;
+    return structuredClone(previewProfile) as T;
   }
   return {} as T;
 }
@@ -522,6 +541,7 @@ function App() {
     return saved === "stats" || saved === "profile" ? saved : "home";
   });
   const [mainTabDirection, setMainTabDirection] = useState<-1 | 0 | 1>(0);
+  const [screenTransition, setScreenTransition] = useState<"default" | "back">("default");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [opponents, setOpponents] = useState<Opponent[]>([]);
   const [selectedOpponent, setSelectedOpponent] = useState<Opponent | null>(null);
@@ -549,6 +569,7 @@ function App() {
   const [inviteInput, setInviteInput] = useState("");
   const [inviteMessage, setInviteMessage] = useState("");
   const [ratingInput, setRatingInput] = useState("");
+  const [ratingFeedback, setRatingFeedback] = useState<RatingFeedback>(null);
   const [profileNameInput, setProfileNameInput] = useState("");
   const [profileEditing, setProfileEditing] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
@@ -589,20 +610,12 @@ function App() {
   const overlayOpen = Boolean(actionSheet || opponentEditSheet || avatarPickerOpen);
 
   const loadHome = async () => {
-    const historyToken = ++historyPageRequest.current.token;
-    historyPageRequest.current.inFlight = false;
-    const [nextProfile, opponentsResponse, historyResponse] = await Promise.all([
+    const [nextProfile, opponentsResponse] = await Promise.all([
       api<Profile>("/api/profile"),
       api<OpponentsResponse>("/api/opponents"),
-      api<HistoryView>("/api/games?page=1"),
     ]);
     setProfile(nextProfile);
     setOpponents(opponentsResponse.opponents);
-    if (historyToken === historyPageRequest.current.token) {
-      setHistory(historyResponse);
-      setHistoryLoadingMore(false);
-      setHistoryLoadError("");
-    }
   };
 
   const loadHistory = async (page = 1, append = false) => {
@@ -660,19 +673,31 @@ function App() {
     setGamesLoadError("");
     setError("");
     if (showScreen) setScreen("opponent");
-    const [statsResponse, gamesResponse, dailyResponse, chartResponse] = await Promise.all([
-      api<OpponentStats>(`/api/opponents/${opponent.id}/stats`),
-      api<GamesView>(`/api/opponents/${opponent.id}/games?page=${page}&limit=10`),
-      api<DailyView>(`/api/opponents/${opponent.id}/daily?page=${page}`),
-      api<GamesView>(`/api/opponents/${opponent.id}/games?page=1&limit=100`),
-    ]);
+    const loadGames = api<GamesView>(`/api/opponents/${opponent.id}/games?page=${page}&limit=10`)
+      .then((response) => {
+        if (requestId !== opponentRequestId.current) return;
+        setGames(response);
+      })
+      .catch((loadError: unknown) => {
+        if (requestId === opponentRequestId.current) setGamesLoadError(messageFromError(loadError));
+      });
+    const loadDaily = api<DailyView>(`/api/opponents/${opponent.id}/daily?page=${page}`)
+      .then((response) => {
+        if (requestId !== opponentRequestId.current) return;
+        setDaily(response);
+      })
+      .catch((loadError: unknown) => {
+        if (requestId === opponentRequestId.current) setDailyLoadError(messageFromError(loadError));
+      });
+    const loadChart = api<GamesView>(`/api/opponents/${opponent.id}/games?page=1&limit=100`)
+      .then((response) => {
+        if (requestId === opponentRequestId.current) setChartGames(response.games);
+      })
+      .catch(() => undefined);
+    const statsResponse = await api<OpponentStats>(`/api/opponents/${opponent.id}/stats`);
     if (requestId !== opponentRequestId.current) return;
     setOpponentStats(statsResponse);
-    setGames(gamesResponse);
-    setDaily(dailyResponse);
-    setDailyLoadError("");
-    setGamesLoadError("");
-    setChartGames(chartResponse.games);
+    void Promise.all([loadGames, loadDaily, loadChart]);
   };
 
   const loadOpponentDays = async (page: number) => {
@@ -831,19 +856,18 @@ function App() {
     void loadHome().catch((loadError: unknown) => setError(messageFromError(loadError)));
   };
 
-  const showHome = async () => {
+  const showHome = () => {
     setScreen("home");
     setSelectedOpponent(null);
     setOpponentStats(null);
     setError("");
-    try {
-      await loadHome();
-    } catch (homeError: unknown) {
-      setError(messageFromError(homeError));
-    }
+    void api<OpponentsResponse>("/api/opponents")
+      .then((response) => setOpponents(response.opponents))
+      .catch(() => undefined);
   };
 
   const openOpponent = (opponent: Opponent, tab: StatsTab = "summary", page = 1, returnScreen: "home" | "stats" = screen === "stats" ? "stats" : "home") => {
+    setScreenTransition("default");
     opponentReturnScreen.current = returnScreen;
     void loadOpponent(opponent, tab, page).catch((loadError: unknown) => setError(messageFromError(loadError)));
   };
@@ -855,6 +879,8 @@ function App() {
       name: game.opponent_name,
       first_name: game.opponent_name.startsWith("@") ? null : game.opponent_name,
       username: game.opponent_name.startsWith("@") ? game.opponent_name.slice(1) : null,
+      display_name: null,
+      avatar_value: null,
       elo_rating: null,
     };
     openOpponent(knownOpponent ?? fallbackOpponent, "summary", 1, "stats");
@@ -934,10 +960,16 @@ function App() {
     setScoreDrawerOpen(true);
   };
 
-  const openScoreForOpponent = async (opponent: Opponent) => {
-    await loadOpponent(opponent, "summary", 1, false);
+  const openScoreForOpponent = (opponent: Opponent) => {
+    setSelectedOpponent(opponent);
     setActionSheet(null);
     openScore("home");
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        void loadOpponent(opponent, "summary", 1, false)
+          .catch((loadError: unknown) => setError(messageFromError(loadError)));
+      }, 0);
+    });
   };
 
   const resetScoreDraft = () => {
@@ -1147,18 +1179,18 @@ function App() {
   const saveRating = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setActionPending("rating", true);
-    setError("");
+    setRatingFeedback(null);
     try {
       const result = await api<Profile>("/api/rating", {
         method: "POST",
         body: JSON.stringify({ value: ratingInput }),
       });
       setProfile(result);
-      setRatingInput("");
+      setRatingInput(result.user.rating ?? "");
+      setRatingFeedback({ tone: "success", message: result.user.rating_is_fnt ? "Рейтинг ФНТР добавлен. Теперь ваш уровень — «Профик»" : "Рейтинг добавлен" });
       tma.haptic.notification("success");
-      setScreen("profile");
     } catch (ratingError: unknown) {
-      setError(messageFromError(ratingError));
+      setRatingFeedback({ tone: "error", message: messageFromError(ratingError) });
     } finally {
       setActionPending("rating", false);
     }
@@ -1166,12 +1198,15 @@ function App() {
 
   const clearRating = async () => {
     setActionPending("rating", true);
+    setRatingFeedback(null);
     try {
       const result = await api<Profile>("/api/rating", { method: "DELETE" });
       setProfile(result);
-      setScreen("profile");
+      setRatingInput("");
+      setRatingFeedback({ tone: "success", message: "Рейтинг сброшен" });
+      tma.haptic.notification("success");
     } catch (ratingError: unknown) {
-      setError(messageFromError(ratingError));
+      setRatingFeedback({ tone: "error", message: messageFromError(ratingError) });
     } finally {
       setActionPending("rating", false);
     }
@@ -1215,6 +1250,7 @@ function App() {
   };
 
   const selectMainTab = (tab: MainTab) => {
+    setScreenTransition("default");
     const currentTab: MainTab = screen === "stats" ? "stats" : screen === "profile" ? "profile" : "matches";
     setMainTabDirection(Math.sign(mainTabPosition[tab] - mainTabPosition[currentTab]) as -1 | 0 | 1);
     setSelectedOpponent(null);
@@ -1239,13 +1275,14 @@ function App() {
   };
 
   const goBack = () => {
+    setScreenTransition("back");
     if (screen === "confirm") {
       setScreen("edit");
     } else if (screen === "edit") {
       setScreen("opponent");
     } else if (screen === "score") {
       backFromScoreToOpponentPicker();
-    } else if (screen === "rating" || screen === "levels") {
+    } else if (screen === "levels") {
       setScreen("profile");
     } else if (screen === "opponent" && opponentReturnScreen.current === "stats") {
       setSelectedOpponent(null);
@@ -1253,7 +1290,7 @@ function App() {
       setError("");
       setScreen("stats");
     } else if (screen === "opponent" || screen === "stats" || screen === "profile") {
-      void showHome();
+      showHome();
     }
   };
 
@@ -1295,8 +1332,12 @@ function App() {
           editing={profileEditing}
           nameInput={profileNameInput}
           submitting={profileSubmitting}
-          onRating={() => setScreen("rating")}
-          onLevel={() => setScreen("levels")}
+          onLevel={() => {
+            setScreenTransition("default");
+            setRatingInput(profile.user.rating ?? "");
+            setRatingFeedback(null);
+            setScreen("levels");
+          }}
           onEdit={() => {
             setProfileNameInput(userName(profile.user));
             setProfileEditing(true);
@@ -1322,20 +1363,18 @@ function App() {
         />
       );
     }
-    if (screen === "rating") {
+    if (screen === "levels") {
       return (
-        <RatingScreen
+        <LevelsScreen
           profile={profile}
-          value={ratingInput}
-          submitting={ratingSubmitting}
-          onValue={setRatingInput}
-          onSave={saveRating}
-          onClear={() => void clearRating()}
+          ratingValue={ratingInput}
+          ratingFeedback={ratingFeedback}
+          ratingSubmitting={ratingSubmitting}
+          onRatingValue={setRatingInput}
+          onRatingSave={saveRating}
+          onRatingClear={() => void clearRating()}
         />
       );
-    }
-    if (screen === "levels") {
-      return <LevelsScreen profile={profile} />;
     }
     if (screen === "opponent" && selectedOpponent) {
       if (!opponentStats) {
@@ -1374,10 +1413,12 @@ function App() {
           onSaveGames={() => void saveTotal("games")}
           onSavePoints={() => void saveTotal("points")}
           onReset={() => {
+            setScreenTransition("default");
             setConfirmAction("reset");
             setScreen("confirm");
           }}
           onDelete={() => {
+            setScreenTransition("default");
             setConfirmAction("delete");
             setScreen("confirm");
           }}
@@ -1390,7 +1431,7 @@ function App() {
           action={confirmAction}
           opponentName={selectedName}
           submitting={opponentSubmitting}
-          onCancel={() => setScreen("edit")}
+          onCancel={goBack}
           onConfirm={() => void confirmDestructiveAction()}
         />
       );
@@ -1401,9 +1442,11 @@ function App() {
   const canShowNavigation = profile && !loading && (screen === "home" || screen === "stats" || screen === "profile" || screen === "opponent");
   const activeTab: MainTab = screen === "stats" || screen === "profile" ? screen : "matches";
   const savedHistoryScroll = screen === "stats" ? Number(sessionStorage.getItem("ping-tablet:scroll:stats") ?? 0) : 0;
-  const screenMotionDirection = isMainTabScreen(screen) && isMainTabScreen(previousRenderedScreen.current) && savedHistoryScroll <= 0
-    ? mainTabDirection
-    : 0;
+  const screenMotion: ScreenMotion = screenTransition === "back"
+    ? { kind: "back" }
+    : isMainTabScreen(screen) && isMainTabScreen(previousRenderedScreen.current) && savedHistoryScroll <= 0 && mainTabDirection !== 0
+      ? { kind: "tab", direction: mainTabDirection }
+      : { kind: "none" };
 
   return (
     <MotionConfig reducedMotion="user">
@@ -1432,40 +1475,57 @@ function App() {
               </motion.p>
             ) : null}
           </AnimatePresence>
-          <AnimatePresence initial={false} mode="popLayout" custom={screenMotionDirection}>
+          <AnimatePresence
+            initial={false}
+            mode="popLayout"
+            custom={screenMotion}
+            onExitComplete={() => setScreenTransition("default")}
+          >
             <motion.main
               className="screen"
               key={screen}
-              custom={screenMotionDirection}
+              data-screen={screen}
+              custom={screenMotion}
               variants={{
-                initial: (direction: number) => ({
-                  opacity: direction === 0 ? 1 : 0,
+                initial: (motion: ScreenMotion) => ({
+                  opacity: motion.kind === "tab" ? 0 : 1,
                   transform: reduceMotion
                     ? "translateX(0)"
-                    : direction === 0
-                      ? "translateX(0)"
-                      : `translateX(${direction > 0 ? 14 : -14}px)`,
+                    : motion.kind === "tab"
+                      ? `translateX(${motion.direction > 0 ? 14 : -14}px)`
+                      : "translateX(0)",
+                  zIndex: 0,
                 }),
                 animate: {
                   opacity: 1,
                   transform: "translate(0, 0)",
+                  zIndex: 0,
                 },
-                exit: (direction: number) => ({
-                  opacity: direction === 0 ? 1 : 0,
-                  transform: reduceMotion
-                    ? "translateX(0)"
-                    : direction === 0
-                      ? "translateX(0)"
-                      : `translateX(${direction > 0 ? -14 : 14}px)`,
-                  transition: direction === 0 ? { duration: 0 } : undefined,
-                }),
+                exit: (motion: ScreenMotion) => {
+                  if (motion.kind === "back") {
+                    return {
+                      opacity: reduceMotion ? 0 : 1,
+                      transform: reduceMotion ? "translateX(0)" : "translateX(100vw)",
+                      zIndex: 2,
+                      transition: { duration: reduceMotion ? 0.12 : 0.24, ease: easeOut },
+                    };
+                  }
+                  if (motion.kind === "tab") {
+                    return {
+                      opacity: 0,
+                      transform: reduceMotion ? "translateX(0)" : `translateX(${motion.direction > 0 ? -14 : 14}px)`,
+                      zIndex: 0,
+                    };
+                  }
+                  return { opacity: 1, transform: "translateX(0)", zIndex: 0, transition: { duration: 0 } };
+                },
               }}
               initial="initial"
               animate="animate"
               exit="exit"
               transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }}
             >
-              {screen === "rating" || screen === "levels" || screen === "edit" || screen === "confirm" ? (
+              {screen === "levels" || screen === "edit" || screen === "confirm" ? (
                 <PageHeader title={pageTitle(screen)} onBack={goBack} />
               ) : null}
               {page}
@@ -1495,7 +1555,7 @@ function App() {
             </motion.div>
           </div>
         ) : null}
-        {selectedOpponent && opponentStats ? (
+        {selectedOpponent ? (
           <ScoreDrawer
             open={scoreDrawerOpen}
             opponentName={selectedName}
@@ -1530,7 +1590,7 @@ function App() {
           onClose={() => setActionSheet(null)}
           onBack={() => setActionSheet("actions")}
           onScore={() => setActionSheet("opponents")}
-          onScoreOpponent={(opponent) => void openScoreForOpponent(opponent).catch((loadError: unknown) => setError(messageFromError(loadError)))}
+          onScoreOpponent={openScoreForOpponent}
           onShare={() => void openInvite("share")}
           onAccept={() => void openInvite("accept")}
           onInput={setInviteInput}
@@ -1582,7 +1642,6 @@ function App() {
 
 function pageTitle(screen: Screen): string {
   if (screen === "opponent") return "статистика";
-  if (screen === "rating") return "Рейтинг";
   if (screen === "levels") return "Уровень";
   if (screen === "edit") return "Изменение счёта";
   if (screen === "confirm") return "Подтверждение";
@@ -1844,7 +1903,7 @@ function HomeScreen({ profile, opponents, onOpenOpponent }: { profile: Profile; 
               key={opponent.id}
               onClick={() => onOpenOpponent(opponent)}
             >
-              <span className="avatar" aria-hidden="true">{initials(opponentName(opponent))}</span>
+              <span className="avatar" aria-hidden="true"><ProfileAvatarContent value={opponent.avatar_value ?? null} defaultIconSize={22} /></span>
               <span className="opponent-card-copy">
                 <strong>{opponentName(opponent)}</strong>
                 <small>{opponent.stats ? <ScorePair left={opponent.stats.wins} right={opponent.stats.losses} /> : "Счёт пока не добавлен"}</small>
@@ -1882,6 +1941,7 @@ function HistoryScreen({
   onLoadMore(): void;
   onOpenOpponent(game: HistoryGame): void;
 }) {
+  const reduceMotion = useReducedMotion();
   const sortedGames = [...(view?.games ?? [])].sort((left, right) => {
     const delta = new Date(right.played_at).valueOf() - new Date(left.played_at).valueOf();
     return newestFirst ? delta : -delta;
@@ -1898,10 +1958,13 @@ function HistoryScreen({
             {group.games.map((game) => {
               const won = game.own_score > game.opponent_score;
               return (
-                <button
+                <motion.button
                   className="history-row"
                   type="button"
                   key={`${game.opponent_id}-${game.played_at}`}
+                  layout="position"
+                  layoutDependency={newestFirst}
+                  transition={{ layout: reduceMotion ? { duration: 0 } : { duration: 0.18, ease: easeInOut } }}
                   onClick={() => onOpenOpponent(game)}
                 >
                   <span className="history-avatar" aria-hidden="true">
@@ -1918,7 +1981,7 @@ function HistoryScreen({
                     <strong className={won ? "history-score result-win" : "history-score result-loss"}><ScorePair left={game.own_score} right={game.opponent_score} /></strong>
                     <EloDeltaBadge value={game.elo_change} />
                   </span>
-                </button>
+                </motion.button>
               );
             })}
           </div>
@@ -2145,10 +2208,6 @@ function ScoreScreen(props: {
         <button type="button" aria-label="Закрыть" onClick={props.onClose}><AppIcon name="x" size={30} /></button>
       </header>
       <ScoreValidationSnackbar message={props.validationMessage} />
-      <div className="score-switch" role="tablist" aria-label="Выбор игрока">
-        <button className={props.side === "own" ? "score-switch-active" : ""} type="button" role="tab" aria-selected={props.side === "own"} onClick={() => props.onSide("own")}>Ты</button>
-        <button className={props.side === "opponent" ? "score-switch-active" : ""} type="button" role="tab" aria-selected={props.side === "opponent"} onClick={() => props.onSide("opponent")}>{props.opponentName}</button>
-      </div>
       <div className="score-value" aria-live="polite"><RollingNumber value={current || "0"} /></div>
       <p className="score-progress">
         <ScorePair
@@ -2156,14 +2215,28 @@ function ScoreScreen(props: {
           right={<RollingNumber value={props.opponentScore || "0"} />}
         />
       </p>
-      <div className="score-opponent-row"><span className="avatar">{initials(props.opponentName)}</span><div><strong>{props.opponentName}</strong><small>{props.side === "own" ? "Сначала твой счёт" : "Теперь счёт соперника"}</small></div></div>
+      <SegmentedControl
+        ariaLabel="Выбор игрока"
+        className="score-player-switch"
+        tone="dark"
+        value={props.side}
+        options={[
+          { value: "own", label: "Ты" },
+          { value: "opponent", label: "Противник" },
+        ]}
+        onChange={props.onSide}
+      />
       <NumericKeypad ariaLabel="Клавиатура счёта" onDigit={props.onDigit} onErase={props.onErase} />
       <button className="score-continue" type="button" disabled={!canContinue || props.submitting} onClick={props.onContinue}>{props.submitting ? "Сохраняем…" : props.side === "own" ? "Дальше" : "Сохранить"}</button>
     </motion.section>
   );
 }
 
-function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: string; submitting: boolean; onRating(): void; onLevel(): void; onEdit(): void; onAvatarEdit(): void; onNameInput(value: string): void; onSaveName(event: FormEvent<HTMLFormElement>): void }) {
+function FntrBadge({ className = "" }: { className?: string }) {
+  return <span className={`fntr-badge${className ? ` ${className}` : ""}`}>ФНТР</span>;
+}
+
+function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: string; submitting: boolean; onLevel(): void; onEdit(): void; onAvatarEdit(): void; onNameInput(value: string): void; onSaveName(event: FormEvent<HTMLFormElement>): void }) {
   const { profile } = props;
   const nameInputRef = useRef<HTMLInputElement>(null);
   const startEditing = () => {
@@ -2180,6 +2253,7 @@ function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: s
           >
             <ProfileAvatarContent value={profile.user.avatar_value} />
           </span>
+          {profile.user.rating_is_fnt ? <FntrBadge className="profile-avatar-fntr-badge" /> : null}
           {props.editing ? <motion.button className="profile-avatar-edit modal-icon-button" type="button" aria-label="Изменить аватар" initial={{ opacity: 0, transform: "scale(0.94)" }} animate={{ opacity: 1, transform: "scale(1)" }} transition={{ duration: 0.18, ease: easeOut }} onClick={props.onAvatarEdit}><AppIcon name="pencil" size={14} /></motion.button> : null}
         </div>
         {props.editing ? <form id="profile-name-form" className="profile-name-form" onSubmit={props.onSaveName}>
@@ -2190,7 +2264,7 @@ function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: s
 
       <div className={props.editing ? "profile-locked-content profile-locked-content-disabled" : "profile-locked-content"} aria-disabled={props.editing}>
         <section className="profile-actions" aria-label="Действия профиля">
-          <button type="button" onClick={props.onRating} disabled={props.editing}><span><AppIcon name="star" size={31} /></span><small>Рейтинг</small></button>
+          <button type="button" disabled aria-label="Рейтинг недоступен"><span><AppIcon name="star" size={31} /></span><small>Рейтинг</small></button>
           <button type="button" onClick={props.onLevel} disabled={props.editing}><span><AppIcon name="chart" size={31} /></span><small>Уровень</small></button>
           <button type="button" onClick={startEditing} disabled={props.editing}><span><AppIcon name="settings" size={31} /></span><small>Настройки</small></button>
         </section>
@@ -2206,7 +2280,6 @@ function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: s
         <dl className="profile-facts">
           <div><dt><AppIcon name="calendar" size={21} /><span>Начал играть</span></dt><dd>{formatProfileDate(profile.user.created_at)}</dd></div>
           <div><dt><AppIcon name="chart" size={21} /><span>Уровень игры</span></dt><dd><button className="profile-fact-link" type="button" onClick={props.onLevel} disabled={props.editing}><span>{playerLevels[levelIndexFor(profile)].name}</span><AppIcon name="chevron-right" size={21} /></button></dd></div>
-          <div><dt><AppIcon name="star" size={21} /><span>Рейтинг</span></dt><dd><button className="profile-fact-link" type="button" onClick={props.onRating} disabled={props.editing}><span>{profile.user.rating ? `${profile.user.rating}${profile.user.rating_is_fnt ? " ФНТР" : ""}` : "Не указан"}</span><AppIcon name="chevron-right" size={21} /></button></dd></div>
         </dl>
 
         <div className="profile-divider"><span>ещё про вас</span></div>
@@ -2222,14 +2295,26 @@ function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: s
   );
 }
 
-function LevelsScreen({ profile }: { profile: Profile }) {
+function LevelsScreen(props: {
+  profile: Profile;
+  ratingValue: string;
+  ratingFeedback: RatingFeedback;
+  ratingSubmitting: boolean;
+  onRatingValue(value: string): void;
+  onRatingSave(event: FormEvent<HTMLFormElement>): void;
+  onRatingClear(): void;
+}) {
+  const { profile } = props;
   const currentIndex = levelIndexFor(profile);
   const current = playerLevels[currentIndex];
   const next = playerLevels[currentIndex + 1];
   return (
     <>
       <section className="levels-hero">
-        <span aria-hidden="true">{current.emoji}</span>
+        <span className="level-hero-icon" aria-hidden="true">
+          {current.emoji}
+          {profile.user.rating_is_fnt ? <FntrBadge className="level-icon-fntr-badge" /> : null}
+        </span>
         <MorphingHeading>{current.name}</MorphingHeading>
         <strong>{profile.user.elo_rating} elo</strong>
         <small>{next ? `До следующего уровня — ${Math.max(0, next.threshold - profile.user.elo_rating)} elo` : "Максимальный уровень"}</small>
@@ -2242,6 +2327,35 @@ function LevelsScreen({ profile }: { profile: Profile }) {
             {index === currentIndex ? <AppIcon name="check" size={20} strokeWidth={3} /> : null}
           </div>
         ))}
+      </section>
+      <section className="rating-editor levels-rating-editor" aria-label="Рейтинг ФНТР">
+        <form className="inline-form rating-form" onSubmit={props.onRatingSave}>
+          <label className="visually-hidden" htmlFor="rating">Рейтинг или ссылка на профиль ФНТР</label>
+          <input
+            id="rating"
+            value={props.ratingValue}
+            onChange={(event) => props.onRatingValue(event.target.value)}
+            placeholder="Рейтинг или ссылка ФНТР"
+            required
+          />
+          <button className="primary-button" type="submit" disabled={props.ratingSubmitting}>
+            {props.ratingSubmitting ? "Добавляем…" : "Добавить"}
+          </button>
+        </form>
+        {profile.user.rating ? (
+          <button className="text-button danger-text" type="button" onClick={props.onRatingClear} disabled={props.ratingSubmitting}>
+            Сбросить
+          </button>
+        ) : null}
+        {props.ratingFeedback ? (
+          <p
+            className={props.ratingFeedback.tone === "error" ? "rating-feedback rating-feedback-error" : "rating-feedback"}
+            role={props.ratingFeedback.tone === "error" ? "alert" : "status"}
+            aria-live="polite"
+          >
+            {props.ratingFeedback.message}
+          </p>
+        ) : null}
       </section>
     </>
   );
@@ -2282,28 +2396,6 @@ function AvatarPicker(props: { open: boolean; submitting: boolean; feedback: str
   );
 }
 
-function RatingScreen(props: { profile: Profile; value: string; submitting: boolean; onValue(value: string): void; onSave(event: FormEvent<HTMLFormElement>): void; onClear(): void }) {
-  const rating = props.profile.user.rating;
-  return (
-    <>
-      <section className="rating-hero">
-        <span aria-hidden="true"><AppIcon name="star" size={46} fill="currentColor" /></span>
-        <p>Профессиональный рейтинг</p>
-        <MorphingHeading>{rating ?? "Не указан"}</MorphingHeading>
-        {props.profile.user.rating_is_fnt ? <small>Рейтинг ФНТР</small> : null}
-      </section>
-      <section className="rating-editor">
-        <form className="stacked-form rating-form" onSubmit={props.onSave}>
-          <label htmlFor="rating">Рейтинг или ссылка на профиль ФНТР</label>
-          <input id="rating" value={props.value} onChange={(event) => props.onValue(event.target.value)} placeholder="Например, 412" required />
-          <button className="primary-button" type="submit" disabled={props.submitting}>Сохранить</button>
-        </form>
-        {rating ? <button className="text-button danger-text" type="button" onClick={props.onClear} disabled={props.submitting}>Очистить рейтинг</button> : null}
-      </section>
-    </>
-  );
-}
-
 function ActionMenu(props: {
   mode: ActionSheet;
   showTrigger: boolean;
@@ -2334,60 +2426,34 @@ function ActionMenu(props: {
     accept: "Добавить соперника",
   };
   const isRoot = props.mode === "actions";
-  const returningToRoot = isRoot && previousModeRef.current !== null && previousModeRef.current !== "actions";
-  const layoutTransition = reduceMotion
-    ? { duration: 0.12, ease: easeOut }
-    : { duration: 0.24, ease: easeInOut };
 
   useEffect(() => {
     previousModeRef.current = props.mode;
   }, [props.mode]);
 
   return (
-    <AnimatePresence initial={false} mode="popLayout" custom={Boolean(props.mode)}>
+    <AnimatePresence initial={false}>
       {!props.mode && props.showTrigger ? (
         <motion.div
           className="floating-add-slot"
           key="add-trigger"
-          custom={Boolean(props.mode)}
-          initial={{
-            opacity: triggerReturnsFromMenu ? 1 : 0,
-          }}
-          animate={{
-            opacity: 1,
-            transition: { duration: reduceMotion ? 0.12 : 0.18, ease: easeOut },
-          }}
-          variants={{
-            exit: (morphingToMenu: boolean) => ({
-              opacity: morphingToMenu ? 1 : 0,
-              transition: { duration: reduceMotion ? 0.12 : 0.16, ease: easeOut },
-            }),
-          }}
-          exit="exit"
+          initial={{ opacity: triggerReturnsFromMenu ? 1 : 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: reduceMotion ? 0.12 : 0.14, ease: easeOut }}
         >
           <motion.div
             className="floating-add-scale"
-            custom={Boolean(props.mode)}
-            initial={{ transform: reduceMotion || triggerReturnsFromMenu ? "scale(1)" : "scale(0.5)" }}
-            animate={{
-              transform: "scale(1)",
-              transition: { duration: reduceMotion ? 0.12 : 0.18, ease: easeOut },
-            }}
-            variants={{
-              exit: (morphingToMenu: boolean) => ({
-                transform: reduceMotion || morphingToMenu ? "scale(1)" : "scale(0.5)",
-                transition: { duration: reduceMotion ? 0.12 : 0.16, ease: easeOut },
-              }),
-            }}
-            exit="exit"
+            initial={{ transform: reduceMotion || triggerReturnsFromMenu ? "scale(1)" : "scale(0.96)" }}
+            animate={{ transform: "scale(1)" }}
+            exit={{ transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
+            transition={{ duration: reduceMotion ? 0.12 : 0.14, ease: easeOut }}
           >
             <motion.button
               className="floating-add-button"
               type="button"
               aria-label="Добавить"
               title="Добавить"
-              layoutId="add-flow-surface"
-              transition={{ layout: layoutTransition }}
               onClick={(event) => {
                 event.stopPropagation();
                 props.onOpen();
@@ -2397,7 +2463,7 @@ function ActionMenu(props: {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: reduceMotion ? 0.1 : 0.14, delay: reduceMotion ? 0 : 0.1, ease: easeOut }}
+                transition={{ duration: reduceMotion ? 0.1 : 0.12, ease: easeOut }}
               >
                 <AppIcon name="add" aria-hidden="true" size={32} strokeWidth={2} />
               </motion.span>
@@ -2409,6 +2475,10 @@ function ActionMenu(props: {
           className={isRoot ? "action-overlay" : "action-overlay action-overlay-expanded"}
           role="presentation"
           onClick={props.onClose}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: reduceMotion ? 0.12 : 0.14, ease: easeOut }}
         >
           <motion.section
             className={isRoot ? "action-sheet action-sheet-root" : "action-sheet action-sheet-expanded"}
@@ -2416,9 +2486,10 @@ function ActionMenu(props: {
             aria-modal="true"
             aria-label={titles[props.mode]}
             onClick={(event) => event.stopPropagation()}
-            layout
-            layoutId="add-flow-surface"
-            transition={{ layout: layoutTransition }}
+            initial={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(8px) scale(0.96)" }}
+            animate={{ opacity: 1, transform: "translateY(0) scale(1)" }}
+            exit={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(6px) scale(0.98)" }}
+            transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }}
           >
             {isRoot ? (
                 <motion.div
@@ -2428,7 +2499,6 @@ function ActionMenu(props: {
                   animate={{ opacity: 1 }}
                   transition={{
                     duration: reduceMotion ? 0.1 : 0.12,
-                    delay: reduceMotion ? 0 : returningToRoot ? 0.16 : 0.1,
                     ease: easeOut,
                   }}
                 >
@@ -2442,7 +2512,7 @@ function ActionMenu(props: {
                   key={props.mode}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ duration: reduceMotion ? 0.1 : 0.16, delay: reduceMotion ? 0 : 0.04, ease: easeOut }}
+                  transition={{ duration: reduceMotion ? 0.1 : 0.14, ease: easeOut }}
                 >
                   <header>
                     <MorphingHeading as="h2">{titles[props.mode]}</MorphingHeading>
@@ -2453,7 +2523,7 @@ function ActionMenu(props: {
                       onClick={props.onBack}
                       initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.92)" }}
                       animate={{ opacity: 1, transform: "scale(1)" }}
-                      transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }}
+                      transition={{ duration: reduceMotion ? 0.12 : 0.14, ease: easeOut }}
                     >
                       <AppIcon name="arrow-left" size={20} />
                     </motion.button>
@@ -2462,10 +2532,10 @@ function ActionMenu(props: {
                     className="action-sheet-panel"
                     initial={{ opacity: 0, transform: reduceMotion ? "translateY(0)" : "translateY(6px)" }}
                     animate={{ opacity: 1, transform: "translateY(0)" }}
-                    transition={{ duration: reduceMotion ? 0.12 : 0.18, delay: reduceMotion ? 0 : 0.04, ease: easeOut }}
+                    transition={{ duration: reduceMotion ? 0.12 : 0.16, ease: easeOut }}
                   >
                     {props.mode === "opponents" ? <div className="action-list opponent-picker">
-                      {props.opponents.map((opponent) => <button type="button" key={opponent.id} onClick={() => props.onScoreOpponent(opponent)}><span className="avatar">{initials(opponentName(opponent))}</span><span><strong>{opponentName(opponent)}</strong><small>{opponent.stats ? <ScorePair left={opponent.stats.wins} right={opponent.stats.losses} /> : "Нет матчей"}</small></span><AppIcon name="chevron-right" size={24} /></button>)}
+                      {props.opponents.map((opponent) => <button type="button" key={opponent.id} onClick={() => props.onScoreOpponent(opponent)}><span className="avatar"><ProfileAvatarContent value={opponent.avatar_value ?? null} defaultIconSize={22} /></span><span><strong>{opponentName(opponent)}</strong><small>{opponent.stats ? <ScorePair left={opponent.stats.wins} right={opponent.stats.losses} /> : "Нет матчей"}</small></span><AppIcon name="chevron-right" size={24} /></button>)}
                       {!props.opponents.length ? <p className="muted-copy">Сначала добавь соперника по коду.</p> : null}
                     </div> : null}
                     {props.mode === "share" ? <div className="invite-sheet">

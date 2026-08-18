@@ -59,7 +59,8 @@ Telegram chat update                         Telegram Mini App
 - `web/src/tokens.css` already separates semantic theme, accent, status, material and motion tokens. This is a strong base to keep.
 - Motion uses `motion/react`, shared easing/duration tokens and multiple `useReducedMotion` branches.
 - The copied `web/mini-app` and `web/primitives` trees are source libraries, not the active design system wholesale. Active code imports only Telegram runtime helpers and `GlassContainer` from them.
-- Initial home load sends three requests in parallel. Opponent load still requests summary/table/chart data explicitly, with stale-response protection.
+- Initial home load waits only for profile and opponents; history loads on first visit. Opponent identity renders immediately, total stats unblock the full screen, and table/chart requests finish in the background with stale-response protection.
+- Linked opponents read `display_name` and `avatar_value` live from the connected user row, so profile changes are visible to the other player without rewriting the relationship record.
 - Score mutation returns the updated profile/opponent state and updates the local history immediately instead of waiting for seven follow-up GETs.
 - Pending state is scoped by action family; errors have a rendered live surface and modal flows render feedback inside the active layer.
 

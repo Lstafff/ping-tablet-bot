@@ -58,6 +58,8 @@ class WebAppDeliveryTest(unittest.IsolatedAsyncioTestCase):
                 opponent_user_id=20,
                 first_name="Мария",
                 username="maria",
+                display_name="Маша",
+                avatar_value="🏓",
             )
         )
 
@@ -68,6 +70,8 @@ class WebAppDeliveryTest(unittest.IsolatedAsyncioTestCase):
                 "name": "Мария",
                 "first_name": "Мария",
                 "username": "maria",
+                "display_name": "Маша",
+                "avatar_value": "🏓",
                 "elo_rating": None,
             },
         )

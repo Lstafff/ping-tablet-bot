@@ -70,6 +70,8 @@ class OpponentResponse(BaseModel):
     name: str
     first_name: Optional[str]
     username: Optional[str]
+    display_name: Optional[str]
+    avatar_value: Optional[str]
     elo_rating: Optional[int]
     stats: StatsResponse
 

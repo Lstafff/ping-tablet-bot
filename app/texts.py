@@ -152,6 +152,7 @@ class OpponentLike(Protocol):
     opponent_user_id: Optional[int]
     first_name: Optional[str]
     username: Optional[str]
+    display_name: Optional[str]
     elo_rating: Optional[int]
 
 

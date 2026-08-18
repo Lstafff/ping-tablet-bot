@@ -6,7 +6,12 @@ export type OpponentHeaderCollapseState = {
   progress: number;
   remaining: number;
   backdropOpacity: number;
-  scorePrimaryShare: number;
+  titlePrimaryShare: number;
+  avatarOpacity: number;
+  avatarTranslateY: number;
+  avatarScale: number;
+  titleTranslateY: number;
+  titleScale: number;
   summaryOpacity: number;
   summaryTranslateY: number;
 };
@@ -23,20 +28,13 @@ export function calculateOpponentHeaderCollapseState(
     progress,
     remaining,
     backdropOpacity: Math.min(1, rawProgress * 1.5),
-    scorePrimaryShare: Math.round(100 * remaining),
+    titlePrimaryShare: Math.round(100 * remaining),
+    avatarOpacity: remaining,
+    avatarTranslateY: reduceMotion ? 0 : -84 * progress,
+    avatarScale: reduceMotion ? 1 : 0.45 + 0.55 * remaining,
+    titleTranslateY: reduceMotion ? 0 : 126 * remaining,
+    titleScale: reduceMotion ? 1 : 1 + 0.45 * remaining,
     summaryOpacity: remaining,
-    summaryTranslateY: reduceMotion ? 0 : -8 * progress,
+    summaryTranslateY: reduceMotion ? 0 : -64 * progress,
   };
-}
-
-export function opponentHeaderElementTransform(
-  state: OpponentHeaderCollapseState,
-  expandedX: number,
-  expandedY: number,
-  compactScale: number,
-): string {
-  const translateX = expandedX * state.remaining;
-  const translateY = expandedY * state.remaining;
-  const scale = 1 + (compactScale - 1) * state.progress;
-  return `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})`;
 }

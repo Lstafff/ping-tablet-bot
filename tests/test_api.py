@@ -14,7 +14,7 @@ try:
 
     from app.api import AppState, RatingRequestGuard, create_app, require_webapp_user
     from app.config import Config
-    from app.domain import ExtendedStats, Stats, User
+    from app.domain import ExtendedStats, Opponent, Stats, User
     from app.scoring import parse_score
     from app.services import OpponentStatsView, ProfileView, ScoreSubmission
     from app.webapp_auth import WebAppUser
@@ -40,6 +40,23 @@ class FakeService:
             extended_stats=self._extended_stats(),
             user_name="Игрок",
         )
+
+    def list_opponents(self, user_id: int) -> list[Opponent]:
+        return [
+            Opponent(
+                id=10,
+                owner_id=user_id,
+                name="Соперник",
+                opponent_user_id=2,
+                first_name="Мария",
+                username="maria",
+                display_name="Маша",
+                avatar_value="🏓",
+            )
+        ]
+
+    def get_opponent_stats(self, user_id: int, opponent_id: int) -> Stats:
+        return Stats(wins=1, losses=0, points_for=11, points_against=7)
 
     def get_profile(self, user_id: int) -> ProfileView:
         return ProfileView(
@@ -185,6 +202,17 @@ class ApiTest(unittest.TestCase):
                 "elo_games",
             },
         )
+
+    def test_opponents_response_includes_live_profile_fields(self) -> None:
+        response = self.client.get(
+            "/api/opponents",
+            headers=self.authorization(int(time.time())),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        opponent = response.json()["opponents"][0]
+        self.assertEqual(opponent["display_name"], "Маша")
+        self.assertEqual(opponent["avatar_value"], "🏓")
 
     def test_openapi_documents_success_and_error_contracts(self) -> None:
         schema = self.app.openapi()

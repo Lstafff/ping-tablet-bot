@@ -1,13 +1,15 @@
-import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 
 import type { DailyView, ExtendedStats, GamesView, Opponent, OpponentStats, RecentGame, Stats } from "../../api/types";
 import { AppIcon } from "../../components/AppIcon";
 import { ProgressiveLoadTrigger } from "../../components/ProgressiveLoadTrigger";
+import { ProfileAvatarContent } from "../../components/ProfileAvatar";
 import { EloDeltaBadge, ScorePair, ScoreValue } from "../../components/ScoreDisplay";
-import { easeInOut, easeOut } from "../../lib/motion";
-import { gamesCount, initials, opponentName, winRate } from "../../lib/player";
-import { calculateOpponentHeaderCollapseState, opponentHeaderElementTransform } from "./collapsingHeader";
+import { SegmentedControl } from "../../components/SegmentedControl";
+import { easeOut } from "../../lib/motion";
+import { gamesCount, opponentName, winRate } from "../../lib/player";
+import { calculateOpponentHeaderCollapseState } from "./collapsingHeader";
 
 export type StatsTab = "summary" | "days" | "games";
 
@@ -81,13 +83,16 @@ export function OpponentScreen(props: OpponentScreenProps) {
         <div><span>Текущая серия</span><strong>{stats.extended_stats.win_streak}</strong></div>
       </section>
 
-      <LayoutGroup id={`opponent-stat-tabs-${opponent.id}`}>
-        <div className="segmented-control" role="tablist" aria-label="Статистика с соперником">
-          <TabButton active={props.tab === "summary"} indicatorId={`opponent-stat-tab-${opponent.id}`} onClick={() => props.onTabChange("summary")}>Общая</TabButton>
-          <TabButton active={props.tab === "days"} indicatorId={`opponent-stat-tab-${opponent.id}`} onClick={() => props.onTabChange("days")}>По дням</TabButton>
-          <TabButton active={props.tab === "games"} indicatorId={`opponent-stat-tab-${opponent.id}`} onClick={() => props.onTabChange("games")}>По играм</TabButton>
-        </div>
-      </LayoutGroup>
+      <SegmentedControl
+        ariaLabel="Статистика с соперником"
+        value={props.tab}
+        options={[
+          { value: "summary", label: "Общая" },
+          { value: "days", label: "По дням" },
+          { value: "games", label: "По играм" },
+        ]}
+        onChange={props.onTabChange}
+      />
 
       <AnimatePresence initial={false} mode="popLayout" custom={tabDirection}>
         <motion.div
@@ -122,8 +127,7 @@ export function OpponentCollapsingHeader({ opponent, stats, onBack, pending = fa
   const headerRef = useRef<HTMLElement>(null);
   const backdropRef = useRef<HTMLSpanElement>(null);
   const avatarRef = useRef<HTMLSpanElement>(null);
-  const nameRef = useRef<HTMLHeadingElement>(null);
-  const scoreRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLDivElement>(null);
   const summaryRef = useRef<HTMLParagraphElement>(null);
   const resolvedStats = stats ?? opponent.stats;
 
@@ -134,28 +138,14 @@ export function OpponentCollapsingHeader({ opponent, stats, onBack, pending = fa
       const header = headerRef.current;
       const backdrop = backdropRef.current;
       const avatar = avatarRef.current;
-      const name = nameRef.current;
-      if (!header || !backdrop || !avatar || !name) return;
+      const title = titleRef.current;
+      if (!header || !backdrop || !avatar || !title) return;
 
       const state = calculateOpponentHeaderCollapseState(window.scrollY, Boolean(reduceMotion));
-      const centerX = header.clientWidth / 2;
-      const transformElement = (element: HTMLElement, expandedY: number, compactScale: number) => {
-        const expandedX = centerX - (element.offsetLeft + element.offsetWidth / 2);
-        element.style.transform = opponentHeaderElementTransform(state, expandedX, expandedY, compactScale);
-      };
-
-      transformElement(avatar, 66, 0.45);
-      transformElement(name, 142, 0.61);
-      const score = scoreRef.current;
-      if (score) {
-        transformElement(score, 190, 0.42);
-        const ownScore = score.querySelector<HTMLElement>(".score-pair > span:first-child");
-        const opponentScore = score.querySelector<HTMLElement>(".score-pair > span:last-child");
-        const separator = score.querySelector<HTMLElement>(".score-separator");
-        if (ownScore) ownScore.style.color = `color-mix(in srgb, var(--color-success) ${state.scorePrimaryShare}%, var(--color-text-secondary))`;
-        if (opponentScore) opponentScore.style.color = `color-mix(in srgb, var(--color-danger) ${state.scorePrimaryShare}%, var(--color-text-secondary))`;
-        if (separator) separator.style.color = `color-mix(in srgb, var(--color-score-separator) ${state.scorePrimaryShare}%, var(--color-text-secondary))`;
-      }
+      avatar.style.opacity = String(state.avatarOpacity);
+      avatar.style.transform = `translate3d(0, ${state.avatarTranslateY}px, 0) scale(${state.avatarScale})`;
+      title.style.color = `color-mix(in srgb, var(--color-text-primary) ${state.titlePrimaryShare}%, var(--color-text-secondary))`;
+      title.style.transform = `translate3d(0, ${state.titleTranslateY}px, 0) scale(${state.titleScale})`;
       if (summaryRef.current) {
         summaryRef.current.style.opacity = String(state.summaryOpacity);
         summaryRef.current.style.transform = reduceMotion ? "none" : `translate3d(0, ${state.summaryTranslateY}px, 0)`;
@@ -182,16 +172,20 @@ export function OpponentCollapsingHeader({ opponent, stats, onBack, pending = fa
         <button className="opponent-header-back" type="button" aria-label="Назад" title="Назад" onClick={onBack}>
           <AppIcon name="chevron-left" size={30} aria-hidden="true" />
         </button>
-        <span className="avatar avatar-opponent opponent-header-avatar" ref={avatarRef} aria-hidden="true">{initials(opponentName(opponent))}</span>
-        <h1 className="opponent-header-name" ref={nameRef}>{opponentName(opponent)}</h1>
+        <span className="avatar avatar-opponent opponent-header-avatar" ref={avatarRef} aria-hidden="true">
+          <ProfileAvatarContent value={opponent.avatar_value ?? null} />
+        </span>
         {resolvedStats ? (
           <>
-            <div className="opponent-scoreline opponent-header-score" ref={scoreRef} aria-label={`Побед ${resolvedStats.wins}, поражений ${resolvedStats.losses}`}>
-              <ScorePair left={<strong>{resolvedStats.wins}</strong>} right={<strong>{resolvedStats.losses}</strong>} />
+            <div className="opponent-header-title" ref={titleRef}>
+              <h1 className="opponent-header-name">{opponentName(opponent)}</h1>
+              <div className="opponent-scoreline opponent-header-score" aria-label={`Побед ${resolvedStats.wins}, поражений ${resolvedStats.losses}`}>
+                <ScorePair left={<strong>{resolvedStats.wins}</strong>} right={<strong>{resolvedStats.losses}</strong>} />
+              </div>
             </div>
             <p className="opponent-header-summary" ref={summaryRef}><strong>{winRate(resolvedStats)}%</strong> побед · {gamesCount(resolvedStats)} партий</p>
           </>
-        ) : null}
+        ) : <div className="opponent-header-title" ref={titleRef}><h1 className="opponent-header-name">{opponentName(opponent)}</h1></div>}
       </header>
       <div className="opponent-header-spacer" aria-hidden="true" />
     </>
@@ -329,22 +323,6 @@ export function GamesTable({ view, loadingMore, loadError, onLoadMore }: { view:
       })}</div> : <p className="muted-copy">Пока нет сыгранных матчей.</p>}
       <ProgressiveLoadTrigger error={loadError} hasMore={(view?.page ?? 1) < (view?.total_pages ?? 1)} loading={loadingMore} onLoadMore={onLoadMore} />
     </section>
-  );
-}
-
-function TabButton({ active, children, indicatorId, onClick }: { active: boolean; children: string; indicatorId: string; onClick(): void }) {
-  const reduceMotion = useReducedMotion();
-  return (
-    <button className={active ? "tab-button tab-button-active" : "tab-button"} type="button" role="tab" aria-selected={active} onClick={onClick}>
-      {active ? (
-        <motion.span
-          className="tab-active-indicator"
-          layoutId={indicatorId}
-          transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: easeInOut }}
-        />
-      ) : null}
-      <span className="tab-button-label">{children}</span>
-    </button>
   );
 }
 

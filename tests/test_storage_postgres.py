@@ -150,6 +150,18 @@ class PostgresStorageTest(unittest.TestCase):
         self.assertEqual((first_stats.points_for, first_stats.points_against), (11, 7))
         self.assertEqual((second_stats.points_for, second_stats.points_against), (7, 11))
 
+    def test_linked_opponent_uses_live_profile_name_and_avatar(self) -> None:
+        self.db.ensure_user(1, "Игрок 1", None)
+        self.db.ensure_user(2, "Игрок 2", "second")
+        self.db.add_opponent(1, "Игрок 2", 2)
+
+        self.db.set_user_display_name(2, "Новое имя")
+        self.db.set_user_avatar(2, "🏓")
+
+        opponent = self.db.list_opponents(1)[0]
+        self.assertEqual(opponent.display_name, "Новое имя")
+        self.assertEqual(opponent.avatar_value, "🏓")
+
     def test_linked_games_rebuild_elo_for_both_players(self) -> None:
         self.db.ensure_user(1, "Игрок 1", None)
         self.db.ensure_user(2, "Игрок 2", None)

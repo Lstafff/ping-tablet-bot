@@ -240,6 +240,20 @@ class TennisServiceTest(unittest.TestCase):
         self.assertEqual(storage.rating_updates, [(1, "1500.5", False)])
         self.assertEqual(storage.cleared_sessions, [1])
 
+    def test_submit_fnt_rating_marks_rating_as_fnt(self) -> None:
+        storage = FakeStorage()
+        service = TennisService(
+            storage,
+            seed_test_opponent=False,
+            rating_fetcher=lambda _url: "1409",
+        )
+
+        result = asyncio.run(service.submit_rating_input(1, "https://ttfr.ru/sportsman/9"))
+
+        self.assertEqual(result.status, RATING_UPDATED)
+        self.assertEqual(storage.rating_updates, [(1, "1409", True)])
+        self.assertEqual(storage.cleared_sessions, [1])
+
     def test_submit_rating_input_rejects_invalid_text(self) -> None:
         storage = FakeStorage()
         service = TennisService(storage, seed_test_opponent=False)

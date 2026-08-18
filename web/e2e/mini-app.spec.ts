@@ -74,6 +74,28 @@ test("appends every progressive history batch without replacing existing rows", 
   await loadUntilCount(page, page.locator(".opponent-tab-content .table-row"), 11);
 });
 
+test("opens the central add-score flow without waiting and uses the shared selector", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Добавить", exact: true }).click();
+  const rootMenu = page.getByRole("dialog", { name: "Добавить", exact: true });
+  await expect(rootMenu).toBeVisible();
+  await rootMenu.getByRole("button", { name: /Добавить счёт/ }).click();
+
+  const opponentPicker = page.getByRole("dialog", { name: "Добавить счёт", exact: true });
+  await opponentPicker.getByRole("button", { name: /Мария/ }).click();
+  const drawer = page.locator(".score-drawer-content");
+  await expect(drawer).toBeVisible();
+  await expect(page.locator(".score-opponent-row")).toHaveCount(0);
+  await expect(drawer.getByRole("tab")).toHaveText(["Ты", "Противник"]);
+
+  const indicator = drawer.locator(".segment-active-indicator");
+  const ownPosition = await indicator.boundingBox();
+  await drawer.getByRole("tab", { name: "Противник" }).click();
+  await expect(drawer.getByRole("tab", { name: "Противник" })).toHaveAttribute("aria-selected", "true");
+  await expect.poll(async () => (await indicator.boundingBox())?.x ?? 0).toBeGreaterThan(ownPosition?.x ?? Number.POSITIVE_INFINITY);
+});
+
 test("keeps the main tab indicator on one horizontal track", async ({ page }) => {
   await page.goto("/");
   const pill = page.locator(".nav-active-pill");
@@ -99,7 +121,17 @@ test("keeps the main tab indicator on one horizontal track", async ({ page }) =>
 test("keeps history chrome sticky and restores a previously scrolled position before paint", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "История" }).click();
-  await loadUntilCount(page, page.locator(".history-row"), 8);
+  const historyRows = page.locator(".history-row");
+  await loadUntilCount(page, historyRows, 8);
+
+  const sortButton = page.locator(".history-sort-button");
+  await sortButton.click();
+  const movingRows = await historyRows.evaluateAll((rows) => rows.filter((row) => getComputedStyle(row).transform !== "none").length);
+  expect(movingRows).toBeGreaterThan(0);
+  await page.waitForTimeout(220);
+  await expect.poll(async () => historyRows.evaluateAll((rows) => rows.every((row) => getComputedStyle(row).transform === "none"))).toBe(true);
+  await sortButton.click();
+  await page.waitForTimeout(220);
 
   const header = page.locator(".page-header-sticky");
   await expect(header).toHaveCSS("position", "sticky");
@@ -191,39 +223,70 @@ test("collapses the opponent header and returns to the originating history", asy
   await expect(page.getByRole("heading", { name: "статистика" })).toHaveCount(0);
   const header = page.locator(".opponent-collapsing-header");
   const avatar = page.locator(".opponent-header-avatar");
+  const title = page.locator(".opponent-header-title");
+  const summary = page.locator(".opponent-header-summary");
   await expect(header).toHaveCSS("position", "sticky");
   const expandedHeaderBox = await header.boundingBox();
   const expandedAvatarBox = await avatar.boundingBox();
   expect(expandedAvatarBox?.width).toBeCloseTo(76, 0);
 
+  await page.evaluate(() => window.scrollTo({ top: 84, behavior: "auto" }));
+  await expect.poll(async () => Number(await avatar.evaluate((element) => getComputedStyle(element).opacity))).toBeCloseTo(0.5, 1);
+
   await page.evaluate(() => window.scrollTo({ top: 200, behavior: "auto" }));
   await expect.poll(async () => (await avatar.boundingBox())?.width ?? 0).toBeCloseTo(34.2, 0);
+  await expect(avatar).toHaveCSS("opacity", "0");
+  await expect(summary).toHaveCSS("opacity", "0");
   const compactHeaderBox = await header.boundingBox();
   const compactAvatarBox = await avatar.boundingBox();
+  const compactTitleBox = await title.boundingBox();
   expect(compactHeaderBox?.y).toBeCloseTo(expandedHeaderBox?.y ?? Number.POSITIVE_INFINITY, 1);
-  expect(compactAvatarBox && compactHeaderBox ? compactAvatarBox.y : 0).toBeGreaterThanOrEqual(compactHeaderBox?.y ?? Number.POSITIVE_INFINITY);
-  expect(compactAvatarBox && compactHeaderBox ? compactAvatarBox.y + compactAvatarBox.height : Number.POSITIVE_INFINITY)
-    .toBeLessThanOrEqual((compactHeaderBox?.y ?? 0) + (compactHeaderBox?.height ?? 0) + 1);
+  expect(compactAvatarBox && compactHeaderBox ? compactAvatarBox.y : Number.POSITIVE_INFINITY)
+    .toBeLessThan(compactHeaderBox?.y ?? 0);
+  expect(compactTitleBox && compactHeaderBox ? compactTitleBox.x + compactTitleBox.width / 2 : 0)
+    .toBeCloseTo(compactHeaderBox ? compactHeaderBox.x + compactHeaderBox.width / 2 : Number.POSITIVE_INFINITY, 1);
   const compactScoreColors = await page.locator(".opponent-header-score .score-pair > span").evaluateAll((parts) => parts.map((part) => getComputedStyle(part).color));
   expect(new Set(compactScoreColors).size).toBe(1);
+  await expect(page.locator(".opponent-header-name")).toHaveCSS("color", compactScoreColors[0]);
 
+  const outgoingOpponentScreen = page.locator('main[data-screen="opponent"]');
   await page.getByRole("button", { name: "Назад" }).click();
+  await page.waitForTimeout(32);
+  const opponentBackTranslate = await outgoingOpponentScreen.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m41);
+  expect(opponentBackTranslate).toBeGreaterThan(0);
   await expect(page.getByRole("button", { name: "История" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { name: "история" })).toBeVisible();
 });
 
-test("opens profile subpages without a screen opacity flash", async ({ page }) => {
+test("manages an FNT rating from Levels and promotes the player to Pro", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Профиль" }).click();
 
-  await page.getByRole("button", { name: /Рейтинг/ }).click();
-  await expect(page.locator("main.screen")).toHaveCount(1);
-  await expect(page.locator("main.screen")).toHaveCSS("opacity", "1");
-  await page.getByRole("button", { name: "Назад" }).click();
+  await expect(page.getByRole("button", { name: "Рейтинг недоступен" })).toBeDisabled();
+  await expect(page.locator(".profile-facts").first().getByText("Рейтинг", { exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: /Уровень/ }).click();
   await expect(page.locator("main.screen")).toHaveCount(1);
   await expect(page.locator("main.screen")).toHaveCSS("opacity", "1");
+  const levelsList = page.locator(".levels-list");
+  const ratingEditor = page.locator(".levels-rating-editor");
+  const levelsListBox = await levelsList.boundingBox();
+  const ratingEditorBox = await ratingEditor.boundingBox();
+  expect(ratingEditorBox?.y ?? 0).toBeGreaterThan(levelsListBox?.y ?? Number.POSITIVE_INFINITY);
+
+  await page.getByLabel("Рейтинг или ссылка на профиль ФНТР").fill("https://ttfr.ru/sportsman/9");
+  await page.getByRole("button", { name: "Добавить", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "Профик" })).toBeVisible();
+  await expect(page.locator(".level-icon-fntr-badge")).toHaveText("ФНТР");
+  await expect(page.getByRole("status")).toContainText("Теперь ваш уровень — «Профик»");
+
+  const outgoingLevelsScreen = page.locator('main[data-screen="levels"]');
+  await page.getByRole("button", { name: "Назад" }).click();
+  await page.waitForTimeout(32);
+  const levelsBackTranslate = await outgoingLevelsScreen.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m41);
+  expect(levelsBackTranslate).toBeGreaterThan(0);
+  await expect(page.locator(".profile-avatar-fntr-badge")).toHaveText("ФНТР");
 });
 
 test.describe("Android avatar emoji fallback", () => {
