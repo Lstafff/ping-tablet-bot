@@ -35,6 +35,7 @@
 
 ### Fixed
 
+- **Mini App cache revalidation.** Production HTML теперь всегда перепроверяется после открытия, а хешированные Vite assets кешируются как immutable на год. Раньше static mount не задавал `Cache-Control`, поэтому Telegram WebView мог продолжать запускать старый frontend после успешного Railway deploy; query-параметр в `WEBAPP_URL` отвергнут как ручной и одноразовый cache-bust.
 - История получила сплошной непрозрачный sticky-слой под page header и заголовками периодов. Заголовок периода теперь ограничен собственной группой и уходит вместе с последним матчем; возврат во вкладку не заменяет уже прогруженную историю первой страницей и сохраняет позицию скролла.
 - Компактный аватар больше не участвует в shared-layout переходе с большим профильным аватаром и остаётся неподвижным между главными вкладками. Волна заголовка укладывается в 180 ms экранного перехода, поэтому хвост предыдущего текста не остаётся на новом экране.
 - Opponent/edit/profile navigation no longer stretches «Редактировать», animates a readable opponent score, or leaves overlapping screens during non-tab transitions. History restores saved scroll before paint and skips its whole-screen slide when returning to a previously scrolled position.

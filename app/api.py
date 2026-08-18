@@ -11,7 +11,7 @@ from typing import Any, Optional
 from aiogram import Bot
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -148,6 +148,17 @@ class BodySizeLimitMiddleware:
             content={"detail": "Запрос слишком большой. Уменьшите данные и попробуйте снова."},
         )
         await response(scope, receive, send)
+
+
+class WebStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope: dict[str, Any]) -> Response:
+        response = await super().get_response(path, scope)
+        content_type = response.headers.get("content-type", "").partition(";")[0]
+        if path.startswith("assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        elif content_type == "text/html":
+            response.headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate"
+        return response
 
 
 @asynccontextmanager
@@ -595,7 +606,7 @@ def create_app(
 
     frontend = static_directory or Path(__file__).resolve().parents[1] / "web" / "dist"
     if frontend.is_dir():
-        application.mount("/", StaticFiles(directory=frontend, html=True), name="web")
+        application.mount("/", WebStaticFiles(directory=frontend, html=True), name="web")
     return application
 
 

@@ -5,6 +5,8 @@ import hashlib
 import hmac
 import json
 import time
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from urllib.parse import urlencode
 
 try:
@@ -252,6 +254,22 @@ class ApiTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 413)
         self.assertIn("слишком большой", response.json()["detail"])
+
+    def test_static_html_revalidates_and_hashed_assets_are_immutable(self) -> None:
+        with TemporaryDirectory() as directory:
+            frontend = Path(directory)
+            assets = frontend / "assets"
+            assets.mkdir()
+            (frontend / "index.html").write_text("<main>Ping Tablet</main>", encoding="utf-8")
+            (assets / "index-abc123.js").write_text("console.log('ping')", encoding="utf-8")
+            app = create_app(self.app.state.app_state, static_directory=frontend)
+            client = TestClient(app)
+
+            html_response = client.get("/")
+            asset_response = client.get("/assets/index-abc123.js")
+
+        self.assertEqual(html_response.headers["Cache-Control"], "no-cache, max-age=0, must-revalidate")
+        self.assertEqual(asset_response.headers["Cache-Control"], "public, max-age=31536000, immutable")
 
 
 if __name__ == "__main__":
