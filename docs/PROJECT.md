@@ -13,7 +13,7 @@ Tennis is a Telegram-first product for recording table-tennis matches, tracking 
 
 ## Current phase
 
-Phase 3 refactoring is implemented in the current branch: retry-safe score writes, owner-local linked reset/delete semantics, versioned migrations, bounded history reads, incremental Elo on score, API safety checks, frontend API boundaries, scoped async feedback and reproducible CI/Railway entrypoints. This does not add tournaments or other product functionality.
+Phase 3 refactoring and the first Phase 4 foundations are implemented in the current branch: retry-safe score writes, owner-local linked reset/delete semantics, versioned migrations, bounded history reads, incremental Elo on score, API safety checks, explicit OpenAPI response contracts, frontend quality gates, scoped async feedback and reproducible CI/Railway entrypoints. This does not add tournaments or other product functionality.
 
 ## Direction
 

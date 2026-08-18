@@ -70,10 +70,11 @@ Ideas are tracked separately in `docs/ideas/`. An idea appears here only after i
 
 ### P4-002 — Establish explicit API response contracts
 
-- Status: planned; execute before adding a second non-Telegram client or materially expanding the public API.
+- Status: done for the current API surface.
 - Goal: stop relying on separately maintained handwritten Python response dictionaries and TypeScript response types as the long-term client boundary.
 - Acceptance: representative FastAPI routes use explicit response models; contract tests cover their stable shapes and error semantics; the TypeScript client has one documented synchronization strategy. OpenAPI code generation remains optional and must be justified by maintenance cost.
 - Scope guard: preserve current routes and product behavior; do not combine this work with a frontend redesign or an API rewrite.
+- Evidence: `app/api_contracts.py` defines Pydantic success/error models attached to every current FastAPI route; `tests/test_api.py` checks representative response shapes and OpenAPI success/error schemas; `web/src/api/types.ts` mirrors the response fields under the synchronization checklist in `docs/API_CONTRACTS.md`. OpenAPI code generation was rejected for now because one TypeScript client does not justify a generator lifecycle.
 
 ### P4-003 — Separate product identity from Telegram
 

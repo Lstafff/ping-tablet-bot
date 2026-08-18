@@ -156,6 +156,52 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(response.json()["stats"]["wins"], 1)
         self.assertEqual(response.json()["opponent_name"], "Соперник")
 
+    def test_profile_response_matches_explicit_contract(self) -> None:
+        response = self.client.get(
+            "/api/profile",
+            headers=self.authorization(int(time.time())),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            set(response.json()),
+            {"user", "stats", "extended_stats", "player_level"},
+        )
+        self.assertEqual(
+            set(response.json()["user"]),
+            {
+                "telegram_id",
+                "first_name",
+                "username",
+                "last_message_id",
+                "created_at",
+                "rating",
+                "rating_is_fnt",
+                "display_name",
+                "avatar_value",
+                "elo_rating",
+                "elo_games",
+            },
+        )
+
+    def test_openapi_documents_success_and_error_contracts(self) -> None:
+        schema = self.app.openapi()
+        profile_responses = schema["paths"]["/api/profile"]["get"]["responses"]
+        score_responses = schema["paths"]["/api/opponents/{opponent_id}/scores"]["post"]["responses"]
+
+        self.assertEqual(
+            profile_responses["200"]["content"]["application/json"]["schema"],
+            {"$ref": "#/components/schemas/ProfileResponse"},
+        )
+        self.assertEqual(
+            score_responses["201"]["content"]["application/json"]["schema"],
+            {"$ref": "#/components/schemas/ScoreResponse"},
+        )
+        self.assertEqual(
+            score_responses["409"]["content"]["application/json"]["schema"],
+            {"$ref": "#/components/schemas/ErrorResponse"},
+        )
+
     def test_stale_and_future_init_data_are_rejected(self) -> None:
         now = int(time.time())
         for auth_date in (now - 3601, now + 60):

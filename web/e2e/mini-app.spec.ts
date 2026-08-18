@@ -177,16 +177,39 @@ test("keeps the compact avatar stationary across main tabs", async ({ page }) =>
   expect(profileToHistoryBox?.y).toBeCloseTo(profileToMatchesBox?.y ?? Number.POSITIVE_INFINITY, 1);
 });
 
-test("opens the matching opponent from general history", async ({ page }) => {
+test("collapses the opponent header and returns to the originating history", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "История" }).click();
+  await loadUntilCount(page, page.locator(".history-row"), 8);
 
-  const mariaMatch = page.getByRole("button", { name: /Победа Мария/ }).first();
+  const mariaMatch = page.getByRole("button", { name: /Победа Мария/ }).last();
+  await mariaMatch.scrollIntoViewIfNeeded();
   await expect(mariaMatch).toBeVisible();
   await mariaMatch.click();
 
   await expect(page.getByRole("heading", { name: "Мария" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "статистика" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "статистика" })).toHaveCount(0);
+  const header = page.locator(".opponent-collapsing-header");
+  const avatar = page.locator(".opponent-header-avatar");
+  await expect(header).toHaveCSS("position", "sticky");
+  const expandedHeaderBox = await header.boundingBox();
+  const expandedAvatarBox = await avatar.boundingBox();
+  expect(expandedAvatarBox?.width).toBeCloseTo(76, 0);
+
+  await page.evaluate(() => window.scrollTo({ top: 200, behavior: "auto" }));
+  await expect.poll(async () => (await avatar.boundingBox())?.width ?? 0).toBeCloseTo(34.2, 0);
+  const compactHeaderBox = await header.boundingBox();
+  const compactAvatarBox = await avatar.boundingBox();
+  expect(compactHeaderBox?.y).toBeCloseTo(expandedHeaderBox?.y ?? Number.POSITIVE_INFINITY, 1);
+  expect(compactAvatarBox && compactHeaderBox ? compactAvatarBox.y : 0).toBeGreaterThanOrEqual(compactHeaderBox?.y ?? Number.POSITIVE_INFINITY);
+  expect(compactAvatarBox && compactHeaderBox ? compactAvatarBox.y + compactAvatarBox.height : Number.POSITIVE_INFINITY)
+    .toBeLessThanOrEqual((compactHeaderBox?.y ?? 0) + (compactHeaderBox?.height ?? 0) + 1);
+  const compactScoreColors = await page.locator(".opponent-header-score .score-pair > span").evaluateAll((parts) => parts.map((part) => getComputedStyle(part).color));
+  expect(new Set(compactScoreColors).size).toBe(1);
+
+  await page.getByRole("button", { name: "Назад" }).click();
+  await expect(page.getByRole("button", { name: "История" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name: "история" })).toBeVisible();
 });
 
 test("opens profile subpages without a screen opacity flash", async ({ page }) => {

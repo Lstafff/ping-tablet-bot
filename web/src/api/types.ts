@@ -2,6 +2,7 @@ export type User = {
   telegram_id: number;
   first_name: string;
   username: string | null;
+  last_message_id: number | null;
   created_at: string;
   rating: string | null;
   rating_is_fnt: boolean;
@@ -26,8 +27,10 @@ export type ExtendedStats = {
   longest_opponent_score: number | null;
   longest_points: number;
   win_streak: number;
+  large_margin_games: number;
   close_margin_games: number;
   most_common_score: string | null;
+  most_common_score_count: number;
 };
 
 export type Opponent = {
@@ -62,6 +65,7 @@ export type RecentGame = {
 };
 
 export type GamesView = {
+  opponent_name: string;
   games: RecentGame[];
   page: number;
   total_pages: number;
@@ -85,14 +89,27 @@ export type DailyStat = {
 };
 
 export type DailyView = {
+  opponent_name: string;
+  user_name: string;
   daily_stats: DailyStat[];
   page: number;
   total_pages: number;
 };
 
+export type ParsedScore = {
+  own_score: number;
+  opponent_score: number;
+  regular_own: number;
+  regular_opponent: number;
+  overtime_own: number;
+  overtime_opponent: number;
+};
+
 export type ScoreResponse = {
   game_id: number;
+  opponent_id: number;
   opponent_name: string;
+  score: ParsedScore;
   recent_games: RecentGame[];
   elo_rating: number | null;
   elo_change: number | null;
@@ -100,3 +117,9 @@ export type ScoreResponse = {
   profile: Profile;
   opponent_stats: OpponentStats;
 };
+
+export type OpponentsResponse = { opponents: Opponent[] };
+
+export type InviteResponse = { code: string; invite_link: string | null };
+
+export type InviteAcceptResponse = { status: string; accepted: boolean; has_opponents: boolean };

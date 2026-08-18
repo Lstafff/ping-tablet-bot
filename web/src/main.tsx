@@ -1,5 +1,5 @@
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { FormEvent, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import ReactDOM from "react-dom/client";
 import { Drawer } from "vaul";
@@ -10,16 +10,17 @@ import "@fontsource-variable/nunito/wght.css";
 import { requestApi } from "./api/client";
 import type {
   DailyView,
-  ExtendedStats,
   GamesView,
   HistoryGame,
   HistoryView,
+  InviteAcceptResponse,
+  InviteResponse,
   Opponent,
+  OpponentsResponse,
   OpponentStats,
   Profile,
   RecentGame,
   ScoreResponse,
-  Stats,
   User,
 } from "./api/types";
 import { AppIcon } from "./components/AppIcon";
@@ -27,13 +28,15 @@ import { BottomNavigation, MainTab } from "./components/BottomNavigation";
 import { NumericKeypad } from "./components/NumericKeypad";
 import { ProfileAvatarContent, profileAvatarKind } from "./components/ProfileAvatar";
 import { ProgressiveLoadTrigger } from "./components/ProgressiveLoadTrigger";
+import { EloDeltaBadge, ScorePair } from "./components/ScoreDisplay";
+import { OpponentOpeningScreen, OpponentScreen, type StatsTab } from "./features/opponent/OpponentFlow";
 import { easeInOut, easeOut } from "./lib/motion";
+import { gamesCount, initials, opponentName, winRate } from "./lib/player";
 import { tma } from "./lib/tma";
 import "./tokens.css";
 import "./styles.css";
 
 type Screen = "home" | "stats" | "profile" | "rating" | "levels" | "opponent" | "score" | "edit" | "confirm";
-type StatsTab = "summary" | "days" | "games";
 type ConfirmAction = "reset" | "delete";
 type InviteMode = "share" | "accept";
 type ScoreSide = "own" | "opponent";
@@ -96,6 +99,7 @@ const previewProfile: Profile = {
     telegram_id: 1,
     first_name: "Алексей",
     username: "alexey",
+    last_message_id: null,
     created_at: "2025-02-14T12:00:00+03:00",
     rating: "412",
     rating_is_fnt: false,
@@ -113,8 +117,10 @@ const previewProfile: Profile = {
     longest_opponent_score: 12,
     longest_points: 26,
     win_streak: 6,
+    large_margin_games: 12,
     close_margin_games: 17,
     most_common_score: "11:8",
+    most_common_score_count: 14,
   },
   player_level: "Любитель",
 };
@@ -137,8 +143,10 @@ const previewOpponentStats: OpponentStats = {
     longest_opponent_score: 12,
     longest_points: 26,
     win_streak: 5,
+    large_margin_games: 6,
     close_margin_games: 8,
     most_common_score: "11:9",
+    most_common_score_count: 9,
   },
 };
 
@@ -158,6 +166,7 @@ function previewStatsForOpponent(path: string): OpponentStats {
 }
 
 const previewGames: GamesView = {
+  opponent_name: "@maria",
   games: [
     { played_at: "2026-07-21T19:30:00+03:00", own_score: 11, opponent_score: 8, elo_change: 11 },
     { played_at: "2026-07-21T19:18:00+03:00", own_score: 9, opponent_score: 11, elo_change: -13 },
@@ -256,7 +265,8 @@ async function previewApi<T>(path: string, options: RequestInit): Promise<T> {
   if (path.startsWith("/api/games")) {
     const page = requestedPage(path);
     const result = pagedPreview(previewHistoryGames, page);
-    return { games: result.items, page, total_pages: result.totalPages } as T;
+    const opponent = previewOpponents.find((item) => item.id === opponentId);
+    return { opponent_name: opponent ? opponentName(opponent) : "Соперник", games: result.items, page, total_pages: result.totalPages } as T;
   }
   if (path.includes("/stats") || path.includes("/totals/")) {
     return previewStatsForOpponent(path) as T;
@@ -272,7 +282,8 @@ async function previewApi<T>(path: string, options: RequestInit): Promise<T> {
   if (path.includes("/daily")) {
     const page = requestedPage(path);
     const result = pagedPreview(previewDailyStats, page);
-    return { daily_stats: result.items, page, total_pages: result.totalPages } as T;
+    const opponent = previewOpponents.find((item) => item.id === opponentId);
+    return { opponent_name: opponent ? opponentName(opponent) : "Соперник", user_name: "@alexey", daily_stats: result.items, page, total_pages: result.totalPages } as T;
   }
   if (path.endsWith("/scores") && method === "POST") {
     const score = payload.score?.match(/^(\d+)[-:](\d+)$/);
@@ -319,6 +330,14 @@ async function previewApi<T>(path: string, options: RequestInit): Promise<T> {
       game_id: gameId,
       opponent_id: opponent.id,
       opponent_name: opponentName(opponent),
+      score: {
+        own_score: game.own_score,
+        opponent_score: game.opponent_score,
+        regular_own: Math.max(game.own_score, game.opponent_score) > 11 ? 10 : game.own_score,
+        regular_opponent: Math.max(game.own_score, game.opponent_score) > 11 ? 10 : game.opponent_score,
+        overtime_own: Math.max(game.own_score, game.opponent_score) > 11 ? game.own_score - 10 : 0,
+        overtime_opponent: Math.max(game.own_score, game.opponent_score) > 11 ? game.opponent_score - 10 : 0,
+      },
       recent_games: structuredClone(opponentGames.slice(0, 5)),
       elo_rating: previewProfile.user.elo_rating,
       elo_change: eloChange,
@@ -368,16 +387,6 @@ async function previewApi<T>(path: string, options: RequestInit): Promise<T> {
   return {} as T;
 }
 
-function opponentName(opponent: Opponent): string {
-  if (opponent.first_name) {
-    return opponent.first_name;
-  }
-  if (opponent.username) {
-    return opponent.username.startsWith("@") ? opponent.username : `@${opponent.username}`;
-  }
-  return opponent.first_name || opponent.name;
-}
-
 function userName(user: User): string {
   if (user.display_name) {
     return user.display_name;
@@ -389,45 +398,6 @@ function userName(user: User): string {
     return user.username.startsWith("@") ? user.username : `@${user.username}`;
   }
   return user.first_name || "Игрок";
-}
-
-function initials(value: string): string {
-  const clean = value.replace(/^@/, "").trim();
-  const words = clean.split(/\s+/).filter(Boolean);
-  if (words.length > 1) {
-    return `${words[0][0]}${words[1][0]}`.toUpperCase();
-  }
-  return clean.slice(0, 2).toUpperCase() || "—";
-}
-
-function gamesCount(stats: Stats): number {
-  return stats.wins + stats.losses;
-}
-
-function winRate(stats: Stats): number {
-  const games = gamesCount(stats);
-  return games ? Math.round((stats.wins / games) * 100) : 0;
-}
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" }).format(date);
-}
-
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
 }
 
 function formatProfileDate(value: string): string {
@@ -530,10 +500,10 @@ function appendUnique<T>(current: T[], next: T[], key: (item: T) => string): T[]
   return [...current, ...appended];
 }
 
-function addGameToDailyView(view: DailyView | null, game: RecentGame): DailyView {
+function addGameToDailyView(view: DailyView | null, game: RecentGame, opponentNameValue: string, userName: string): DailyView {
   const playedOn = game.played_at.slice(0, 10);
   const won = game.own_score > game.opponent_score;
-  const current = view ?? { daily_stats: [], page: 1, total_pages: 1 };
+  const current = view ?? { opponent_name: opponentNameValue, user_name: userName, daily_stats: [], page: 1, total_pages: 1 };
   const existing = current.daily_stats.find((item) => item.played_on === playedOn);
   const daily_stats = existing
     ? current.daily_stats.map((item) => item.played_on === playedOn ? {
@@ -593,6 +563,7 @@ function App() {
   const [pendingActions, setPendingActions] = useState<ReadonlySet<PendingAction>>(() => new Set());
   const handledStartParam = useRef(false);
   const opponentTabScrollFrame = useRef<number | null>(null);
+  const opponentReturnScreen = useRef<"home" | "stats">("home");
   const previousRenderedScreen = useRef<Screen>(screen);
   const opponentRequestId = useRef(0);
   const historyPageRequest = useRef<PaginationRequest>({ token: 0, inFlight: false });
@@ -622,7 +593,7 @@ function App() {
     historyPageRequest.current.inFlight = false;
     const [nextProfile, opponentsResponse, historyResponse] = await Promise.all([
       api<Profile>("/api/profile"),
-      api<{ opponents: Opponent[] }>("/api/opponents"),
+      api<OpponentsResponse>("/api/opponents"),
       api<HistoryView>("/api/games?page=1"),
     ]);
     setProfile(nextProfile);
@@ -872,7 +843,8 @@ function App() {
     }
   };
 
-  const openOpponent = (opponent: Opponent, tab: StatsTab = "summary", page = 1) => {
+  const openOpponent = (opponent: Opponent, tab: StatsTab = "summary", page = 1, returnScreen: "home" | "stats" = screen === "stats" ? "stats" : "home") => {
+    opponentReturnScreen.current = returnScreen;
     void loadOpponent(opponent, tab, page).catch((loadError: unknown) => setError(messageFromError(loadError)));
   };
 
@@ -885,7 +857,7 @@ function App() {
       username: game.opponent_name.startsWith("@") ? game.opponent_name.slice(1) : null,
       elo_rating: null,
     };
-    openOpponent(knownOpponent ?? fallbackOpponent);
+    openOpponent(knownOpponent ?? fallbackOpponent, "summary", 1, "stats");
   };
 
   const submitScore = async () => {
@@ -917,12 +889,13 @@ function App() {
       } : opponent));
       if (savedGame) {
         setGames((current) => ({
+          opponent_name: current?.opponent_name ?? result.opponent_name,
           games: [savedGame, ...(current?.games ?? []).filter((game) => game.game_id !== savedGame.game_id)],
           page: 1,
           total_pages: current?.total_pages ?? 1,
         }));
         setChartGames((current) => [savedGame, ...current.filter((game) => game.game_id !== savedGame.game_id)]);
-        setDaily((current) => addGameToDailyView(current, savedGame));
+        setDaily((current) => addGameToDailyView(current, savedGame, result.opponent_name, result.opponent_stats.user_name));
         setHistory((current) => ({
           games: [
             {
@@ -1111,7 +1084,7 @@ function App() {
     if (mode === "accept") return;
     setActionPending("invite", true);
     try {
-      const result = await api<{ code: string; invite_link: string | null }>("/api/invites", { method: "POST" });
+      const result = await api<InviteResponse>("/api/invites", { method: "POST" });
       setInviteCode(result.code);
       setInviteLink(result.invite_link);
     } catch (inviteError: unknown) {
@@ -1148,7 +1121,7 @@ function App() {
     setActionPending("invite", true);
     setError("");
     try {
-      const result = await api<{ status: string; accepted: boolean }>("/api/invites/accept", {
+      const result = await api<InviteAcceptResponse>("/api/invites/accept", {
         method: "POST",
         body: JSON.stringify({ code: inviteInput }),
       });
@@ -1274,6 +1247,11 @@ function App() {
       backFromScoreToOpponentPicker();
     } else if (screen === "rating" || screen === "levels") {
       setScreen("profile");
+    } else if (screen === "opponent" && opponentReturnScreen.current === "stats") {
+      setSelectedOpponent(null);
+      setOpponentStats(null);
+      setError("");
+      setScreen("stats");
     } else if (screen === "opponent" || screen === "stats" || screen === "profile") {
       void showHome();
     }
@@ -1361,7 +1339,7 @@ function App() {
     }
     if (screen === "opponent" && selectedOpponent) {
       if (!opponentStats) {
-        return <OpponentOpeningScreen opponent={selectedOpponent} />;
+        return <OpponentOpeningScreen opponent={selectedOpponent} onBack={goBack} />;
       }
       return (
         <OpponentScreen
@@ -1380,6 +1358,7 @@ function App() {
           onGamesLoadMore={() => void loadOpponentGames((games?.page ?? 1) + 1)}
           onEdit={openEdit}
           editingOpen={opponentEditSheet !== null}
+          onBack={goBack}
         />
       );
     }
@@ -1430,11 +1409,10 @@ function App() {
     <MotionConfig reducedMotion="user">
       <LayoutGroup id="ping-tablet-layout">
         <div className="app-shell" data-vaul-drawer-wrapper="">
-          {profile && (screen === "home" || screen === "stats" || screen === "opponent") ? (
+          {profile && (screen === "home" || screen === "stats") ? (
             <PageHeader
-              title={screen === "home" ? "пинг понг каунтер" : screen === "stats" ? "история" : "статистика"}
+              title={screen === "home" ? "пинг понг каунтер" : "история"}
               sticky={screen === "stats"}
-              onBack={screen === "opponent" ? goBack : undefined}
               profileAvatar={profile.user.avatar_value}
               sortNewestFirst={screen === "stats" ? historyNewestFirst : undefined}
               onSort={screen === "stats" ? () => setHistoryNewestFirst((value) => !value) : undefined}
@@ -1885,22 +1863,6 @@ function HomeScreen({ profile, opponents, onOpenOpponent }: { profile: Profile; 
   );
 }
 
-function EloDeltaBadge({ value }: { value?: number | null }) {
-  const delta = value ?? 0;
-  const tone = delta > 0 ? "elo-delta-positive" : delta < 0 ? "elo-delta-negative" : "elo-delta-neutral";
-  return <small className={`elo-delta-badge ${tone}`}>{delta >= 0 ? "+" : ""}{delta}</small>;
-}
-
-function ScorePair({ left, right }: { left: ReactNode; right: ReactNode }) {
-  return <span className="score-pair"><span>{left}</span><span className="score-separator"> : </span><span>{right}</span></span>;
-}
-
-function ScoreValue({ value }: { value: string | null }) {
-  if (!value) return <>—</>;
-  const parts = value.split(":");
-  return parts.length === 2 ? <ScorePair left={parts[0].trim()} right={parts[1].trim()} /> : <>{value}</>;
-}
-
 function ProgressiveBottomBlur() {
   return <div className="progressive-bottom-blur" aria-hidden="true" />;
 }
@@ -1968,224 +1930,6 @@ function HistoryScreen({
         loading={loadingMore}
         onLoadMore={onLoadMore}
       />
-    </section>
-  );
-}
-
-function OpponentScreen(props: {
-  opponent: Opponent;
-  stats: OpponentStats;
-  tab: StatsTab;
-  daily: DailyView | null;
-  games: GamesView | null;
-  chartGames: RecentGame[];
-  onTabChange(tab: StatsTab): void;
-  dailyLoadingMore: boolean;
-  dailyLoadError: string;
-  gamesLoadingMore: boolean;
-  gamesLoadError: string;
-  onDaysLoadMore(): void;
-  onGamesLoadMore(): void;
-  onEdit(): void;
-  editingOpen: boolean;
-}) {
-  const { opponent, stats } = props;
-  const reduceMotion = useReducedMotion();
-  const previousTab = useRef(props.tab);
-  const tabOrder: Record<StatsTab, number> = { summary: 0, days: 1, games: 2 };
-  const tabDirection = Math.sign(tabOrder[props.tab] - tabOrder[previousTab.current]);
-
-  useEffect(() => {
-    previousTab.current = props.tab;
-  }, [props.tab]);
-
-  const tabContent = props.tab === "summary" ? (
-    <>
-      <StatsSummary stats={stats.extended_stats} />
-      {!props.editingOpen ? (
-        <button
-          className="secondary-button opponent-edit-inline"
-          type="button"
-          onClick={props.onEdit}
-        >
-          Редактировать
-        </button>
-      ) : <span className="opponent-edit-inline-placeholder" aria-hidden="true" />}
-    </>
-  ) : props.tab === "days" ? (
-    <DailyTable
-      view={props.daily}
-      loadingMore={props.dailyLoadingMore}
-      loadError={props.dailyLoadError}
-      onLoadMore={props.onDaysLoadMore}
-    />
-  ) : (
-    <GamesTable
-      view={props.games}
-      loadingMore={props.gamesLoadingMore}
-      loadError={props.gamesLoadError}
-      onLoadMore={props.onGamesLoadMore}
-    />
-  );
-
-  return (
-    <>
-      <section className="opponent-hero">
-        <span className="avatar avatar-opponent" aria-hidden="true">{initials(opponentName(opponent))}</span>
-        <MorphingHeading>{opponentName(opponent)}</MorphingHeading>
-        <div className="opponent-scoreline" aria-label={`Побед ${stats.stats.wins}, поражений ${stats.stats.losses}`}>
-          <ScorePair
-            left={<strong>{stats.stats.wins}</strong>}
-            right={<strong>{stats.stats.losses}</strong>}
-          />
-        </div>
-        <p><strong>{winRate(stats.stats)}%</strong> побед · {gamesCount(stats.stats)} партий</p>
-      </section>
-
-      <ActivityHeatmap games={props.chartGames} />
-
-      <section className="opponent-metrics" aria-label="Главная статистика">
-        <div><span>Мячи</span><strong><ScorePair left={stats.stats.points_for} right={stats.stats.points_against} /></strong></div>
-        <div><span>Текущая серия</span><strong>{stats.extended_stats.win_streak}</strong></div>
-      </section>
-
-      <LayoutGroup id={`opponent-stat-tabs-${opponent.id}`}>
-        <div className="segmented-control" role="tablist" aria-label="Статистика с соперником">
-          <TabButton active={props.tab === "summary"} indicatorId={`opponent-stat-tab-${opponent.id}`} onClick={() => props.onTabChange("summary")}>Общая</TabButton>
-          <TabButton active={props.tab === "days"} indicatorId={`opponent-stat-tab-${opponent.id}`} onClick={() => props.onTabChange("days")}>По дням</TabButton>
-          <TabButton active={props.tab === "games"} indicatorId={`opponent-stat-tab-${opponent.id}`} onClick={() => props.onTabChange("games")}>По играм</TabButton>
-        </div>
-      </LayoutGroup>
-
-      <AnimatePresence initial={false} mode="popLayout" custom={tabDirection}>
-        <motion.div
-          className="opponent-tab-content"
-          key={props.tab}
-          custom={tabDirection}
-          variants={{
-            initial: (direction: number) => ({
-              opacity: 0,
-              transform: reduceMotion ? "translateX(0)" : `translateX(${direction >= 0 ? 14 : -14}px)`,
-            }),
-            animate: { opacity: 1, transform: "translateX(0)" },
-            exit: (direction: number) => ({
-              opacity: 0,
-              transform: reduceMotion ? "translateX(0)" : `translateX(${direction >= 0 ? -10 : 10}px)`,
-            }),
-          }}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }}
-        >
-          {tabContent}
-        </motion.div>
-      </AnimatePresence>
-    </>
-  );
-}
-
-function OpponentOpeningScreen({ opponent }: { opponent: Opponent }) {
-  return (
-    <section className="opponent-hero opponent-hero-pending" aria-busy="true">
-      <span className="avatar avatar-opponent" aria-hidden="true">{initials(opponentName(opponent))}</span>
-      <MorphingHeading>{opponentName(opponent)}</MorphingHeading>
-      {opponent.stats ? (
-        <>
-          <div className="opponent-scoreline" aria-label={`Побед ${opponent.stats.wins}, поражений ${opponent.stats.losses}`}>
-            <ScorePair left={<strong>{opponent.stats.wins}</strong>} right={<strong>{opponent.stats.losses}</strong>} />
-          </div>
-          <p>{gamesCount(opponent.stats)} партий</p>
-        </>
-      ) : null}
-    </section>
-  );
-}
-
-const activityWeekCount = 26;
-
-function localDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function gameCountLabel(value: number): string {
-  const remainder100 = value % 100;
-  const remainder10 = value % 10;
-  if (remainder100 >= 11 && remainder100 <= 14) return `${value} игр`;
-  if (remainder10 === 1) return `${value} игра`;
-  if (remainder10 >= 2 && remainder10 <= 4) return `${value} игры`;
-  return `${value} игр`;
-}
-
-function dayCountLabel(value: number): string {
-  const remainder100 = value % 100;
-  const remainder10 = value % 10;
-  if (remainder100 >= 11 && remainder100 <= 14) return `${value} дней`;
-  if (remainder10 === 1) return `${value} день`;
-  if (remainder10 >= 2 && remainder10 <= 4) return `${value} дня`;
-  return `${value} дней`;
-}
-
-function ActivityHeatmap({ games }: { games: RecentGame[] }) {
-  const today = new Date();
-  today.setHours(12, 0, 0, 0);
-  const currentWeekStart = new Date(today);
-  currentWeekStart.setDate(today.getDate() - today.getDay());
-  const startDate = new Date(currentWeekStart);
-  startDate.setDate(currentWeekStart.getDate() - (activityWeekCount - 1) * 7);
-
-  const activityByDay = new Map<string, { wins: number; losses: number }>();
-  for (const game of games) {
-    const playedAt = new Date(game.played_at);
-    if (Number.isNaN(playedAt.valueOf())) continue;
-    const key = localDateKey(playedAt);
-    const activity = activityByDay.get(key) ?? { wins: 0, losses: 0 };
-    if (game.own_score > game.opponent_score) activity.wins += 1;
-    else activity.losses += 1;
-    activityByDay.set(key, activity);
-  }
-
-  const visibleStartKey = localDateKey(startDate);
-  const todayKey = localDateKey(today);
-  const visibleActivity = [...activityByDay.entries()].filter(([key]) => key >= visibleStartKey && key <= todayKey);
-  const activeDays = visibleActivity.length;
-  const visibleGames = visibleActivity.reduce((total, [, value]) => total + value.wins + value.losses, 0);
-  const dateFormatter = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" });
-
-  return (
-    <section className="match-activity" aria-labelledby="match-activity-title">
-      <div className="match-activity-heading">
-        <span id="match-activity-title">Активность</span>
-        <strong>{activeDays ? `${dayCountLabel(activeDays)} с матчами` : "Матчей пока нет"}</strong>
-      </div>
-      <div className="activity-calendar" role="img" aria-label={`Активность за 26 недель: ${gameCountLabel(visibleGames)}`}>
-        {Array.from({ length: activityWeekCount }, (_, weekIndex) => (
-          <span className="activity-week" aria-hidden="true" key={`week-${weekIndex}`}>
-            {Array.from({ length: 7 }, (_, dayIndex) => {
-              const date = new Date(startDate);
-              date.setDate(startDate.getDate() + weekIndex * 7 + dayIndex);
-              const key = localDateKey(date);
-              const activity = activityByDay.get(key);
-              const total = (activity?.wins ?? 0) + (activity?.losses ?? 0);
-              const result = !total ? "none" : activity?.wins && activity.losses ? "mixed" : activity?.wins ? "win" : "loss";
-              const title = total ? `${dateFormatter.format(date)}: ${gameCountLabel(total)}` : `${dateFormatter.format(date)}: матчей нет`;
-              return <i className="activity-cell" data-future={key > todayKey || undefined} data-level={Math.min(total, 3)} data-result={result} key={key} title={title} />;
-            })}
-          </span>
-        ))}
-      </div>
-      <div className="match-activity-footer">
-        <span>{dateFormatter.format(startDate)}</span>
-        <span className="activity-legend">
-          <span><i className="activity-cell" data-level="1" data-result="win" />Победы</span>
-          <span><i className="activity-cell" data-level="1" data-result="mixed" />Оба исхода</span>
-          <span><i className="activity-cell" data-level="1" data-result="loss" />Поражения</span>
-        </span>
-        <span>Сегодня</span>
-      </div>
     </section>
   );
 }
@@ -2416,48 +2160,6 @@ function ScoreScreen(props: {
       <NumericKeypad ariaLabel="Клавиатура счёта" onDigit={props.onDigit} onErase={props.onErase} />
       <button className="score-continue" type="button" disabled={!canContinue || props.submitting} onClick={props.onContinue}>{props.submitting ? "Сохраняем…" : props.side === "own" ? "Дальше" : "Сохранить"}</button>
     </motion.section>
-  );
-}
-
-function StatsSummary({ stats }: { stats: ExtendedStats }) {
-  return (
-    <section className="details-section">
-      <dl className="facts-list">
-        <div><dt>Текущая серия</dt><dd>{stats.win_streak}</dd></div>
-        <div><dt>Овертаймы</dt><dd><ScorePair left={stats.overtime_wins} right={stats.overtime_losses} /></dd></div>
-        <div><dt>Самая длинная партия</dt><dd>{stats.longest_own_score !== null ? <ScorePair left={stats.longest_own_score} right={stats.longest_opponent_score ?? "—"} /> : "—"}</dd></div>
-        <div><dt>Частый счёт</dt><dd><ScoreValue value={stats.most_common_score} /></dd></div>
-      </dl>
-    </section>
-  );
-}
-
-function DailyTable({ view, loadingMore, loadError, onLoadMore }: { view: DailyView | null; loadingMore: boolean; loadError: string; onLoadMore(): void }) {
-  return (
-    <section className="table-section">
-      {view?.daily_stats.length ? <div className="data-table" role="list">{view.daily_stats.map((day) => <div className="table-row" key={day.played_on} role="listitem"><time dateTime={day.played_on}>{formatDate(day.played_on)}</time><b><ScorePair left={day.wins} right={day.losses} /></b></div>)}</div> : <p className="muted-copy">Пока нет сыгранных матчей.</p>}
-      <ProgressiveLoadTrigger error={loadError} hasMore={(view?.page ?? 1) < (view?.total_pages ?? 1)} loading={loadingMore} onLoadMore={onLoadMore} />
-    </section>
-  );
-}
-
-function GamesTable({ view, loadingMore, loadError, onLoadMore }: { view: GamesView | null; loadingMore: boolean; loadError: string; onLoadMore(): void }) {
-  return (
-    <section className="table-section">
-      {view?.games.length ? <div className="data-table" role="list">{view.games.map((game) => {
-        const won = game.own_score > game.opponent_score;
-        return (
-          <div className="table-row" key={`${game.game_id ?? game.played_at}-${game.own_score}-${game.opponent_score}`} role="listitem">
-            <span className="table-game-copy">
-              <small className={won ? "result-win" : "result-loss"}>{won ? "Победа" : "Поражение"}</small>
-              <time dateTime={game.played_at}>{formatDateTime(game.played_at)}</time>
-            </span>
-            <span className="table-result"><b><ScorePair left={game.own_score} right={game.opponent_score} /></b><EloDeltaBadge value={game.elo_change} /></span>
-          </div>
-        );
-      })}</div> : <p className="muted-copy">Пока нет сыгранных матчей.</p>}
-      <ProgressiveLoadTrigger error={loadError} hasMore={(view?.page ?? 1) < (view?.total_pages ?? 1)} loading={loadingMore} onLoadMore={onLoadMore} />
-    </section>
   );
 }
 
@@ -2960,22 +2662,6 @@ function linkedStatsPolicyText(action: ConfirmAction, opponentName: string): str
     ? `${opponentName} исчезнет только из вашего списка.`
     : `Ваша статистика с ${opponentName} обнулится.`;
   return `${localAction} Если данные останутся у соперника, они вернутся после новой партии. Если их не останется у вас обоих, счёт начнётся с нуля.`;
-}
-
-function TabButton({ active, children, indicatorId, onClick }: { active: boolean; children: string; indicatorId: string; onClick(): void }) {
-  const reduceMotion = useReducedMotion();
-  return (
-    <button className={active ? "tab-button tab-button-active" : "tab-button"} type="button" role="tab" aria-selected={active} onClick={onClick}>
-      {active ? (
-        <motion.span
-          className="tab-active-indicator"
-          layoutId={indicatorId}
-          transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: easeInOut }}
-        />
-      ) : null}
-      <span className="tab-button-label">{children}</span>
-    </button>
-  );
 }
 
 function TelegramOnlyScreen() {

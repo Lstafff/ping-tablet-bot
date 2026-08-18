@@ -30,8 +30,8 @@ Telegram chat update                         Telegram Mini App
 - `app.scoring`, `app.elo`, `app.rating` and pure helpers in `app.domain` hold focused rules/calculations.
 - `app.services.TennisService` is the shared application layer used by both bot handlers and FastAPI routes.
 - `app.storage.Database` owns repository queries and transactions. `app.migrations` is the only schema owner; runtime constructors only verify `schema_migrations`.
-- FastAPI endpoints are thin in control flow but return handwritten dictionaries rather than explicit response contracts.
-- TypeScript API shapes are handwritten in `web/src/api/types.ts`; there is no generated schema client or schema sharing across Python and TypeScript.
+- FastAPI endpoints remain thin in control flow; Pydantic models in `app/api_contracts.py` define their successful response shapes and documented stable errors through `response_model`/OpenAPI.
+- TypeScript API shapes in `web/src/api/types.ts` are a deliberate manual mirror of OpenAPI. `docs/API_CONTRACTS.md` defines the atomic synchronization checklist; code generation remains deferred while there is only one TypeScript client.
 
 ### Data model and identity
 
@@ -66,9 +66,8 @@ Telegram chat update                         Telegram Mini App
 ### Validation and delivery
 
 - Backend uses `unittest`; Postgres integration tests run only when `TEST_DATABASE_URL` is supplied.
-- Frontend has a TypeScript/Vite production build.
-- `.github/workflows/ci.yml` runs migrations, the backend suite (including Postgres integration tests) and the strict frontend build.
-- There is still no chosen frontend unit/e2e or lint runner; the build is not described as their replacement.
+- Frontend gates include ESLint, focused Vitest component tests, a mobile Playwright Mini App smoke path and the TypeScript/Vite production build.
+- `scripts/verify.sh` and `.github/workflows/ci.yml` run migrations/backend coverage where applicable plus the frontend lint, unit, build and e2e gates. The browser smoke path complements rather than replaces final Telegram WebView checks on real devices.
 - Docker and separate Railway config files define bot worker plus API/static-web topology. Live Railway behavior remains unverified until an approved deploy.
 
 ## Direction / Planned

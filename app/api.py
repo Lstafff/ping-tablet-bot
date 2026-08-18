@@ -15,6 +15,23 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app.api_contracts import (
+    DailyViewResponse,
+    DeleteOpponentResponse,
+    ErrorResponse,
+    GamesViewResponse,
+    HealthResponse,
+    HistoryResponse,
+    InviteAcceptResponse,
+    InviteResponse,
+    MeResponse,
+    OpponentNameResponse,
+    OpponentsResponse,
+    OpponentStatsResponse,
+    ProfileResponse,
+    ScoreResponse,
+    UndoScoreResponse,
+)
 from app.config import Config, load_config, parse_csv_env
 from app.domain import Opponent, Stats, player_level
 from app.notifications import notify_inviter_about_new_opponent
@@ -191,22 +208,30 @@ def require_webapp_user(
 
 router = APIRouter()
 
+AUTH_ERROR_RESPONSES = {
+    status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse, "description": "Telegram Mini App authentication failed."},
+}
+OPPONENT_ERROR_RESPONSES = {
+    **AUTH_ERROR_RESPONSES,
+    status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "The opponent is not available to the current user."},
+}
+
 
 async def not_found_handler(_: Request, __: LookupError) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": "Ничего не найдено."})
 
 
-@router.get("/health")
+@router.get("/health", response_model=HealthResponse)
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/api/me")
+@router.get("/api/me", response_model=MeResponse, responses=AUTH_ERROR_RESPONSES)
 def me(current_user: WebAppUser = Depends(require_webapp_user)) -> dict[str, Any]:
     return {"user": asdict(current_user)}
 
 
-@router.get("/api/profile")
+@router.get("/api/profile", response_model=ProfileResponse, responses=AUTH_ERROR_RESPONSES)
 def profile(
     request: Request,
     current_user: WebAppUser = Depends(require_webapp_user),
@@ -215,7 +240,7 @@ def profile(
     return profile_response(service, current_user.id)
 
 
-@router.put("/api/profile/name")
+@router.put("/api/profile/name", response_model=ProfileResponse, responses=AUTH_ERROR_RESPONSES)
 def update_profile_name(
     payload: ProfileNameInput,
     request: Request,
@@ -229,7 +254,7 @@ def update_profile_name(
     return profile_response(service, current_user.id)
 
 
-@router.put("/api/profile/avatar")
+@router.put("/api/profile/avatar", response_model=ProfileResponse, responses=AUTH_ERROR_RESPONSES)
 def update_profile_avatar(
     payload: ProfileAvatarInput,
     request: Request,
@@ -243,7 +268,7 @@ def update_profile_avatar(
     return profile_response(service, current_user.id)
 
 
-@router.get("/api/opponents")
+@router.get("/api/opponents", response_model=OpponentsResponse, responses=AUTH_ERROR_RESPONSES)
 def opponents(
     request: Request,
     current_user: WebAppUser = Depends(require_webapp_user),
@@ -257,7 +282,7 @@ def opponents(
     }
 
 
-@router.get("/api/games")
+@router.get("/api/games", response_model=HistoryResponse, responses=AUTH_ERROR_RESPONSES)
 def game_history(
     request: Request,
     page: int = 1,
@@ -272,7 +297,7 @@ def game_history(
     }
 
 
-@router.get("/api/opponents/{opponent_id}/stats")
+@router.get("/api/opponents/{opponent_id}/stats", response_model=OpponentStatsResponse, responses=OPPONENT_ERROR_RESPONSES)
 def opponent_stats(
     opponent_id: int,
     request: Request,
@@ -282,7 +307,7 @@ def opponent_stats(
     return opponent_stats_response(service, current_user.id, opponent_id)
 
 
-@router.get("/api/opponents/{opponent_id}/daily")
+@router.get("/api/opponents/{opponent_id}/daily", response_model=DailyViewResponse, responses=OPPONENT_ERROR_RESPONSES)
 def opponent_daily_stats(
     opponent_id: int,
     request: Request,
@@ -300,7 +325,7 @@ def opponent_daily_stats(
     }
 
 
-@router.get("/api/opponents/{opponent_id}/games")
+@router.get("/api/opponents/{opponent_id}/games", response_model=GamesViewResponse, responses=OPPONENT_ERROR_RESPONSES)
 def opponent_games(
     opponent_id: int,
     request: Request,
@@ -319,7 +344,16 @@ def opponent_games(
     }
 
 
-@router.post("/api/opponents/{opponent_id}/scores", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/api/opponents/{opponent_id}/scores",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ScoreResponse,
+    responses={
+        **OPPONENT_ERROR_RESPONSES,
+        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse, "description": "The score is invalid."},
+        status.HTTP_409_CONFLICT: {"model": ErrorResponse, "description": "The operation id conflicts with an existing score."},
+    },
+)
 def add_score(
     opponent_id: int,
     payload: ScoreInput,
@@ -354,7 +388,7 @@ def add_score(
     }
 
 
-@router.delete("/api/opponents/{opponent_id}/scores/{game_id}")
+@router.delete("/api/opponents/{opponent_id}/scores/{game_id}", response_model=UndoScoreResponse, responses=OPPONENT_ERROR_RESPONSES)
 def undo_score(
     opponent_id: int,
     game_id: int,
@@ -371,7 +405,7 @@ def undo_score(
     }
 
 
-@router.put("/api/opponents/{opponent_id}/totals/games")
+@router.put("/api/opponents/{opponent_id}/totals/games", response_model=OpponentStatsResponse, responses=OPPONENT_ERROR_RESPONSES)
 def update_games_total(
     opponent_id: int,
     payload: ValueInput,
@@ -386,7 +420,7 @@ def update_games_total(
     return opponent_stats_response(service, current_user.id, opponent_id)
 
 
-@router.put("/api/opponents/{opponent_id}/totals/points")
+@router.put("/api/opponents/{opponent_id}/totals/points", response_model=OpponentStatsResponse, responses=OPPONENT_ERROR_RESPONSES)
 def update_points_total(
     opponent_id: int,
     payload: ValueInput,
@@ -401,7 +435,7 @@ def update_points_total(
     return opponent_stats_response(service, current_user.id, opponent_id)
 
 
-@router.post("/api/opponents/{opponent_id}/reset")
+@router.post("/api/opponents/{opponent_id}/reset", response_model=OpponentNameResponse, responses=OPPONENT_ERROR_RESPONSES)
 def reset_opponent_stats(
     opponent_id: int,
     request: Request,
@@ -412,7 +446,7 @@ def reset_opponent_stats(
     return {"opponent_name": result.opponent_name}
 
 
-@router.delete("/api/opponents/{opponent_id}")
+@router.delete("/api/opponents/{opponent_id}", response_model=DeleteOpponentResponse, responses=OPPONENT_ERROR_RESPONSES)
 def delete_opponent(
     opponent_id: int,
     request: Request,
@@ -423,7 +457,7 @@ def delete_opponent(
     return {"opponent_name": result.opponent_name, "has_opponents": result.has_opponents}
 
 
-@router.post("/api/rating")
+@router.post("/api/rating", response_model=ProfileResponse, responses=AUTH_ERROR_RESPONSES)
 async def update_rating(
     payload: ValueInput,
     request: Request,
@@ -441,7 +475,7 @@ async def update_rating(
     return profile_response(service, current_user.id)
 
 
-@router.delete("/api/rating")
+@router.delete("/api/rating", response_model=ProfileResponse, responses=AUTH_ERROR_RESPONSES)
 def clear_rating(
     request: Request,
     current_user: WebAppUser = Depends(require_webapp_user),
@@ -451,7 +485,7 @@ def clear_rating(
     return profile_response(service, current_user.id)
 
 
-@router.post("/api/invites")
+@router.post("/api/invites", response_model=InviteResponse, responses=AUTH_ERROR_RESPONSES)
 def create_invite(
     request: Request,
     current_user: WebAppUser = Depends(require_webapp_user),
@@ -465,7 +499,7 @@ def create_invite(
     return {"code": invite_code, "invite_link": invite_link}
 
 
-@router.post("/api/invites/accept")
+@router.post("/api/invites/accept", response_model=InviteAcceptResponse, responses=AUTH_ERROR_RESPONSES)
 async def accept_invite(
     payload: InviteCodeInput,
     request: Request,

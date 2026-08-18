@@ -19,6 +19,8 @@
 
 ### Changed
 
+- **Collapsing opponent header and contextual Back.** Страница статистики соперника больше не показывает отдельный заголовок «статистика»: прежние аватар, имя и счёт образуют один sticky-хэдер и по скроллу компактно собираются в строку, меняя только transform/opacity/color. Back возвращает в общую историю, если соперник был открыт из неё, и на главную — если он был открыт из списка матчей.
+- **Explicit API response boundary (P4-002).** Все текущие FastAPI routes получили Pydantic response models и OpenAPI-схемы стабильных ошибок; TypeScript types синхронизированы с фактическими полями. Ручное зеркало и обязательный checklist выбраны вместо codegen, пока существует один TypeScript-клиент; P4-001 подтверждён актуальными ESLint/Vitest/Playwright gates в архитектурной документации.
 - **History match navigation.** Каждый матч в общей истории теперь открывает статистику соответствующего соперника; строка остаётся целиком доступной кнопкой вместо отдельного вложенного действия.
 - **Header title transition.** Main headers now replace text with a restrained vertical per-letter wave: the old title leaves upward and the new title enters from below. The earlier slot-layout morph remains exported as `LegacyMorphingHeaderTitle` for later experiments, but was removed from the active path because its layout interpolation made routine navigation feel unstable.
 - **Mini App mobile interaction pass.** History and opponent tables load progressively, opponent score entry uses a bounded Vaul drawer and an in-app numeric keypad, edit totals use the same keypad pattern, opponent tabs transition with restrained spatial continuity, and the bottom tabbar morphs into the context action without spring overshoot or glow.

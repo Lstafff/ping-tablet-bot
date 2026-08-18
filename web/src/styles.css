@@ -1934,24 +1934,101 @@ h2 {
   margin-top: 0;
 }
 
-.opponent-hero {
-  display: grid;
-  justify-items: center;
-  padding: 0 0 12px;
-  text-align: center;
-}
-
 .avatar-opponent {
   width: 76px;
   height: 76px;
-  margin-bottom: 17px;
   background: var(--color-avatar-base);
   font-size: var(--font-size-title-2);
 }
 
-.opponent-hero h1 {
-  margin-bottom: 18px;
+.opponent-collapsing-header {
+  position: sticky;
+  z-index: 9;
+  top: var(--sticky-page-top);
+  height: var(--size-page-header);
+  isolation: isolate;
+}
+
+.opponent-header-backdrop {
+  position: absolute;
+  z-index: -1;
+  top: calc(-1 * var(--sticky-page-top));
+  right: calc(-1 * var(--sticky-page-gutter-right));
+  bottom: 0;
+  left: calc(-1 * var(--sticky-page-gutter-left));
+  background: var(--color-canvas);
+  opacity: 0;
+  pointer-events: none;
+  will-change: opacity;
+}
+
+.opponent-header-back {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+}
+
+.opponent-header-avatar,
+.opponent-header-name,
+.opponent-header-score,
+.opponent-header-summary {
+  position: absolute;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.opponent-header-avatar {
+  top: -16px;
+  left: 52px;
+  margin: 0;
+  transform-origin: left center;
+}
+
+.opponent-header-name {
+  top: 3px;
+  left: 92px;
+  width: calc(100% - 118px);
+  margin: 0;
+  overflow: hidden;
   font-size: var(--font-size-title-1);
+  line-height: 38px;
+  text-align: center;
+  text-overflow: ellipsis;
+  transform-origin: left center;
+  white-space: nowrap;
+}
+
+.opponent-header-score {
+  top: -6px;
+  right: 0;
+  transform-origin: right center;
+}
+
+.opponent-header-summary {
+  top: 244px;
+  right: 0;
+  left: 0;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+  text-align: center;
+  will-change: opacity, transform;
+}
+
+.opponent-header-summary strong {
+  color: var(--color-text-primary);
+}
+
+.opponent-header-spacer {
+  height: 260px;
 }
 
 .opponent-scoreline {
@@ -1978,16 +2055,6 @@ h2 {
   color: var(--color-score-separator);
   font-size: var(--font-size-large-title);
   font-weight: var(--font-weight-semibold);
-}
-
-.opponent-hero p {
-  margin: 11px 0 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-body);
-}
-
-.opponent-hero p strong {
-  color: var(--color-text-primary);
 }
 
 .match-activity {
