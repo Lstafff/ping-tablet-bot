@@ -48,7 +48,7 @@ type OpponentEditSheet = "actions" | "games" | "points" | "reset" | "delete" | n
 type PendingAction = "score" | "opponent" | "invite" | "rating" | "profile" | "avatar";
 type PaginationRequest = { token: number; inFlight: boolean };
 type SnackbarNotice = { id: number; tone: SnackbarTone; message: string } | null;
-type ScreenMotion = { kind: "none" } | { kind: "tab"; direction: -1 | 1 } | { kind: "back" };
+type ScreenMotion = { kind: "none" } | { kind: "reveal" } | { kind: "tab"; direction: -1 | 1 } | { kind: "back" };
 
 const mainTabPosition: Record<MainTab, number> = {
   stats: 0,
@@ -434,34 +434,30 @@ function winRateTone(rate: number): "win-rate-low" | "win-rate-medium" | "win-ra
 }
 
 function RollingNumber({ value, className = "", animateOnMount = false }: { value: string | number; className?: string; animateOnMount?: boolean }) {
-  const reduceMotion = useReducedMotion();
   const hasMounted = useRef(false);
   const characters = String(value).split("");
-  const staggerInitialDigits = animateOnMount && !hasMounted.current && !reduceMotion;
+  const shouldAnimate = animateOnMount || hasMounted.current;
 
   useEffect(() => {
     hasMounted.current = true;
   }, []);
 
   return (
-    <span className={`rolling-number ${className}`.trim()} aria-label={String(value)}>
+    <span
+      className={`rolling-number t-digit-group${shouldAnimate ? " is-animating" : ""} ${className}`.trim()}
+      aria-label={String(value)}
+      key={String(value)}
+    >
       {characters.map((character, index) => {
-        if (!/\d/.test(character)) {
-          return <span className="rolling-separator" aria-hidden="true" key={`separator-${index}-${character}`}>{character}</span>;
-        }
+        const stagger = index === characters.length - 2 ? 1 : index === characters.length - 1 ? 2 : undefined;
         return (
-          <span className="rolling-digit" aria-hidden="true" key={`digit-${index}`}>
-            <AnimatePresence initial={animateOnMount} mode="popLayout">
-              <motion.span
-                key={`${index}-${character}`}
-                initial={{ opacity: 0, transform: reduceMotion ? "translateY(0)" : "translateY(68%)" }}
-                animate={{ opacity: 1, transform: "translateY(0)" }}
-                exit={{ opacity: 0, transform: reduceMotion ? "translateY(0)" : "translateY(-68%)" }}
-                transition={{ duration: reduceMotion ? 0.12 : 0.18, delay: staggerInitialDigits ? index * 0.035 : 0, ease: easeOut }}
-              >
-                {character}
-              </motion.span>
-            </AnimatePresence>
+          <span
+            className={`${/\d/.test(character) ? "rolling-digit" : "rolling-separator"} t-digit`}
+            aria-hidden="true"
+            data-stagger={stagger}
+            key={`${index}-${character}`}
+          >
+            {character}
           </span>
         );
       })}
@@ -591,6 +587,7 @@ function App() {
   const dailyPageRequest = useRef<PaginationRequest>({ token: 0, inFlight: false });
   const gamesPageRequest = useRef<PaginationRequest>({ token: 0, inFlight: false });
   const scoreOperationId = useRef<string | null>(null);
+  const hasRevealedInitialContent = useRef(false);
 
   const selectedName = selectedOpponent ? opponentName(selectedOpponent) : "Соперник";
   const setActionPending = (action: PendingAction, pending: boolean) => {
@@ -763,6 +760,10 @@ function App() {
       cleanupTelegram();
     };
   }, []);
+
+  useEffect(() => {
+    if (!loading) hasRevealedInitialContent.current = true;
+  }, [loading]);
 
   useEffect(() => {
     if (screen === "home" || screen === "stats" || screen === "profile") {
@@ -1321,7 +1322,7 @@ function App() {
 
   const page = (() => {
     if (loading) {
-      return null;
+      return <InitialAppSkeleton />;
     }
     if (!profile) {
       return <ErrorScreen error={error || "Не удалось загрузить данные"} onRetry={() => void loadHome()} />;
@@ -1442,7 +1443,9 @@ function App() {
   const canShowNavigation = profile && !loading && (screen === "home" || screen === "stats" || screen === "profile" || screen === "opponent");
   const activeTab: MainTab = screen === "stats" || screen === "profile" ? screen : "matches";
   const savedHistoryScroll = screen === "stats" ? Number(sessionStorage.getItem("ping-tablet:scroll:stats") ?? 0) : 0;
-  const screenMotion: ScreenMotion = screenTransition === "back"
+  const screenMotion: ScreenMotion = !loading && !hasRevealedInitialContent.current
+    ? { kind: "reveal" }
+    : screenTransition === "back"
     ? { kind: "back" }
     : isMainTabScreen(screen) && isMainTabScreen(previousRenderedScreen.current) && savedHistoryScroll <= 0 && mainTabDirection !== 0
       ? { kind: "tab", direction: mainTabDirection }
@@ -1452,7 +1455,7 @@ function App() {
     <MotionConfig reducedMotion="user">
       <LayoutGroup id="ping-tablet-layout">
         <div className="app-shell" data-vaul-drawer-wrapper="">
-          {profile && (screen === "home" || screen === "stats") ? (
+          {!loading && profile && (screen === "home" || screen === "stats") ? (
             <PageHeader
               title={screen === "home" ? "пинг понг каунтер" : "история"}
               sticky={screen === "stats"}
@@ -1477,25 +1480,36 @@ function App() {
           >
             <motion.main
               className="screen"
-              key={screen}
+              key={loading ? "initial-loading" : screen}
               data-screen={screen}
               custom={screenMotion}
               variants={{
                 initial: (motion: ScreenMotion) => ({
-                  opacity: motion.kind === "tab" ? 0 : 1,
+                  opacity: motion.kind === "tab" || motion.kind === "reveal" ? 0 : 1,
                   transform: reduceMotion
                     ? "translateX(0)"
                     : motion.kind === "tab"
                       ? `translateX(${motion.direction > 0 ? 14 : -14}px)`
                       : "translateX(0)",
+                  filter: motion.kind === "reveal" && !reduceMotion ? "blur(2px)" : "blur(0)",
                   zIndex: 0,
                 }),
                 animate: {
                   opacity: 1,
                   transform: "translate(0, 0)",
+                  filter: "blur(0)",
                   zIndex: 0,
                 },
                 exit: (motion: ScreenMotion) => {
+                  if (motion.kind === "reveal") {
+                    return {
+                      opacity: 0,
+                      transform: "translateX(0)",
+                      filter: reduceMotion ? "blur(0)" : "blur(2px)",
+                      zIndex: 0,
+                      transition: { duration: 0.16, ease: easeInOut },
+                    };
+                  }
                   if (motion.kind === "back") {
                     return {
                       opacity: reduceMotion ? 0 : 1,
@@ -1511,13 +1525,13 @@ function App() {
                       zIndex: 0,
                     };
                   }
-                  return { opacity: 1, transform: "translateX(0)", zIndex: 0, transition: { duration: 0 } };
+                  return { opacity: 1, transform: "translateX(0)", filter: "blur(0)", zIndex: 0, transition: { duration: 0 } };
                 },
               }}
               initial="initial"
               animate="animate"
               exit="exit"
-              transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }}
+              transition={{ duration: reduceMotion ? 0.12 : screenMotion.kind === "reveal" ? 0.2 : 0.18, ease: easeOut }}
             >
               {screen === "levels" || screen === "edit" || screen === "confirm" ? (
                 <PageHeader title={pageTitle(screen)} onBack={goBack} />
@@ -1655,10 +1669,42 @@ function MorphingHeading({
   if (!morphId) {
     return <StaticHeading className={className}>{children}</StaticHeading>;
   }
-  return <WaveHeaderTitle as={as} className={className}>{children}</WaveHeaderTitle>;
+  return <TextStateSwapHeading as={as} className={className}>{children}</TextStateSwapHeading>;
 }
 
-function WaveHeaderTitle({ as = "h1", children, className }: { as?: "h1" | "h2"; children: string; className?: string }) {
+function TextStateSwapHeading({ as = "h1", children, className }: { as?: "h1" | "h2"; children: string; className?: string }) {
+  const reduceMotion = useReducedMotion();
+  const Heading = as === "h2" ? motion.h2 : motion.h1;
+
+  return (
+    <Heading className={className} aria-label={children}>
+      <span className="screen-title-copy" aria-hidden="true">
+        <AnimatePresence initial={false} mode="wait">
+          <motion.span
+            className="text-state-swap"
+            key={children}
+            initial={{
+              opacity: 0,
+              transform: reduceMotion ? "translateY(0)" : "translateY(4px)",
+              filter: reduceMotion ? "blur(0)" : "blur(2px)",
+            }}
+            animate={{ opacity: 1, transform: "translateY(0)", filter: "blur(0)" }}
+            exit={{
+              opacity: 0,
+              transform: reduceMotion ? "translateY(0)" : "translateY(-4px)",
+              filter: reduceMotion ? "blur(0)" : "blur(2px)",
+            }}
+            transition={{ duration: reduceMotion ? 0.12 : 0.15, ease: easeInOut }}
+          >
+            {children}
+          </motion.span>
+        </AnimatePresence>
+      </span>
+    </Heading>
+  );
+}
+
+export function LegacyWaveHeaderTitle({ as = "h1", children, className }: { as?: "h1" | "h2"; children: string; className?: string }) {
   const reduceMotion = useReducedMotion();
   const Heading = as === "h2" ? motion.h2 : motion.h1;
   const glyphs = Array.from(children);
@@ -1753,6 +1799,42 @@ function ScreenTitle({ children }: { children: string }) {
   return <MorphingHeading morphId="screen-header-title">{children}</MorphingHeading>;
 }
 
+function InitialAppSkeleton() {
+  return (
+    <div className="initial-app-skeleton" role="status" aria-label="Загрузка приложения">
+      <div className="initial-skeleton-header" aria-hidden="true">
+        <span className="initial-skeleton-title initial-skeleton-shape" />
+        <span className="initial-skeleton-avatar initial-skeleton-shape" />
+      </div>
+      <div className="initial-skeleton-summary" aria-hidden="true">
+        <div className="initial-skeleton-score">
+          <span className="initial-skeleton-score-value initial-skeleton-shape" />
+          <span className="initial-skeleton-score-divider initial-skeleton-shape" />
+          <span className="initial-skeleton-score-value initial-skeleton-shape" />
+        </div>
+        <span className="initial-skeleton-caption initial-skeleton-shape" />
+      </div>
+      <div className="initial-skeleton-list" aria-hidden="true">
+        <span className="initial-skeleton-section-title initial-skeleton-shape" />
+        {[0, 1, 2].map((row) => (
+          <div className="initial-skeleton-row" key={row}>
+            <span className="initial-skeleton-row-avatar initial-skeleton-shape" />
+            <span className="initial-skeleton-row-copy">
+              <span className="initial-skeleton-row-title initial-skeleton-shape" />
+              <span className="initial-skeleton-row-detail initial-skeleton-shape" />
+            </span>
+            <span className="initial-skeleton-row-value initial-skeleton-shape" />
+          </div>
+        ))}
+      </div>
+      <div className="initial-skeleton-toolbar" aria-hidden="true">
+        <span className="initial-skeleton-toolbar-pill initial-skeleton-shape" />
+        <span className="initial-skeleton-toolbar-action initial-skeleton-shape" />
+      </div>
+    </div>
+  );
+}
+
 function HeaderSortMorph({ newestFirst, onSort }: { newestFirst?: boolean; onSort?(): void }) {
   const reduceMotion = useReducedMotion();
   const iconTransition = reduceMotion
@@ -1798,8 +1880,10 @@ function HeaderProfileAvatar({ value, back }: { value: string | null; back: bool
   const hasCustomAvatar = avatarKind !== "default";
 
   return (
-    <span
+    <motion.span
       className={`header-profile-avatar header-leading-surface${back ? " header-leading-surface-back" : ""}`}
+      layoutId={reduceMotion ? undefined : "profile-avatar-surface"}
+      transition={{ layout: morphTransition }}
       aria-hidden="true"
     >
       <motion.span
@@ -1831,7 +1915,7 @@ function HeaderProfileAvatar({ value, back }: { value: string | null; back: bool
           </>
         ) : null}
       </motion.svg>
-    </span>
+    </motion.span>
   );
 }
 
@@ -2274,6 +2358,7 @@ function FntrBadge({ className = "" }: { className?: string }) {
 
 function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: string; submitting: boolean; onLevel(): void; onEdit(): void; onAvatarEdit(): void; onNameInput(value: string): void; onSaveName(event: FormEvent<HTMLFormElement>): void }) {
   const { profile } = props;
+  const reduceMotion = useReducedMotion();
   const nameInputRef = useRef<HTMLInputElement>(null);
   const startEditing = () => {
     flushSync(() => props.onEdit());
@@ -2283,12 +2368,14 @@ function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: s
     <>
       <section className="profile-hero family-profile-hero">
         <div className="profile-avatar-wrap">
-          <span
+          <motion.span
             className="profile-avatar"
+            layoutId={reduceMotion ? undefined : "profile-avatar-surface"}
+            transition={{ layout: { duration: 0.24, ease: easeInOut } }}
             aria-hidden="true"
           >
             <ProfileAvatarContent value={profile.user.avatar_value} />
-          </span>
+          </motion.span>
           {profile.user.rating_is_fnt ? <FntrBadge className="profile-avatar-fntr-badge" /> : null}
           {props.editing ? <motion.button className="profile-avatar-edit modal-icon-button" type="button" aria-label="Изменить аватар" initial={{ opacity: 0, transform: "scale(0.94)" }} animate={{ opacity: 1, transform: "scale(1)" }} transition={{ duration: 0.18, ease: easeOut }} onClick={props.onAvatarEdit}><AppIcon name="pencil" size={14} /></motion.button> : null}
         </div>
@@ -2440,7 +2527,14 @@ function ActionMenu(props: {
   const previousModeRef = useRef<ActionSheet>(props.mode);
   const triggerReturnsFromMenu = previousModeRef.current !== null && props.mode === null;
   const returningToRoot = previousModeRef.current !== null && previousModeRef.current !== "actions" && props.mode === "actions";
-  const layoutTransition = reduceMotion ? { duration: 0 } : { duration: 0.24, ease: easeInOut };
+  const resizingOpenCard = previousModeRef.current !== null && props.mode !== null;
+  const layoutTransition = reduceMotion
+    ? { duration: 0 }
+    : triggerReturnsFromMenu
+      ? { duration: 0.25, ease: easeOut }
+      : resizingOpenCard
+        ? { duration: 0.3, ease: [0.22, 1, 0.36, 1] as const }
+        : { duration: 0.35, ease: [0.34, 1.25, 0.64, 1] as const };
   const titles: Record<Exclude<ActionSheet, null>, string> = {
     actions: "Добавить",
     opponents: "Добавить счёт",
@@ -2494,10 +2588,21 @@ function ActionMenu(props: {
               }}
             >
               <motion.span
+                className="add-flow-plus"
+                custom={Boolean(props.mode)}
                 initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: reduceMotion ? 0.1 : 0.12, ease: easeOut }}
+                animate={{ opacity: 1, transform: "translateX(0) scale(1) rotate(0deg)", filter: "blur(0)" }}
+                variants={{
+                  exit: (morphingToMenu: boolean) => ({
+                    opacity: 0,
+                    transform: reduceMotion || !morphingToMenu
+                      ? "translateX(0) scale(1) rotate(0deg)"
+                      : "translateX(-40px) scale(0.97) rotate(45deg)",
+                    filter: reduceMotion || !morphingToMenu ? "blur(0)" : "blur(2px)",
+                  }),
+                }}
+                exit="exit"
+                transition={{ duration: reduceMotion ? 0.12 : 0.2, ease: easeOut }}
               >
                 <AppIcon name="add" aria-hidden="true" size={32} strokeWidth={2} />
               </motion.span>
@@ -2522,13 +2627,22 @@ function ActionMenu(props: {
           >
             {isRoot ? (
                 <motion.div
-                  className="action-list"
+                  className="action-list add-flow-menu"
                   key="actions"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
+                  initial={{
+                    opacity: 0,
+                    transform: reduceMotion ? "translateX(0) scale(1)" : "translateX(40px) scale(0.97)",
+                    filter: reduceMotion ? "blur(0)" : "blur(2px)",
+                  }}
+                  animate={{ opacity: 1, transform: "translateX(0) scale(1)", filter: "blur(0)" }}
+                  exit={{
+                    opacity: 0,
+                    transform: reduceMotion ? "translateX(0) scale(1)" : "translateX(40px) scale(0.97)",
+                    filter: reduceMotion ? "blur(0)" : "blur(2px)",
+                  }}
                   transition={{
-                    duration: reduceMotion ? 0.1 : 0.12,
-                    delay: reduceMotion ? 0 : returningToRoot ? 0.16 : 0.1,
+                    duration: reduceMotion ? 0.12 : 0.2,
+                    delay: reduceMotion ? 0 : returningToRoot ? 0.16 : 0.08,
                     ease: easeOut,
                   }}
                 >

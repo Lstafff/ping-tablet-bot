@@ -9,7 +9,7 @@ import { EloDeltaBadge, ScorePair, ScoreValue } from "../../components/ScoreDisp
 import { SegmentedControl } from "../../components/SegmentedControl";
 import { easeOut } from "../../lib/motion";
 import { gamesCount, opponentName, winRate } from "../../lib/player";
-import { calculateOpponentHeaderCollapseState, opponentHeaderCollapseDistance } from "./collapsingHeader";
+import { calculateOpponentHeaderCollapseState, calculateOpponentHeaderSnapTarget } from "./collapsingHeader";
 
 export type StatsTab = "summary" | "days" | "games";
 
@@ -84,7 +84,7 @@ export function OpponentScreen(props: OpponentScreenProps) {
       </section>
 
       <SegmentedControl
-        ariaLabel="Статистика с соперником"
+        ariaLabel="Ваша статистика"
         value={props.tab}
         options={[
           { value: "summary", label: "Общая" },
@@ -143,17 +143,13 @@ export function OpponentCollapsingHeader({ opponent, stats, onBack, pending = fa
       if (!header || !backdrop || !avatar || !name) return;
 
       const state = calculateOpponentHeaderCollapseState(window.scrollY, Boolean(reduceMotion));
-      const centerX = header.clientWidth / 2;
-      const avatarExpandedX = centerX - (avatar.offsetLeft + avatar.offsetWidth / 2);
       avatar.style.opacity = String(state.avatarOpacity);
       avatar.style.transform = reduceMotion
         ? "none"
-        : `translate3d(${avatarExpandedX * state.remaining}px, ${state.avatarTranslateY}px, 0) scale(${state.avatarScale})`;
-      name.style.color = `color-mix(in srgb, var(--color-text-primary) ${state.titlePrimaryShare}%, var(--color-text-secondary))`;
+        : `translate3d(0, ${state.avatarTranslateY}px, 0) scale(${state.avatarScale})`;
       name.style.transform = `translate3d(0, ${state.nameTranslateY}px, 0) scale(${state.nameScale})`;
       const score = scoreRef.current;
       if (score) {
-        score.style.color = name.style.color;
         score.style.fontWeight = String(state.scoreFontWeight);
         score.style.transform = `translate3d(0, ${state.scoreTranslateY}px, 0) scale(${state.scoreScale})`;
       }
@@ -170,8 +166,8 @@ export function OpponentCollapsingHeader({ opponent, stats, onBack, pending = fa
     const snapToRestingState = () => {
       snapTimer = null;
       const scrollY = window.scrollY;
-      if (scrollY <= 0 || scrollY >= opponentHeaderCollapseDistance) return;
-      const target = scrollY >= opponentHeaderCollapseDistance / 2 ? opponentHeaderCollapseDistance : 0;
+      const target = calculateOpponentHeaderSnapTarget(scrollY);
+      if (target === null) return;
       if (reduceMotion) {
         window.scrollTo({ top: target, behavior: "auto" });
         return;
@@ -210,20 +206,24 @@ export function OpponentCollapsingHeader({ opponent, stats, onBack, pending = fa
       pointerActive = false;
       requestUpdate();
     };
+    const handleWheel = () => {
+      stopSnap();
+      requestUpdate();
+    };
     update();
     window.addEventListener("scroll", requestUpdate, { passive: true });
     window.addEventListener("resize", requestUpdate);
     window.addEventListener("pointerdown", beginPointerInteraction, { passive: true });
     window.addEventListener("pointerup", endPointerInteraction, { passive: true });
     window.addEventListener("pointercancel", endPointerInteraction, { passive: true });
-    window.addEventListener("wheel", stopSnap, { passive: true });
+    window.addEventListener("wheel", handleWheel, { passive: true });
     return () => {
       window.removeEventListener("scroll", requestUpdate);
       window.removeEventListener("resize", requestUpdate);
       window.removeEventListener("pointerdown", beginPointerInteraction);
       window.removeEventListener("pointerup", endPointerInteraction);
       window.removeEventListener("pointercancel", endPointerInteraction);
-      window.removeEventListener("wheel", stopSnap);
+      window.removeEventListener("wheel", handleWheel);
       if (frame !== null) window.cancelAnimationFrame(frame);
       if (snapTimer !== null) window.clearTimeout(snapTimer);
       snapAnimation?.stop();
@@ -238,7 +238,7 @@ export function OpponentCollapsingHeader({ opponent, stats, onBack, pending = fa
           <AppIcon name="chevron-left" size={30} aria-hidden="true" />
         </button>
         <span className="avatar avatar-opponent opponent-header-avatar" ref={avatarRef} aria-hidden="true">
-          <ProfileAvatarContent value={opponent.avatar_value ?? null} />
+          <ProfileAvatarContent value={opponent.avatar_value ?? null} defaultIconSize={48} />
         </span>
         {resolvedStats ? (
           <>
