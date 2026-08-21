@@ -1,4 +1,4 @@
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, animate, motion, useReducedMotion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 
 import type { DailyView, ExtendedStats, GamesView, Opponent, OpponentStats, RecentGame, Stats } from "../../api/types";
@@ -9,7 +9,7 @@ import { EloDeltaBadge, ScorePair, ScoreValue } from "../../components/ScoreDisp
 import { SegmentedControl } from "../../components/SegmentedControl";
 import { easeOut } from "../../lib/motion";
 import { gamesCount, opponentName, winRate } from "../../lib/player";
-import { calculateOpponentHeaderCollapseState } from "./collapsingHeader";
+import { calculateOpponentHeaderCollapseState, opponentHeaderCollapseDistance } from "./collapsingHeader";
 
 export type StatsTab = "summary" | "days" | "games";
 
@@ -127,7 +127,8 @@ export function OpponentCollapsingHeader({ opponent, stats, onBack, pending = fa
   const headerRef = useRef<HTMLElement>(null);
   const backdropRef = useRef<HTMLSpanElement>(null);
   const avatarRef = useRef<HTMLSpanElement>(null);
-  const titleRef = useRef<HTMLDivElement>(null);
+  const nameRef = useRef<HTMLHeadingElement>(null);
+  const scoreRef = useRef<HTMLDivElement>(null);
   const summaryRef = useRef<HTMLParagraphElement>(null);
   const resolvedStats = stats ?? opponent.stats;
 
@@ -138,30 +139,94 @@ export function OpponentCollapsingHeader({ opponent, stats, onBack, pending = fa
       const header = headerRef.current;
       const backdrop = backdropRef.current;
       const avatar = avatarRef.current;
-      const title = titleRef.current;
-      if (!header || !backdrop || !avatar || !title) return;
+      const name = nameRef.current;
+      if (!header || !backdrop || !avatar || !name) return;
 
       const state = calculateOpponentHeaderCollapseState(window.scrollY, Boolean(reduceMotion));
+      const centerX = header.clientWidth / 2;
+      const avatarExpandedX = centerX - (avatar.offsetLeft + avatar.offsetWidth / 2);
       avatar.style.opacity = String(state.avatarOpacity);
-      avatar.style.transform = `translate3d(0, ${state.avatarTranslateY}px, 0) scale(${state.avatarScale})`;
-      title.style.color = `color-mix(in srgb, var(--color-text-primary) ${state.titlePrimaryShare}%, var(--color-text-secondary))`;
-      title.style.transform = `translate3d(0, ${state.titleTranslateY}px, 0) scale(${state.titleScale})`;
+      avatar.style.transform = reduceMotion
+        ? "none"
+        : `translate3d(${avatarExpandedX * state.remaining}px, ${state.avatarTranslateY}px, 0) scale(${state.avatarScale})`;
+      name.style.color = `color-mix(in srgb, var(--color-text-primary) ${state.titlePrimaryShare}%, var(--color-text-secondary))`;
+      name.style.transform = `translate3d(0, ${state.nameTranslateY}px, 0) scale(${state.nameScale})`;
+      const score = scoreRef.current;
+      if (score) {
+        score.style.color = name.style.color;
+        score.style.fontWeight = String(state.scoreFontWeight);
+        score.style.transform = `translate3d(0, ${state.scoreTranslateY}px, 0) scale(${state.scoreScale})`;
+      }
       if (summaryRef.current) {
         summaryRef.current.style.opacity = String(state.summaryOpacity);
         summaryRef.current.style.transform = reduceMotion ? "none" : `translate3d(0, ${state.summaryTranslateY}px, 0)`;
       }
       backdrop.style.opacity = String(state.backdropOpacity);
     };
+    let snapTimer: number | null = null;
+    let snapAnimation: ReturnType<typeof animate> | null = null;
+    let snapping = false;
+    let pointerActive = false;
+    const snapToRestingState = () => {
+      snapTimer = null;
+      const scrollY = window.scrollY;
+      if (scrollY <= 0 || scrollY >= opponentHeaderCollapseDistance) return;
+      const target = scrollY >= opponentHeaderCollapseDistance / 2 ? opponentHeaderCollapseDistance : 0;
+      if (reduceMotion) {
+        window.scrollTo({ top: target, behavior: "auto" });
+        return;
+      }
+      snapping = true;
+      snapAnimation = animate(scrollY, target, {
+        type: "spring",
+        stiffness: 420,
+        damping: 38,
+        mass: 0.8,
+        onUpdate: (value) => window.scrollTo({ top: value, behavior: "auto" }),
+        onComplete: () => {
+          snapping = false;
+          snapAnimation = null;
+        },
+      });
+    };
     const requestUpdate = () => {
       if (frame === null) frame = window.requestAnimationFrame(update);
+      if (snapping || pointerActive) return;
+      if (snapTimer !== null) window.clearTimeout(snapTimer);
+      snapTimer = window.setTimeout(snapToRestingState, 110);
+    };
+    const stopSnap = () => {
+      if (snapTimer !== null) window.clearTimeout(snapTimer);
+      snapTimer = null;
+      snapAnimation?.stop();
+      snapAnimation = null;
+      snapping = false;
+    };
+    const beginPointerInteraction = () => {
+      pointerActive = true;
+      stopSnap();
+    };
+    const endPointerInteraction = () => {
+      pointerActive = false;
+      requestUpdate();
     };
     update();
     window.addEventListener("scroll", requestUpdate, { passive: true });
     window.addEventListener("resize", requestUpdate);
+    window.addEventListener("pointerdown", beginPointerInteraction, { passive: true });
+    window.addEventListener("pointerup", endPointerInteraction, { passive: true });
+    window.addEventListener("pointercancel", endPointerInteraction, { passive: true });
+    window.addEventListener("wheel", stopSnap, { passive: true });
     return () => {
       window.removeEventListener("scroll", requestUpdate);
       window.removeEventListener("resize", requestUpdate);
+      window.removeEventListener("pointerdown", beginPointerInteraction);
+      window.removeEventListener("pointerup", endPointerInteraction);
+      window.removeEventListener("pointercancel", endPointerInteraction);
+      window.removeEventListener("wheel", stopSnap);
       if (frame !== null) window.cancelAnimationFrame(frame);
+      if (snapTimer !== null) window.clearTimeout(snapTimer);
+      snapAnimation?.stop();
     };
   }, [opponent.id, reduceMotion, resolvedStats]);
 
@@ -177,15 +242,13 @@ export function OpponentCollapsingHeader({ opponent, stats, onBack, pending = fa
         </span>
         {resolvedStats ? (
           <>
-            <div className="opponent-header-title" ref={titleRef}>
-              <h1 className="opponent-header-name">{opponentName(opponent)}</h1>
-              <div className="opponent-scoreline opponent-header-score" aria-label={`Побед ${resolvedStats.wins}, поражений ${resolvedStats.losses}`}>
-                <ScorePair left={<strong>{resolvedStats.wins}</strong>} right={<strong>{resolvedStats.losses}</strong>} />
-              </div>
+            <h1 className="opponent-header-name" ref={nameRef}>{opponentName(opponent)}</h1>
+            <div className="opponent-scoreline opponent-header-score" ref={scoreRef} aria-label={`Побед ${resolvedStats.wins}, поражений ${resolvedStats.losses}`}>
+              <ScorePair left={<strong>{resolvedStats.wins}</strong>} right={<strong>{resolvedStats.losses}</strong>} />
             </div>
             <p className="opponent-header-summary" ref={summaryRef}><strong>{winRate(resolvedStats)}%</strong> побед · {gamesCount(resolvedStats)} партий</p>
           </>
-        ) : <div className="opponent-header-title" ref={titleRef}><h1 className="opponent-header-name">{opponentName(opponent)}</h1></div>}
+        ) : <h1 className="opponent-header-name" ref={nameRef}>{opponentName(opponent)}</h1>}
       </header>
       <div className="opponent-header-spacer" aria-hidden="true" />
     </>

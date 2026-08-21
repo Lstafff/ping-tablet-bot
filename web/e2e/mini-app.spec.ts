@@ -40,6 +40,8 @@ test("opens an opponent and records a score through the Vaul drawer", async ({ p
   const handleBox = await page.locator(".score-drawer-handle").boundingBox();
   expect(handleBox && drawerBox ? handleBox.x + handleBox.width / 2 : 0)
     .toBeCloseTo(drawerBox ? drawerBox.x + drawerBox.width / 2 : Number.POSITIVE_INFINITY, 1);
+  expect(handleBox?.width ?? 0).toBeGreaterThanOrEqual(44);
+  expect(handleBox?.height ?? 0).toBeGreaterThanOrEqual(44);
   await page.getByRole("button", { name: "1", exact: true }).click();
   await page.getByRole("button", { name: "1", exact: true }).click();
   await page.getByRole("button", { name: "Дальше" }).click();
@@ -80,6 +82,11 @@ test("opens the central add-score flow without waiting and uses the shared selec
   await page.getByRole("button", { name: "Добавить", exact: true }).click();
   const rootMenu = page.getByRole("dialog", { name: "Добавить", exact: true });
   await expect(rootMenu).toBeVisible();
+  const sharedSurfaceTransform = await page.evaluate(() => new Promise<string>((resolve) => requestAnimationFrame(() => {
+    const surface = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Добавить"]');
+    resolve(surface ? getComputedStyle(surface).transform : "none");
+  })));
+  expect(sharedSurfaceTransform).not.toBe("none");
   await rootMenu.getByRole("button", { name: /Добавить счёт/ }).click();
 
   const opponentPicker = page.getByRole("dialog", { name: "Добавить счёт", exact: true });
@@ -94,6 +101,47 @@ test("opens the central add-score flow without waiting and uses the shared selec
   await drawer.getByRole("tab", { name: "Противник" }).click();
   await expect(drawer.getByRole("tab", { name: "Противник" })).toHaveAttribute("aria-selected", "true");
   await expect.poll(async () => (await indicator.boundingBox())?.x ?? 0).toBeGreaterThan(ownPosition?.x ?? Number.POSITIVE_INFINITY);
+});
+
+test("expands invalid-score guidance by swipe and keeps its handle reachable", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Мария/ }).click();
+  await page.getByRole("button", { name: "Добавить счёт" }).click();
+  await page.getByRole("button", { name: "1", exact: true }).click();
+  await page.getByRole("button", { name: "Дальше" }).click();
+  await page.getByRole("button", { name: "1", exact: true }).click();
+  await page.getByRole("button", { name: "Сохранить" }).click();
+
+  const compactNotice = page.locator(".score-validation-compact");
+  const compactBox = await compactNotice.boundingBox();
+  if (!compactBox) throw new Error("Не удалось измерить snackbar ошибки счёта");
+  const hitTargetClass = await page.evaluate(({ x, y }) => (document.elementFromPoint(x, y) as HTMLElement | null)?.closest(".score-validation-surface")?.className ?? "", {
+    x: compactBox.x + compactBox.width / 2,
+    y: compactBox.y + compactBox.height / 2,
+  });
+  expect(String(hitTargetClass)).toContain("score-validation");
+  await compactNotice.locator(".score-validation-gesture-layer").evaluate((element, { from, to }) => {
+    const options = { bubbles: true, pointerId: 7, pointerType: "touch", isPrimary: true };
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...options, clientY: from }));
+    element.dispatchEvent(new PointerEvent("pointermove", { ...options, clientY: to }));
+    element.dispatchEvent(new PointerEvent("pointerup", { ...options, clientY: to }));
+  }, { from: compactBox.y + compactBox.height / 2, to: compactBox.y - 42 });
+
+  const rules = page.getByRole("dialog", { name: "Правила счёта" });
+  await expect(rules).toBeVisible();
+  await page.waitForTimeout(260);
+  const handleBox = await rules.locator(".score-validation-handle").boundingBox();
+  expect(handleBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+
+  const rulesBox = await rules.boundingBox();
+  if (!rulesBox) throw new Error("Не удалось измерить правила счёта");
+  await rules.locator(".score-validation-gesture-layer").evaluate((element, { from, to }) => {
+    const options = { bubbles: true, pointerId: 8, pointerType: "touch", isPrimary: true };
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...options, clientY: from }));
+    element.dispatchEvent(new PointerEvent("pointermove", { ...options, clientY: to }));
+    element.dispatchEvent(new PointerEvent("pointerup", { ...options, clientY: to }));
+  }, { from: rulesBox.y + rulesBox.height - 22, to: rulesBox.y + rulesBox.height + 28 });
+  await expect(compactNotice).toBeVisible();
 });
 
 test("keeps the main tab indicator on one horizontal track", async ({ page }) => {
@@ -223,7 +271,8 @@ test("collapses the opponent header and returns to the originating history", asy
   await expect(page.getByRole("heading", { name: "статистика" })).toHaveCount(0);
   const header = page.locator(".opponent-collapsing-header");
   const avatar = page.locator(".opponent-header-avatar");
-  const title = page.locator(".opponent-header-title");
+  const name = page.locator(".opponent-header-name");
+  const score = page.locator(".opponent-header-score");
   const summary = page.locator(".opponent-header-summary");
   await expect(header).toHaveCSS("position", "sticky");
   const expandedHeaderBox = await header.boundingBox();
@@ -231,20 +280,30 @@ test("collapses the opponent header and returns to the originating history", asy
   expect(expandedAvatarBox?.width).toBeCloseTo(76, 0);
 
   await page.evaluate(() => window.scrollTo({ top: 84, behavior: "auto" }));
-  await expect.poll(async () => Number(await avatar.evaluate((element) => getComputedStyle(element).opacity))).toBeCloseTo(0.5, 1);
+  const intermediateOpacity = await page.evaluate(() => new Promise<number>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
+    const element = document.querySelector<HTMLElement>(".opponent-header-avatar");
+    resolve(Number(element ? getComputedStyle(element).opacity : 0));
+  }))));
+  expect(intermediateOpacity).toBeCloseTo(0.5, 1);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(168, 0);
 
   await page.evaluate(() => window.scrollTo({ top: 200, behavior: "auto" }));
-  await expect.poll(async () => (await avatar.boundingBox())?.width ?? 0).toBeCloseTo(34.2, 0);
+  await expect.poll(async () => (await avatar.boundingBox())?.width ?? 0).toBeCloseTo(26.6, 0);
   await expect(avatar).toHaveCSS("opacity", "0");
   await expect(summary).toHaveCSS("opacity", "0");
   const compactHeaderBox = await header.boundingBox();
   const compactAvatarBox = await avatar.boundingBox();
-  const compactTitleBox = await title.boundingBox();
+  const compactNameBox = await name.boundingBox();
+  const compactScoreBox = await score.boundingBox();
   expect(compactHeaderBox?.y).toBeCloseTo(expandedHeaderBox?.y ?? Number.POSITIVE_INFINITY, 1);
   expect(compactAvatarBox && compactHeaderBox ? compactAvatarBox.y : Number.POSITIVE_INFINITY)
     .toBeLessThan(compactHeaderBox?.y ?? 0);
-  expect(compactTitleBox && compactHeaderBox ? compactTitleBox.x + compactTitleBox.width / 2 : 0)
+  expect(compactNameBox && compactHeaderBox ? compactNameBox.x + compactNameBox.width / 2 : 0)
     .toBeCloseTo(compactHeaderBox ? compactHeaderBox.x + compactHeaderBox.width / 2 : Number.POSITIVE_INFINITY, 1);
+  expect(compactScoreBox && compactHeaderBox ? compactScoreBox.x + compactScoreBox.width / 2 : 0)
+    .toBeCloseTo(compactHeaderBox ? compactHeaderBox.x + compactHeaderBox.width / 2 : Number.POSITIVE_INFINITY, 1);
+  expect(compactScoreBox?.height ?? Number.POSITIVE_INFINITY).toBeLessThan(16);
+  await expect(score).toHaveCSS("font-weight", "400");
   const compactScoreColors = await page.locator(".opponent-header-score .score-pair > span").evaluateAll((parts) => parts.map((part) => getComputedStyle(part).color));
   expect(new Set(compactScoreColors).size).toBe(1);
   await expect(page.locator(".opponent-header-name")).toHaveCSS("color", compactScoreColors[0]);
@@ -261,6 +320,9 @@ test("collapses the opponent header and returns to the originating history", asy
 test("manages an FNT rating from Levels and promotes the player to Pro", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Профиль" }).click();
+
+  await expect(page.locator(".profile-facts")).toHaveCount(1);
+  await expect(page.getByText("ещё про вас", { exact: true })).toHaveCount(0);
 
   await expect(page.getByRole("button", { name: "Рейтинг недоступен" })).toBeDisabled();
   await expect(page.locator(".profile-facts").first().getByText("Рейтинг", { exact: true })).toHaveCount(0);

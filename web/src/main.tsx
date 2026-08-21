@@ -1,5 +1,5 @@
-import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { FormEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { AnimatePresence, LayoutGroup, MotionConfig, animate, motion, useMotionValue, useReducedMotion } from "motion/react";
+import { FormEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import ReactDOM from "react-dom/client";
 import { Drawer } from "vaul";
@@ -30,8 +30,9 @@ import { ProfileAvatarContent, profileAvatarKind } from "./components/ProfileAva
 import { ProgressiveLoadTrigger } from "./components/ProgressiveLoadTrigger";
 import { EloDeltaBadge, ScorePair } from "./components/ScoreDisplay";
 import { SegmentedControl } from "./components/SegmentedControl";
+import { Snackbar, type SnackbarTone } from "./components/Snackbar";
 import { OpponentOpeningScreen, OpponentScreen, type StatsTab } from "./features/opponent/OpponentFlow";
-import { easeInOut, easeOut } from "./lib/motion";
+import { easeDrawer, easeInOut, easeOut } from "./lib/motion";
 import { gamesCount, initials, opponentName, winRate } from "./lib/player";
 import { tma } from "./lib/tma";
 import "./tokens.css";
@@ -46,7 +47,7 @@ type ActionSheet = "actions" | "opponents" | "share" | "accept" | null;
 type OpponentEditSheet = "actions" | "games" | "points" | "reset" | "delete" | null;
 type PendingAction = "score" | "opponent" | "invite" | "rating" | "profile" | "avatar";
 type PaginationRequest = { token: number; inFlight: boolean };
-type RatingFeedback = { tone: "success" | "error"; message: string } | null;
+type SnackbarNotice = { id: number; tone: SnackbarTone; message: string } | null;
 type ScreenMotion = { kind: "none" } | { kind: "tab"; direction: -1 | 1 } | { kind: "back" };
 
 const mainTabPosition: Record<MainTab, number> = {
@@ -567,9 +568,8 @@ function App() {
   const [inviteCode, setInviteCode] = useState("");
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteInput, setInviteInput] = useState("");
-  const [inviteMessage, setInviteMessage] = useState("");
   const [ratingInput, setRatingInput] = useState("");
-  const [ratingFeedback, setRatingFeedback] = useState<RatingFeedback>(null);
+  const [snackbar, setSnackbar] = useState<SnackbarNotice>(null);
   const [profileNameInput, setProfileNameInput] = useState("");
   const [profileEditing, setProfileEditing] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
@@ -608,6 +608,10 @@ function App() {
   const profileSubmitting = pendingActions.has("profile");
   const avatarSubmitting = pendingActions.has("avatar");
   const overlayOpen = Boolean(actionSheet || opponentEditSheet || avatarPickerOpen);
+  const notify = (message: string, tone: SnackbarTone = "neutral") => {
+    setError("");
+    setSnackbar({ id: Date.now(), message, tone });
+  };
 
   const loadHome = async () => {
     const [nextProfile, opponentsResponse] = await Promise.all([
@@ -1111,7 +1115,7 @@ function App() {
 
   const openInvite = async (mode: InviteMode = "share") => {
     setActionSheet(mode);
-    setInviteMessage("");
+    setSnackbar(null);
     setError("");
     if (mode === "accept") return;
     setActionPending("invite", true);
@@ -1120,7 +1124,7 @@ function App() {
       setInviteCode(result.code);
       setInviteLink(result.invite_link);
     } catch (inviteError: unknown) {
-      setInviteMessage(messageFromError(inviteError));
+      notify(messageFromError(inviteError), "error");
     } finally {
       setActionPending("invite", false);
     }
@@ -1134,17 +1138,17 @@ function App() {
         window.open(shareUrl, "_blank", "noopener,noreferrer");
       }
     } catch {
-      setInviteMessage("Не удалось открыть отправку через Telegram");
+      notify("Не удалось открыть отправку через Telegram", "error");
     }
   };
 
   const copyInvite = async () => {
     try {
       await navigator.clipboard.writeText(inviteCode);
-      setInviteMessage("Код скопирован");
+      notify("Код скопирован", "success");
       tma.haptic.notification("success");
     } catch {
-      setInviteMessage("Не удалось скопировать код");
+      notify("Не удалось скопировать код", "error");
     }
   };
 
@@ -1163,14 +1167,14 @@ function App() {
         self: "Это ваш собственный код",
         invalid: "Код не найден",
       };
-      setInviteMessage(messages[result.status] ?? "Код обработан");
+      notify(messages[result.status] ?? "Код обработан", result.accepted ? "success" : "neutral");
       if (result.accepted) {
         tma.haptic.notification("success");
         await loadHome();
         setActionSheet(null);
       }
     } catch (acceptError: unknown) {
-      setInviteMessage(messageFromError(acceptError));
+      notify(messageFromError(acceptError), "error");
     } finally {
       setActionPending("invite", false);
     }
@@ -1179,7 +1183,7 @@ function App() {
   const saveRating = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setActionPending("rating", true);
-    setRatingFeedback(null);
+    setSnackbar(null);
     try {
       const result = await api<Profile>("/api/rating", {
         method: "POST",
@@ -1187,10 +1191,10 @@ function App() {
       });
       setProfile(result);
       setRatingInput(result.user.rating ?? "");
-      setRatingFeedback({ tone: "success", message: result.user.rating_is_fnt ? "Рейтинг ФНТР добавлен. Теперь ваш уровень — «Профик»" : "Рейтинг добавлен" });
+      notify(result.user.rating_is_fnt ? "Рейтинг ФНТР добавлен. Теперь ваш уровень — «Профик»" : "Рейтинг добавлен", "success");
       tma.haptic.notification("success");
     } catch (ratingError: unknown) {
-      setRatingFeedback({ tone: "error", message: messageFromError(ratingError) });
+      notify(messageFromError(ratingError), "error");
     } finally {
       setActionPending("rating", false);
     }
@@ -1198,15 +1202,15 @@ function App() {
 
   const clearRating = async () => {
     setActionPending("rating", true);
-    setRatingFeedback(null);
+    setSnackbar(null);
     try {
       const result = await api<Profile>("/api/rating", { method: "DELETE" });
       setProfile(result);
       setRatingInput("");
-      setRatingFeedback({ tone: "success", message: "Рейтинг сброшен" });
+      notify("Рейтинг сброшен", "success");
       tma.haptic.notification("success");
     } catch (ratingError: unknown) {
-      setRatingFeedback({ tone: "error", message: messageFromError(ratingError) });
+      notify(messageFromError(ratingError), "error");
     } finally {
       setActionPending("rating", false);
     }
@@ -1335,7 +1339,7 @@ function App() {
           onLevel={() => {
             setScreenTransition("default");
             setRatingInput(profile.user.rating ?? "");
-            setRatingFeedback(null);
+            setSnackbar(null);
             setScreen("levels");
           }}
           onEdit={() => {
@@ -1368,7 +1372,6 @@ function App() {
         <LevelsScreen
           profile={profile}
           ratingValue={ratingInput}
-          ratingFeedback={ratingFeedback}
           ratingSubmitting={ratingSubmitting}
           onRatingValue={setRatingInput}
           onRatingSave={saveRating}
@@ -1461,20 +1464,14 @@ function App() {
               onSort={screen === "stats" ? () => setHistoryNewestFirst((value) => !value) : undefined}
             />
           ) : null}
-          <AnimatePresence initial={false}>
-            {error ? (
-              <motion.p
-                className="action-feedback action-feedback-error"
-                role="alert"
-                initial={{ opacity: 0, transform: reduceMotion ? "translateY(0)" : "translateY(-4px)" }}
-                animate={{ opacity: 1, transform: "translateY(0)" }}
-                exit={{ opacity: 0, transform: reduceMotion ? "translateY(0)" : "translateY(-4px)" }}
-                transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }}
-              >
-                {error}
-              </motion.p>
-            ) : null}
-          </AnimatePresence>
+          <Snackbar
+            message={error || snackbar?.message || ""}
+            tone={error ? "error" : snackbar?.tone}
+            onDismiss={() => {
+              setError("");
+              setSnackbar(null);
+            }}
+          />
           <AnimatePresence
             initial={false}
             mode="popLayout"
@@ -1507,7 +1504,7 @@ function App() {
                       opacity: reduceMotion ? 0 : 1,
                       transform: reduceMotion ? "translateX(0)" : "translateX(100vw)",
                       zIndex: 2,
-                      transition: { duration: reduceMotion ? 0.12 : 0.24, ease: easeOut },
+                      transition: { duration: reduceMotion ? 0.12 : 0.26, ease: easeDrawer },
                     };
                   }
                   if (motion.kind === "tab") {
@@ -1584,7 +1581,6 @@ function App() {
           opponents={opponents}
           code={inviteCode}
           input={inviteInput}
-          message={inviteMessage}
           submitting={inviteSubmitting}
           onOpen={() => setActionSheet("actions")}
           onClose={() => setActionSheet(null)}
@@ -1606,7 +1602,6 @@ function App() {
               gamesTotal={gamesTotal}
               pointsTotal={pointsTotal}
               submitting={opponentSubmitting}
-              feedback={error}
               onClose={() => {
                 setOpponentEditSheet(null);
                 setConfirmAction(null);
@@ -1630,7 +1625,6 @@ function App() {
         <AvatarPicker
           open={avatarPickerOpen}
           submitting={avatarSubmitting}
-          feedback={error}
           onClose={() => setAvatarPickerOpen(false)}
           onEmoji={(emoji) => void saveAvatar(emoji)}
         />
@@ -2018,24 +2012,20 @@ const scoreRules = [
 function ScoreValidationSnackbar({ message }: { message: string }) {
   const reduceMotion = useReducedMotion();
   const [expanded, setExpanded] = useState(false);
-  const infoButtonRef = useRef<HTMLButtonElement>(null);
-  const handleButtonRef = useRef<HTMLButtonElement>(null);
-  const wasExpanded = useRef(false);
+  const dragY = useMotionValue(0);
+  const swipeStart = useRef<{ pointerId: number; y: number; at: number } | null>(null);
   const layoutTransition = reduceMotion
     ? { duration: 0 }
     : { duration: 0.24, ease: easeInOut };
 
   useEffect(() => {
-    setExpanded(false);
+    if (!message) setExpanded(false);
   }, [message]);
 
   useEffect(() => {
     if (expanded) {
-      handleButtonRef.current?.focus();
-    } else if (wasExpanded.current) {
-      window.requestAnimationFrame(() => infoButtonRef.current?.focus());
+      window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".score-validation-expanded")?.focus());
     }
-    wasExpanded.current = expanded;
   }, [expanded]);
 
   useEffect(() => {
@@ -2044,14 +2034,47 @@ function ScoreValidationSnackbar({ message }: { message: string }) {
       if (event.key === "Escape") {
         event.preventDefault();
         setExpanded(false);
-      } else if (event.key === "Tab") {
-        event.preventDefault();
-        handleButtonRef.current?.focus();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [expanded]);
+
+  const startSwipe = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+    event.stopPropagation();
+    const surface = event.currentTarget;
+    try {
+      surface.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic pointer events in browser tests do not create an active pointer.
+    }
+    swipeStart.current = { pointerId: event.pointerId, y: event.clientY, at: performance.now() };
+  }, []);
+  const moveSwipe = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+    event.stopPropagation();
+    const start = swipeStart.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    const distance = event.clientY - start.y;
+    dragY.set(expanded ? Math.max(-12, Math.min(76, distance)) : Math.max(-76, Math.min(12, distance)));
+  }, [dragY, expanded]);
+  const finishSwipe = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+    event.stopPropagation();
+    const start = swipeStart.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    swipeStart.current = null;
+    const distance = event.clientY - start.y;
+    const velocity = distance / Math.max(1, performance.now() - start.at);
+    const completes = expanded ? distance >= 28 || velocity >= 0.42 : distance <= -28 || velocity <= -0.42;
+    if (completes) {
+      dragY.set(0);
+      setExpanded(!expanded);
+    } else if (reduceMotion) dragY.set(0);
+    else animate(dragY, 0, { type: "spring", stiffness: 460, damping: 38 });
+  }, [dragY, expanded, reduceMotion]);
+  const cancelSwipe = useCallback(() => {
+    swipeStart.current = null;
+    dragY.set(0);
+  }, [dragY]);
 
   return (
     <AnimatePresence>
@@ -2078,7 +2101,7 @@ function ScoreValidationSnackbar({ message }: { message: string }) {
             ) : null}
           </AnimatePresence>
 
-          <AnimatePresence mode="popLayout">
+          <AnimatePresence>
             {expanded ? (
               <motion.section
                 className="score-validation-surface score-validation-expanded"
@@ -2088,6 +2111,8 @@ function ScoreValidationSnackbar({ message }: { message: string }) {
                 role="dialog"
                 aria-modal="true"
                 aria-label="Правила счёта"
+                tabIndex={-1}
+                style={{ y: dragY }}
                 transition={{ layout: layoutTransition }}
               >
                 <motion.div
@@ -2103,15 +2128,20 @@ function ScoreValidationSnackbar({ message }: { message: string }) {
                     </div>
                   ))}
                 </motion.div>
-                <button
+                <div
                   className="score-validation-handle"
-                  ref={handleButtonRef}
-                  type="button"
-                  aria-label="Свернуть правила"
-                  onClick={() => setExpanded(false)}
+                  aria-hidden="true"
                 >
                   <span aria-hidden="true" />
-                </button>
+                </div>
+                <div
+                  className="score-validation-gesture-layer"
+                  aria-hidden="true"
+                  onPointerDown={startSwipe}
+                  onPointerMove={moveSwipe}
+                  onPointerUp={finishSwipe}
+                  onPointerCancel={cancelSwipe}
+                />
               </motion.section>
             ) : (
               <motion.div
@@ -2120,22 +2150,32 @@ function ScoreValidationSnackbar({ message }: { message: string }) {
                 layout
                 layoutId="score-validation-surface"
                 role="alert"
+                aria-label={`${message}. Проведи вверх, чтобы показать правила счёта`}
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowUp" || event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setExpanded(true);
+                  }
+                }}
+                style={{ y: dragY }}
                 initial={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(-8px) scale(0.96)" }}
                 animate={{ opacity: 1, transform: "translateY(0) scale(1)" }}
                 exit={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(-8px) scale(0.96)" }}
                 transition={{ layout: layoutTransition, opacity: { duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }, transform: { duration: reduceMotion ? 0.12 : 0.18, ease: easeOut } }}
               >
                 <span>{message}</span>
-                <motion.button
-                  ref={infoButtonRef}
-                  type="button"
-                  aria-label="Показать правила счёта"
-                  onClick={() => setExpanded(true)}
-                  whileTap={{ transform: "scale(0.94)" }}
-                  transition={{ duration: 0.12, ease: easeOut }}
-                >
+                <span className="score-validation-info" aria-hidden="true">
                   <motion.span layoutId="score-validation-info"><AppIcon name="info" size={21} /></motion.span>
-                </motion.button>
+                </span>
+                <div
+                  className="score-validation-gesture-layer"
+                  aria-hidden="true"
+                  onPointerDown={startSwipe}
+                  onPointerMove={moveSwipe}
+                  onPointerUp={finishSwipe}
+                  onPointerCancel={cancelSwipe}
+                />
               </motion.div>
             )}
           </AnimatePresence>
@@ -2177,6 +2217,7 @@ function ScoreDrawer(props: {
           <Drawer.Description className="visually-hidden">Введи свой счёт и счёт соперника</Drawer.Description>
           <Drawer.Handle className="score-drawer-handle" aria-label="Потянуть, чтобы закрыть" />
           <ScoreScreen {...props} />
+          <ScoreValidationSnackbar message={props.validationMessage} />
         </Drawer.Content>
       </Drawer.Portal>
     </Drawer.Root>
@@ -2189,7 +2230,6 @@ function ScoreScreen(props: {
   opponentScore: string;
   side: ScoreSide;
   submitting: boolean;
-  validationMessage: string;
   onDigit(digit: string): void;
   onErase(): void;
   onContinue(): void;
@@ -2207,7 +2247,6 @@ function ScoreScreen(props: {
         <MorphingHeading>Добавить счёт</MorphingHeading>
         <button type="button" aria-label="Закрыть" onClick={props.onClose}><AppIcon name="x" size={30} /></button>
       </header>
-      <ScoreValidationSnackbar message={props.validationMessage} />
       <div className="score-value" aria-live="polite"><RollingNumber value={current || "0"} /></div>
       <p className="score-progress">
         <ScorePair
@@ -2277,13 +2316,9 @@ function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: s
           <div className="profile-metric"><span>Процент побед</span><strong><RollingNumber value={winRate(profile.stats)} />%</strong></div>
         </section>
 
-        <dl className="profile-facts">
+        <dl className="profile-facts profile-detailed-facts">
           <div><dt><AppIcon name="calendar" size={21} /><span>Начал играть</span></dt><dd>{formatProfileDate(profile.user.created_at)}</dd></div>
           <div><dt><AppIcon name="chart" size={21} /><span>Уровень игры</span></dt><dd><button className="profile-fact-link" type="button" onClick={props.onLevel} disabled={props.editing}><span>{playerLevels[levelIndexFor(profile)].name}</span><AppIcon name="chevron-right" size={21} /></button></dd></div>
-        </dl>
-
-        <div className="profile-divider"><span>ещё про вас</span></div>
-        <dl className="profile-facts profile-detailed-facts">
           <div><dt><AppIcon name="crown" size={21} /><span>Победы</span></dt><dd>{profile.stats.wins}</dd></div>
           <div><dt><AppIcon name="circle-minus" size={21} /><span>Поражения</span></dt><dd>{profile.stats.losses}</dd></div>
           <div><dt><AppIcon name="circle-pile" size={21} /><span>Всего мячей</span></dt><dd><ScorePair left={profile.stats.points_for} right={profile.stats.points_against} /></dd></div>
@@ -2298,7 +2333,6 @@ function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: s
 function LevelsScreen(props: {
   profile: Profile;
   ratingValue: string;
-  ratingFeedback: RatingFeedback;
   ratingSubmitting: boolean;
   onRatingValue(value: string): void;
   onRatingSave(event: FormEvent<HTMLFormElement>): void;
@@ -2347,15 +2381,6 @@ function LevelsScreen(props: {
             Сбросить
           </button>
         ) : null}
-        {props.ratingFeedback ? (
-          <p
-            className={props.ratingFeedback.tone === "error" ? "rating-feedback rating-feedback-error" : "rating-feedback"}
-            role={props.ratingFeedback.tone === "error" ? "alert" : "status"}
-            aria-live="polite"
-          >
-            {props.ratingFeedback.message}
-          </p>
-        ) : null}
       </section>
     </>
   );
@@ -2363,7 +2388,7 @@ function LevelsScreen(props: {
 
 const EMOJI_BATCH_SIZE = 320;
 
-function AvatarPicker(props: { open: boolean; submitting: boolean; feedback: string; onClose(): void; onEmoji(value: string): void }) {
+function AvatarPicker(props: { open: boolean; submitting: boolean; onClose(): void; onEmoji(value: string): void }) {
   const [visibleEmojiCount, setVisibleEmojiCount] = useState(EMOJI_BATCH_SIZE);
 
   useEffect(() => {
@@ -2376,7 +2401,6 @@ function AvatarPicker(props: { open: boolean; submitting: boolean; feedback: str
         <motion.div className="avatar-picker-overlay" role="presentation" onClick={props.onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }}>
           <motion.section className="avatar-picker" role="dialog" aria-modal="true" aria-label="Выбрать аватар" onClick={(event) => event.stopPropagation()} initial={{ opacity: 0, transform: "translateY(24px) scale(0.98)" }} animate={{ opacity: 1, transform: "translateY(0) scale(1)" }} exit={{ opacity: 0, transform: "translateY(18px) scale(0.99)" }} transition={{ type: "spring", bounce: 0, duration: 0.3 }}>
             <header><MorphingHeading as="h2">Выбрать аватар</MorphingHeading><button className="modal-icon-button" type="button" aria-label="Закрыть" onClick={props.onClose}><AppIcon name="x" size={20} /></button></header>
-            {props.feedback ? <p className="inline-action-error" role="alert">{props.feedback}</p> : null}
             <div
               className="avatar-emoji-grid"
               aria-label="Выбрать эмодзи"
@@ -2402,7 +2426,6 @@ function ActionMenu(props: {
   opponents: Opponent[];
   code: string;
   input: string;
-  message: string;
   submitting: boolean;
   onOpen(): void;
   onClose(): void;
@@ -2419,6 +2442,8 @@ function ActionMenu(props: {
   const reduceMotion = useReducedMotion();
   const previousModeRef = useRef<ActionSheet>(props.mode);
   const triggerReturnsFromMenu = previousModeRef.current !== null && props.mode === null;
+  const returningToRoot = previousModeRef.current !== null && previousModeRef.current !== "actions" && props.mode === "actions";
+  const layoutTransition = reduceMotion ? { duration: 0 } : { duration: 0.24, ease: easeInOut };
   const titles: Record<Exclude<ActionSheet, null>, string> = {
     actions: "Добавить",
     opponents: "Добавить счёт",
@@ -2437,16 +2462,26 @@ function ActionMenu(props: {
         <motion.div
           className="floating-add-slot"
           key="add-trigger"
+          custom={Boolean(props.mode)}
           initial={{ opacity: triggerReturnsFromMenu ? 1 : 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: reduceMotion ? 0.12 : 0.14, ease: easeOut }}
+          variants={{
+            exit: (morphingToMenu: boolean) => ({ opacity: morphingToMenu ? 1 : 0 }),
+          }}
+          exit="exit"
+          transition={{ duration: reduceMotion ? 0.12 : 0.16, ease: easeOut }}
         >
           <motion.div
             className="floating-add-scale"
+            custom={Boolean(props.mode)}
             initial={{ transform: reduceMotion || triggerReturnsFromMenu ? "scale(1)" : "scale(0.96)" }}
             animate={{ transform: "scale(1)" }}
-            exit={{ transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
+            variants={{
+              exit: (morphingToMenu: boolean) => ({
+                transform: reduceMotion || morphingToMenu ? "scale(1)" : "scale(0.96)",
+              }),
+            }}
+            exit="exit"
             transition={{ duration: reduceMotion ? 0.12 : 0.14, ease: easeOut }}
           >
             <motion.button
@@ -2454,6 +2489,8 @@ function ActionMenu(props: {
               type="button"
               aria-label="Добавить"
               title="Добавить"
+              layoutId="add-flow-surface"
+              transition={{ layout: layoutTransition }}
               onClick={(event) => {
                 event.stopPropagation();
                 props.onOpen();
@@ -2475,10 +2512,6 @@ function ActionMenu(props: {
           className={isRoot ? "action-overlay" : "action-overlay action-overlay-expanded"}
           role="presentation"
           onClick={props.onClose}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: reduceMotion ? 0.12 : 0.14, ease: easeOut }}
         >
           <motion.section
             className={isRoot ? "action-sheet action-sheet-root" : "action-sheet action-sheet-expanded"}
@@ -2486,10 +2519,9 @@ function ActionMenu(props: {
             aria-modal="true"
             aria-label={titles[props.mode]}
             onClick={(event) => event.stopPropagation()}
-            initial={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(8px) scale(0.96)" }}
-            animate={{ opacity: 1, transform: "translateY(0) scale(1)" }}
-            exit={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(6px) scale(0.98)" }}
-            transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }}
+            layout
+            layoutId="add-flow-surface"
+            transition={{ layout: layoutTransition }}
           >
             {isRoot ? (
                 <motion.div
@@ -2499,6 +2531,7 @@ function ActionMenu(props: {
                   animate={{ opacity: 1 }}
                   transition={{
                     duration: reduceMotion ? 0.1 : 0.12,
+                    delay: reduceMotion ? 0 : returningToRoot ? 0.16 : 0.1,
                     ease: easeOut,
                   }}
                 >
@@ -2551,7 +2584,6 @@ function ActionMenu(props: {
                       <label htmlFor="invite-code">Код приглашения</label>
                       <input id="invite-code" value={props.input} onChange={(event) => props.onInput(event.target.value.toUpperCase())} placeholder="Например, ABC123" autoComplete="off" required />
                       <button className="sheet-primary-button" type="submit" disabled={props.submitting}>Добавить</button>
-                      {props.message ? <p>{props.message}</p> : null}
                     </form> : null}
                   </motion.div>
                 </motion.div>
@@ -2569,7 +2601,6 @@ function OpponentEditMenu(props: {
   gamesTotal: string;
   pointsTotal: string;
   submitting: boolean;
-  feedback: string;
   onClose(): void;
   onBack(): void;
   onMode(mode: Exclude<OpponentEditSheet, null>): void;
@@ -2653,7 +2684,6 @@ function OpponentEditMenu(props: {
               </motion.span>
             </button>
           </header>
-          {props.feedback ? <p className="inline-action-error" role="alert">{props.feedback}</p> : null}
           <motion.div
             className="action-sheet-panel"
             key={mode}

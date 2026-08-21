@@ -1,4 +1,4 @@
-const collapseDistance = 168;
+export const opponentHeaderCollapseDistance = 168;
 const reducedMotionThreshold = 0.16;
 
 export type OpponentHeaderCollapseState = {
@@ -10,8 +10,11 @@ export type OpponentHeaderCollapseState = {
   avatarOpacity: number;
   avatarTranslateY: number;
   avatarScale: number;
-  titleTranslateY: number;
-  titleScale: number;
+  nameTranslateY: number;
+  nameScale: number;
+  scoreTranslateY: number;
+  scoreScale: number;
+  scoreFontWeight: number;
   summaryOpacity: number;
   summaryTranslateY: number;
 };
@@ -20,7 +23,7 @@ export function calculateOpponentHeaderCollapseState(
   scrollY: number,
   reduceMotion: boolean,
 ): OpponentHeaderCollapseState {
-  const rawProgress = Math.min(1, Math.max(0, scrollY / collapseDistance));
+  const rawProgress = Math.min(1, Math.max(0, scrollY / opponentHeaderCollapseDistance));
   const progress = reduceMotion ? (rawProgress >= reducedMotionThreshold ? 1 : 0) : rawProgress;
   const remaining = 1 - progress;
   return {
@@ -30,11 +33,14 @@ export function calculateOpponentHeaderCollapseState(
     backdropOpacity: Math.min(1, rawProgress * 1.5),
     titlePrimaryShare: Math.round(100 * remaining),
     avatarOpacity: remaining,
-    avatarTranslateY: reduceMotion ? 0 : -84 * progress,
-    avatarScale: reduceMotion ? 1 : 0.45 + 0.55 * remaining,
-    titleTranslateY: reduceMotion ? 0 : 126 * remaining,
-    titleScale: reduceMotion ? 1 : 1 + 0.45 * remaining,
+    avatarTranslateY: reduceMotion ? 0 : 66 * remaining - 40 * progress,
+    avatarScale: reduceMotion ? 1 : 0.35 + 0.65 * remaining,
+    nameTranslateY: reduceMotion ? 0 : 142 * remaining,
+    nameScale: reduceMotion ? 1 : 0.714 + 0.286 * remaining,
+    scoreTranslateY: reduceMotion ? 0 : 160 * remaining,
+    scoreScale: reduceMotion ? 1 : 0.27 + 0.73 * remaining,
+    scoreFontWeight: Math.round(400 + 150 * remaining),
     summaryOpacity: remaining,
-    summaryTranslateY: reduceMotion ? 0 : -64 * progress,
+    summaryTranslateY: reduceMotion ? 0 : -8 * progress,
   };
 }
