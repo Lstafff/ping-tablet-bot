@@ -105,7 +105,7 @@ function calculatePreviewEloChange(playerRating: number, opponentRating: number,
   return value >= 0 ? Math.floor(value + 0.5) : Math.ceil(value - 0.5);
 }
 
-const LOCAL_PREVIEW = tma.isLocalPreview();
+const BROWSER_PREVIEW = !tma.isTelegram();
 
 const previewProfile: Profile = {
   user: {
@@ -244,7 +244,7 @@ function pagedPreview<T>(items: T[], page: number, pageSize = PREVIEW_PAGE_SIZE)
 }
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
-  if (LOCAL_PREVIEW) {
+  if (BROWSER_PREVIEW) {
     return previewApi<T>(path, options);
   }
 
@@ -1322,9 +1322,6 @@ function App() {
   const page = (() => {
     if (loading) {
       return null;
-    }
-    if (!tma.isTelegram() && !LOCAL_PREVIEW) {
-      return <TelegramOnlyScreen />;
     }
     if (!profile) {
       return <ErrorScreen error={error || "Не удалось загрузить данные"} onRetry={() => void loadHome()} />;
@@ -2762,10 +2759,6 @@ function linkedStatsPolicyText(action: ConfirmAction, opponentName: string): str
     ? `${opponentName} исчезнет только из вашего списка.`
     : `Ваша статистика с ${opponentName} обнулится.`;
   return `${localAction} Если данные останутся у соперника, они вернутся после новой партии. Если их не останется у вас обоих, счёт начнётся с нуля.`;
-}
-
-function TelegramOnlyScreen() {
-  return <section className="loading-screen"><p className="eyebrow">пинг понг каунтер</p><MorphingHeading>Открой приложение в Telegram</MorphingHeading><p>Так мы безопасно узнаем твою учётную запись и загрузим статистику</p></section>;
 }
 
 function ErrorScreen({ error, onRetry }: { error: string; onRetry(): void }) {
