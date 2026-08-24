@@ -1,12 +1,27 @@
-.floating-add-slot {
+.action-layer {
   position: fixed;
   z-index: 3;
-  left: 50%;
-  bottom: calc(var(--space-floating-action-bottom) + max(env(safe-area-inset-bottom), var(--tma-safe-bottom)));
-  width: min(100%, 430px);
-  height: var(--size-action-control);
-  transform: translateX(-50%);
+  inset: 0;
+  height: var(--tma-viewport-height, 100dvh);
   pointer-events: none;
+}
+
+.floating-add-slot {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% - var(--space-floating-action-bottom) - max(env(safe-area-inset-bottom), var(--tma-safe-bottom)) - var(--size-action-control));
+  right: auto;
+  bottom: auto;
+  left: max(0px, calc((100vw - 430px) / 2));
+  width: min(100vw, 430px);
+  height: var(--size-action-control);
+  margin: 0;
+  pointer-events: none;
+}
+
+.action-layer .action-overlay {
+  position: absolute;
+  pointer-events: auto;
 }
 
 .floating-add-scale {

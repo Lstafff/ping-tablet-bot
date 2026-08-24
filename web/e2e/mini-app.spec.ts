@@ -131,6 +131,101 @@ test("opens the central add-score flow without waiting and uses the shared selec
   await expect.poll(async () => (await indicator.boundingBox())?.x ?? 0).toBeGreaterThan(ownPosition?.x ?? Number.POSITIVE_INFINITY);
 });
 
+test("keeps nested transitions anchored and closes the avatar picker visibly", async ({ page }) => {
+  await page.goto("/");
+
+  const addButton = page.getByRole("button", { name: "Добавить", exact: true });
+  const initialAddBox = await addButton.boundingBox();
+  if (!initialAddBox) throw new Error("Не удалось измерить кнопку добавления");
+
+  await page.locator(".opponent-card").filter({ hasText: "Мария" }).click();
+  await expect(page.getByRole("heading", { name: "Мария" })).toBeVisible();
+  await page.getByRole("button", { name: "Назад" }).click();
+
+  const returningAddSamples = await page.evaluate(async () => {
+    const samples: Array<{ x: number; y: number; scale: number }> = [];
+    for (let index = 0; index < 24; index += 1) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const button = document.querySelector<HTMLElement>('.floating-add-button');
+      const scaleWrapper = document.querySelector<HTMLElement>('.floating-add-scale');
+      const slot = document.querySelector<HTMLElement>('.floating-add-slot');
+      if (!button || !scaleWrapper || !slot) continue;
+      if (Number(getComputedStyle(slot).opacity) < 0.5) continue;
+      const box = button.getBoundingClientRect();
+      samples.push({
+        x: box.x + box.width / 2,
+        y: box.y + box.height / 2,
+        scale: new DOMMatrixReadOnly(getComputedStyle(scaleWrapper).transform).a,
+      });
+    }
+    return samples;
+  });
+  expect(returningAddSamples.length).toBeGreaterThan(0);
+  for (const sample of returningAddSamples) {
+    expect(sample.x).toBeCloseTo(initialAddBox.x + initialAddBox.width / 2, 1);
+    expect(sample.y).toBeCloseTo(initialAddBox.y + initialAddBox.height / 2, 1);
+    expect(sample.scale).toBeCloseTo(1, 2);
+  }
+
+  await expect(addButton).toBeVisible();
+  const addCenter = {
+    x: initialAddBox.x + initialAddBox.width / 2,
+    y: initialAddBox.y + initialAddBox.height / 2,
+  };
+  await addButton.click();
+  const openingSurface = await page.evaluate(async () => {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const surface = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Добавить"]');
+    if (!surface) return null;
+    const box = surface.getBoundingClientRect();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  });
+  expect(openingSurface).not.toBeNull();
+  expect(openingSurface?.x ?? 0).toBeGreaterThan(page.viewportSize()!.width / 2);
+  expect(openingSurface?.y ?? 0).toBeGreaterThan(page.viewportSize()!.height / 2);
+  expect(Math.hypot((openingSurface?.x ?? 0) - addCenter.x, (openingSurface?.y ?? 0) - addCenter.y)).toBeLessThan(140);
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Профиль" }).click();
+  await page.getByRole("button", { name: "Настройки" }).click();
+  const nameInput = page.getByRole("textbox", { name: "Имя профиля" });
+  await expect(nameInput).toBeFocused();
+  const inputChrome = await nameInput.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      outline: style.outlineStyle,
+      shadow: style.boxShadow,
+      borderStyle: style.borderBottomStyle,
+      borderWidth: style.borderBottomWidth,
+      borderColor: style.borderBottomColor,
+    };
+  });
+  expect(inputChrome).toEqual({
+    outline: "none",
+    shadow: "none",
+    borderStyle: "solid",
+    borderWidth: "1px",
+    borderColor: "rgb(102, 105, 107)",
+  });
+
+  await page.getByRole("button", { name: "Изменить аватар" }).click();
+  const avatarDialog = page.getByRole("dialog", { name: "Выбрать аватар" });
+  await expect(avatarDialog).toBeVisible();
+  const avatarDialogHandle = await avatarDialog.elementHandle();
+  if (!avatarDialogHandle) throw new Error("Не найден dialog выбора аватара");
+  await avatarDialog.getByRole("button", { name: "Закрыть" }).click();
+  await page.waitForTimeout(32);
+  const closingState = await avatarDialogHandle.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const matrix = new DOMMatrixReadOnly(style.transform);
+    return { opacity: Number(style.opacity), scale: matrix.a, y: matrix.f };
+  });
+  expect(closingState.opacity).toBeLessThan(1);
+  expect(closingState.scale).toBeLessThan(1);
+  expect(closingState.y).toBeGreaterThan(0);
+  await expect(avatarDialog).toHaveCount(0);
+});
+
 test.describe("reduced motion", () => {
   test.use({ reducedMotion: "reduce" });
 
@@ -346,7 +441,16 @@ test("collapses the opponent header and returns to the originating history", asy
   const mariaMatch = page.getByRole("button", { name: /Победа Мария/ }).last();
   await mariaMatch.scrollIntoViewIfNeeded();
   await expect(mariaMatch).toBeVisible();
+  const outgoingHistory = page.locator('main[data-screen="stats"]');
+  const outgoingHistoryHandle = await outgoingHistory.elementHandle();
+  if (!outgoingHistoryHandle) throw new Error("Не найден исходящий экран истории");
   await mariaMatch.click();
+  await page.waitForTimeout(64);
+  const historyExitState = await outgoingHistoryHandle.evaluate((element) => ({
+    connected: element.isConnected,
+    opacity: Number(getComputedStyle(element).opacity),
+  }));
+  expect(historyExitState.connected ? historyExitState.opacity : 0).toBeLessThan(0.5);
 
   await expect(page.getByRole("heading", { name: "Мария" })).toBeVisible();
   await page.waitForTimeout(280);

@@ -75,7 +75,9 @@ input:focus-visible {
 }
 
 .screen {
+  width: 100%;
   min-height: 60vh;
+  overflow-x: clip;
   background: var(--color-canvas);
 }
 

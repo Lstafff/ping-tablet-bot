@@ -46,7 +46,7 @@ type ScoreReturnTarget = "home" | "opponent";
 type PendingAction = "score" | "opponent" | "invite" | "rating" | "profile" | "avatar";
 type PaginationRequest = { token: number; inFlight: boolean };
 type SnackbarNotice = { id: number; tone: SnackbarTone; message: string } | null;
-type ScreenMotion = { kind: "none" } | { kind: "reveal" } | { kind: "tab"; direction: -1 | 1 } | { kind: "back" };
+type ScreenMotion = { kind: "none" } | { kind: "reveal" } | { kind: "tab"; direction: -1 | 1 } | { kind: "forward" } | { kind: "back" };
 
 const mainTabPosition: Record<MainTab, number> = {
   stats: 0,
@@ -113,7 +113,7 @@ function App() {
     return saved === "stats" || saved === "profile" ? saved : "home";
   });
   const [mainTabDirection, setMainTabDirection] = useState<-1 | 0 | 1>(0);
-  const [screenTransition, setScreenTransition] = useState<"default" | "back">("default");
+  const [screenTransition, setScreenTransition] = useState<"default" | "forward" | "back">("default");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [opponents, setOpponents] = useState<Opponent[]>([]);
   const [selectedOpponent, setSelectedOpponent] = useState<Opponent | null>(null);
@@ -412,7 +412,7 @@ function App() {
   };
 
   const openOpponent = (opponent: Opponent, tab: StatsTab = "summary", page = 1, returnScreen: "home" | "stats" = screen === "stats" ? "stats" : "home", layoutIdentity: string | number = opponent.id) => {
-    setScreenTransition("default");
+    setScreenTransition("forward");
     setOpponentLayoutIdentity(layoutIdentity);
     opponentReturnScreen.current = returnScreen;
     if (screen === "home" || screen === "stats" || screen === "profile") {
@@ -950,6 +950,8 @@ function App() {
     ? { kind: "reveal" }
     : screenTransition === "back"
     ? { kind: "back" }
+    : screenTransition === "forward"
+    ? { kind: "forward" }
     : isMainTabScreen(screen) && isMainTabScreen(previousRenderedScreen.current) && savedHistoryScroll <= 0 && mainTabDirection !== 0
       ? { kind: "tab", direction: mainTabDirection }
       : { kind: "none" };
@@ -979,7 +981,11 @@ function App() {
             initial={false}
             mode="popLayout"
             custom={screenMotion}
-            onExitComplete={() => setScreenTransition("default")}
+            onExitComplete={() => {
+              window.requestAnimationFrame(() => {
+                window.requestAnimationFrame(() => setScreenTransition("default"));
+              });
+            }}
           >
             <motion.main
               className="screen"
@@ -1019,6 +1025,15 @@ function App() {
                       transform: reduceMotion ? "translateX(0)" : "translate3d(102vw, 0, 0)",
                       zIndex: 2,
                       transition: { duration: reduceMotion ? 0.12 : 0.25, ease: easeOut },
+                    };
+                  }
+                  if (motion.kind === "forward") {
+                    return {
+                      opacity: 0,
+                      transform: "translateX(0)",
+                      filter: "blur(0)",
+                      zIndex: 0,
+                      transition: { duration: 0.12, ease: easeOut },
                     };
                   }
                   if (motion.kind === "tab") {
@@ -1085,7 +1100,7 @@ function App() {
         ) : null}
         <ActionMenu
           mode={actionSheet}
-          showTrigger={screen === "home" && Boolean(profile)}
+          showTrigger={screen === "home" && screenTransition === "default" && Boolean(profile)}
           opponents={opponents}
           code={inviteCode}
           input={inviteInput}

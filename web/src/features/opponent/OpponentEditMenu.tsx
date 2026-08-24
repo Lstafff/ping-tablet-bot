@@ -167,9 +167,9 @@ export function OpponentEditMenu(props: {
         aria-modal="true"
         aria-label={titles[mode]}
         onClick={(event) => event.stopPropagation()}
-        initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
-        animate={{ opacity: 1, transform: "scale(1)" }}
-        exit={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)", transition: { duration: reduceMotion ? 0.12 : 0.15, ease: [0.22, 1, 0.36, 1] } }}
+        initial={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(12px) scale(0.96)" }}
+        animate={{ opacity: 1, transform: "translateY(0) scale(1)" }}
+        exit={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(12px) scale(0.96)", transition: { duration: reduceMotion ? 0.12 : 0.15, ease: [0.22, 1, 0.36, 1] } }}
         transition={{ duration: reduceMotion ? 0.12 : 0.25, ease: [0.22, 1, 0.36, 1] }}
       >
         <AnimatePresence initial={false} mode="popLayout" custom={stateDirection}>

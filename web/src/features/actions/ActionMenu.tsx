@@ -1,4 +1,4 @@
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import type { Opponent } from "../../api/types";
@@ -47,9 +47,9 @@ export function AvatarPicker(props: { open: boolean; submitting: boolean; onClos
             aria-modal="true"
             aria-label="Выбрать аватар"
             onClick={(event) => event.stopPropagation()}
-            initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
-            animate={{ opacity: 1, transform: "scale(1)" }}
-            exit={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)", transition: { duration: reduceMotion ? 0.12 : 0.15, ease: [0.22, 1, 0.36, 1] } }}
+            initial={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(12px) scale(0.96)" }}
+            animate={{ opacity: 1, transform: "translateY(0) scale(1)" }}
+            exit={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(12px) scale(0.96)", transition: { duration: reduceMotion ? 0.12 : 0.15, ease: [0.22, 1, 0.36, 1] } }}
             transition={{ duration: reduceMotion ? 0.12 : 0.25, ease: [0.22, 1, 0.36, 1] }}
           >
             <header><MorphingHeading as="h2">Выбрать аватар</MorphingHeading><button className="modal-icon-button" type="button" aria-label="Закрыть" onClick={props.onClose}><AppIcon name="x" size={20} /></button></header>
@@ -93,6 +93,8 @@ export function ActionMenu(props: {
 }) {
   const reduceMotion = useReducedMotion();
   const dialogRef = useRef<HTMLElement>(null);
+  const surfaceSession = useRef(0);
+  const previousShowTrigger = useRef(props.showTrigger);
   useModalDialog(Boolean(props.mode), props.onClose, dialogRef);
   const dropdownEase = [0.22, 1, 0.36, 1] as const;
   const surfaceTransition = reduceMotion
@@ -112,6 +114,10 @@ export function ActionMenu(props: {
     previousMode.current = props.mode;
   }, [props.mode]);
 
+  if (props.showTrigger && !previousShowTrigger.current) surfaceSession.current += 1;
+  previousShowTrigger.current = props.showTrigger;
+  const addSurfaceLayoutId = reduceMotion ? undefined : `add-flow-surface-${surfaceSession.current}`;
+
   const stateVariants = {
     enter: (direction: number) => ({
       opacity: direction === 0 ? 1 : 0,
@@ -127,7 +133,9 @@ export function ActionMenu(props: {
   };
 
   return (
-    <AnimatePresence initial={false}>
+    <LayoutGroup id="add-flow" key={surfaceSession.current}>
+      <motion.div className="action-layer" layoutRoot>
+        <AnimatePresence initial={false}>
       {!props.mode && props.showTrigger ? (
         <motion.div
           className="floating-add-slot"
@@ -137,19 +145,13 @@ export function ActionMenu(props: {
           exit={{ opacity: 0 }}
           transition={{ duration: reduceMotion ? 0.12 : 0.15, ease: dropdownEase }}
         >
-          <motion.div
-            className="floating-add-scale"
-            initial={{ transform: reduceMotion ? "scale(1)" : "scale(0.5)" }}
-            animate={{ transform: "scale(1)" }}
-            exit={{ transform: "scale(1)" }}
-            transition={{ duration: reduceMotion ? 0.12 : 0.2, ease: dropdownEase }}
-          >
+          <div className="floating-add-scale">
             <motion.button
               className="floating-add-button"
               type="button"
               aria-label="Добавить"
               title="Добавить"
-              layoutId={reduceMotion ? undefined : "add-flow-surface"}
+              layoutId={addSurfaceLayoutId}
               transition={{ layout: { duration: reduceMotion ? 0 : 0.15, ease: dropdownEase } }}
               onClick={(event) => {
                 event.stopPropagation();
@@ -164,7 +166,7 @@ export function ActionMenu(props: {
                 <AppIcon name="add" aria-hidden="true" size={32} strokeWidth={2} />
               </motion.span>
             </motion.button>
-          </motion.div>
+          </div>
         </motion.div>
       ) : props.mode ? (
         <motion.div
@@ -180,8 +182,8 @@ export function ActionMenu(props: {
             aria-modal="true"
             aria-label={titles[props.mode]}
             onClick={(event) => event.stopPropagation()}
-            layout="size"
-            layoutId={reduceMotion ? undefined : "add-flow-surface"}
+            layout
+            layoutId={addSurfaceLayoutId}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{
@@ -257,6 +259,8 @@ export function ActionMenu(props: {
           </motion.section>
         </motion.div>
       ) : null}
-    </AnimatePresence>
+        </AnimatePresence>
+      </motion.div>
+    </LayoutGroup>
   );
 }
