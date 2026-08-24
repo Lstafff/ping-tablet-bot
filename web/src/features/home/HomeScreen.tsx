@@ -6,7 +6,7 @@ import { AppIcon } from "../../components/AppIcon";
 import { MorphingHeading } from "../../components/PageHeader";
 import { ProfileAvatarContent } from "../../components/ProfileAvatar";
 import { ScorePair } from "../../components/ScoreDisplay";
-import { easeInOut, opponentSharedLayoutId } from "../../lib/motion";
+import { easeOut, opponentSharedLayoutId } from "../../lib/motion";
 import { gamesCount, opponentName, winRate } from "../../lib/player";
 import "./home.css";
 
@@ -51,14 +51,14 @@ export function HomeScreen({ profile, opponents, onOpenOpponent }: { profile: Pr
               <motion.span
                 className="avatar"
                 layoutId={opponentSharedLayoutId(opponent.id, "avatar")}
-                transition={{ layout: { duration: 0.24, ease: easeInOut } }}
+                transition={{ layout: { duration: 0.25, ease: easeOut } }}
                 aria-hidden="true"
               >
                 <ProfileAvatarContent value={opponent.avatar_value ?? null} defaultIconSize={22} />
               </motion.span>
               <span className="opponent-card-copy">
-                <motion.strong layoutId={opponentSharedLayoutId(opponent.id, "name")}>{opponentName(opponent)}</motion.strong>
-                <motion.small layoutId={opponent.stats ? opponentSharedLayoutId(opponent.id, "score") : undefined}>
+                <motion.strong layoutId={opponentSharedLayoutId(opponent.id, "name")} transition={{ layout: { duration: 0.25, ease: easeOut } }}>{opponentName(opponent)}</motion.strong>
+                <motion.small layoutId={opponent.stats ? opponentSharedLayoutId(opponent.id, "score") : undefined} transition={{ layout: { duration: 0.25, ease: easeOut } }}>
                   {opponent.stats ? <ScorePair left={opponent.stats.wins} right={opponent.stats.losses} /> : "Счёт пока не добавлен"}
                 </motion.small>
               </span>

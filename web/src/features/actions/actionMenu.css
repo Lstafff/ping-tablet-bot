@@ -67,6 +67,7 @@
   background: var(--color-surface);
   padding: var(--space-8);
   box-shadow: var(--shadow-picker);
+  transform-origin: bottom center;
 }
 
 .avatar-picker header {

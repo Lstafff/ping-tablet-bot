@@ -29,7 +29,7 @@ import { ActionMenu, AvatarPicker, type ActionSheet } from "./features/actions/A
 import { HistoryScreen } from "./features/history/HistoryScreen";
 import { HomeScreen } from "./features/home/HomeScreen";
 import { OpponentEditMenu, type OpponentEditSheet } from "./features/opponent/OpponentEditMenu";
-import { OpponentOpeningScreen, OpponentScreen, type StatsTab } from "./features/opponent/OpponentFlow";
+import { OpponentScreen, type StatsTab } from "./features/opponent/OpponentFlow";
 import { LevelsScreen, ProfileScreen } from "./features/profile/ProfileScreens";
 import { ScoreDrawer, type ScoreSide } from "./features/score/ScoreDrawer";
 import { easeInOut, easeOut } from "./lib/motion";
@@ -897,6 +897,7 @@ function App() {
         <HistoryScreen
           newestFirst={historyNewestFirst}
           view={history}
+          opponents={opponents}
           loadingMore={historyLoadingMore}
           loadError={historyLoadError}
           onLoadMore={() => void loadHistory((history?.page ?? 1) + 1, true)}
@@ -917,9 +918,6 @@ function App() {
       );
     }
     if (screen === "opponent" && selectedOpponent) {
-      if (!opponentStats) {
-        return <OpponentOpeningScreen opponent={selectedOpponent} layoutIdentity={opponentLayoutIdentity} onBack={goBack} />;
-      }
       return (
         <OpponentScreen
           opponent={selectedOpponent}
@@ -1020,9 +1018,7 @@ function App() {
                       opacity: reduceMotion ? 0 : 1,
                       transform: reduceMotion ? "translateX(0)" : "translate3d(102vw, 0, 0)",
                       zIndex: 2,
-                      transition: reduceMotion
-                        ? { duration: 0.12 }
-                        : { type: "spring", stiffness: 500, damping: 40, mass: 0.7 },
+                      transition: { duration: reduceMotion ? 0.12 : 0.25, ease: easeOut },
                     };
                   }
                   if (motion.kind === "tab") {

@@ -5,7 +5,6 @@ import { Drawer } from "vaul";
 import { AnimatedNumber } from "../../components/AnimatedNumber";
 import { AppIcon } from "../../components/AppIcon";
 import { NumericKeypad } from "../../components/NumericKeypad";
-import { MorphingHeading } from "../../components/PageHeader";
 import { ScorePair } from "../../components/ScoreDisplay";
 import { SegmentedControl } from "../../components/SegmentedControl";
 import { easeInOut, easeOut } from "../../lib/motion";
@@ -238,14 +237,13 @@ export function ScoreDrawer(props: {
       open={props.open}
       onOpenChange={props.onOpenChange}
       fixed
-      handleOnly
       repositionInputs={false}
       shouldScaleBackground={!reduceMotion}
     >
       <Drawer.Portal>
         <Drawer.Overlay className="score-drawer-overlay" />
         <Drawer.Content className="score-drawer-content">
-          <Drawer.Title className="visually-hidden">Добавить счёт</Drawer.Title>
+          <Drawer.Title className="visually-hidden">Добавление счёта с {props.opponentName}</Drawer.Title>
           <Drawer.Description className="visually-hidden">Введи свой счёт и счёт соперника</Drawer.Description>
           <Drawer.Handle className="score-drawer-handle" aria-label="Потянуть, чтобы закрыть" />
           <ScoreScreen {...props} />
@@ -276,7 +274,7 @@ function ScoreScreen(props: {
     <motion.section className="score-screen">
       <header className="score-header">
         <button type="button" aria-label="Назад" onClick={props.onBack}><AppIcon name="arrow-left" size={29} /></button>
-        <MorphingHeading>Добавить счёт</MorphingHeading>
+        <h1><strong>Добавление счёта</strong><small>с&nbsp;{props.opponentName}</small></h1>
         <button type="button" aria-label="Закрыть" onClick={props.onClose}><AppIcon name="x" size={30} /></button>
       </header>
       <div className="score-value" aria-live="polite"><AnimatedNumber value={current || "0"} /></div>

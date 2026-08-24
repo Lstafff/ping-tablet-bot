@@ -1,4 +1,4 @@
-import { motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 import { AppIcon } from "../../components/AppIcon";
@@ -86,8 +86,10 @@ export function OpponentEditMenu(props: {
 }) {
   const reduceMotion = useReducedMotion();
   const dialogRef = useRef<HTMLElement>(null);
+  const previousMode = useRef<OpponentEditSheet>(null);
   useModalDialog(true, props.onClose, dialogRef);
   const mode = props.mode;
+  const stateDirection = previousMode.current === null ? 0 : mode === "actions" ? -1 : 1;
   const [pairSide, setPairSide] = useState<ScoreSide>("own");
   const touchedPairSides = useRef<Set<ScoreSide>>(new Set());
   const titles: Record<Exclude<OpponentEditSheet, null>, string> = {
@@ -129,6 +131,24 @@ export function OpponentEditMenu(props: {
     touchedPairSides.current = new Set();
   }, [mode]);
 
+  useEffect(() => {
+    previousMode.current = mode;
+  }, [mode]);
+
+  const stateVariants = {
+    enter: (direction: number) => ({
+      opacity: direction === 0 ? 1 : 0,
+      transform: reduceMotion || direction === 0 ? "translateX(0)" : `translateX(${direction * 8}px)`,
+      filter: reduceMotion || direction === 0 ? "none" : "blur(3px)",
+    }),
+    center: { opacity: 1, transform: "translateX(0)", filter: "none" },
+    exit: (direction: number) => ({
+      opacity: direction === 0 ? 1 : 0,
+      transform: reduceMotion || direction === 0 ? "translateX(0)" : `translateX(${-direction * 8}px)`,
+      filter: reduceMotion || direction === 0 ? "none" : "blur(3px)",
+    }),
+  };
+
   return (
     <motion.div
       className="action-overlay"
@@ -136,8 +156,8 @@ export function OpponentEditMenu(props: {
       onClick={props.onClose}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }}
+      exit={{ opacity: 0, transition: { duration: reduceMotion ? 0.12 : 0.15, ease: [0.22, 1, 0.36, 1] } }}
+      transition={{ duration: reduceMotion ? 0.12 : 0.25, ease: [0.22, 1, 0.36, 1] }}
     >
       <motion.section
         ref={dialogRef}
@@ -147,8 +167,22 @@ export function OpponentEditMenu(props: {
         aria-modal="true"
         aria-label={titles[mode]}
         onClick={(event) => event.stopPropagation()}
+        initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
+        animate={{ opacity: 1, transform: "scale(1)" }}
+        exit={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)", transition: { duration: reduceMotion ? 0.12 : 0.15, ease: [0.22, 1, 0.36, 1] } }}
+        transition={{ duration: reduceMotion ? 0.12 : 0.25, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="action-sheet-content">
+        <AnimatePresence initial={false} mode="popLayout" custom={stateDirection}>
+        <motion.div
+          className="action-sheet-content action-sheet-state"
+          key={mode}
+          custom={stateDirection}
+          variants={stateVariants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{ duration: reduceMotion ? 0.12 : 0.25, ease: [0.22, 1, 0.36, 1] }}
+        >
           <header>
             <MorphingHeading as="h2">{titles[mode]}</MorphingHeading>
             <button className="modal-icon-button" type="button" aria-label={isRoot ? "Закрыть" : "Назад"} onClick={isRoot ? props.onClose : props.onBack}>
@@ -163,13 +197,7 @@ export function OpponentEditMenu(props: {
               </motion.span>
             </button>
           </header>
-          <motion.div
-            className="action-sheet-panel"
-            key={mode}
-            initial={{ opacity: 0, transform: reduceMotion ? "translateX(0)" : "translateX(12px)" }}
-            animate={{ opacity: 1, transform: "translateX(0)" }}
-            transition={{ duration: 0.18, ease: easeOut }}
-          >
+          <div className="action-sheet-panel">
                   {mode === "actions" ? (
                     <div className="action-list opponent-edit-list">
                       <button type="button" onClick={() => props.onMode("games")}><span className="action-icon action-icon-blue"><AppIcon name="award" size={25} /></span><span><strong>Изменить счёт</strong><small>Обновить общий итог матчей</small></span></button>
@@ -199,8 +227,9 @@ export function OpponentEditMenu(props: {
                       <button className="sheet-danger-button" type="button" onClick={props.onConfirm} disabled={props.submitting}>{props.submitting ? (mode === "delete" ? "Удаляем…" : "Сбрасываем…") : mode === "delete" ? "Удалить" : "Сбросить"}</button>
                     </div>
                   ) : null}
-          </motion.div>
-        </div>
+          </div>
+        </motion.div>
+        </AnimatePresence>
       </motion.section>
     </motion.div>
   );

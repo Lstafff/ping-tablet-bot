@@ -1,4 +1,4 @@
-export const opponentHeaderCollapseDistance = 260;
+export const opponentHeaderCollapseDistance = 196;
 const reducedMotionThreshold = 0.16;
 const opponentHeaderSnapThreshold = opponentHeaderCollapseDistance * reducedMotionThreshold;
 
@@ -30,18 +30,18 @@ export function calculateOpponentHeaderCollapseState(
     progress,
     remaining,
     backdropOpacity: Math.min(1, rawProgress * 1.5),
-    avatarTranslateY: reduceMotion || progress === 0 ? 0 : -108 * progress,
-    avatarScale: reduceMotion ? 1 : 0.42 + 0.58 * remaining,
+    avatarTranslateY: reduceMotion || progress === 0 ? 0 : -140 * progress,
+    avatarScale: reduceMotion ? 1 : 0.45 + 0.55 * remaining,
 
-    nameTranslateY: reduceMotion ? 0 : 132 * remaining,
-    nameScale: reduceMotion ? 1 : 1 + 0.45 * remaining,
+    nameTranslateY: reduceMotion || progress === 0 ? 0 : -127 * progress,
+    nameScale: reduceMotion ? 1 : 0.7142857 + 0.2857143 * remaining,
 
-    scoreTranslateY: reduceMotion ? 0 : 143 * remaining,
-    scoreScale: reduceMotion ? 1 : 1 + 0.45 * remaining,
-    scoreFontWeight: Math.round(400 + 150 * remaining),
+    scoreTranslateY: reduceMotion || progress === 0 ? 0 : -139 * progress,
+    scoreScale: reduceMotion ? 1 : 0.3125 + 0.6875 * remaining,
+    scoreFontWeight: Math.round(400 + 200 * remaining),
 
     summaryOpacity: remaining,
-    summaryTranslateY: reduceMotion ? 0 : -100 * progress,
+    summaryTranslateY: reduceMotion ? 0 : -80 * progress,
   };
 }
 

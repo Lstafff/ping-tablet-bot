@@ -29,11 +29,15 @@ test("opens an opponent and records a score through the Vaul drawer", async ({ p
   await page.getByRole("button", { name: "Редактировать" }).click();
   const editDialog = page.getByRole("dialog", { name: "Изменить" });
   await expect(editDialog).toBeVisible();
-  await expect(editDialog).toHaveCSS("transform", "none");
+  await expect.poll(async () => editDialog.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).a)).toBeCloseTo(1, 2);
   await editDialog.getByRole("button", { name: "Закрыть" }).click();
+  await expect(editDialog).toHaveCount(0);
 
   await page.getByRole("button", { name: "Добавить счёт" }).click();
-  await expect(page.getByRole("dialog", { name: "Добавить счёт" })).toBeVisible();
+  const scoreDialog = page.getByRole("dialog", { name: "Добавление счёта с Мария" });
+  await expect(scoreDialog).toBeVisible();
+  await expect(scoreDialog.locator(".score-header strong")).toHaveText("Добавление счёта");
+  await expect(scoreDialog.locator(".score-header small")).toHaveText("с Мария");
   const drawer = page.locator(".score-drawer-content");
   const drawerBox = await drawer.boundingBox();
   expect(drawerBox?.x).toBe(0);
@@ -44,6 +48,18 @@ test("opens an opponent and records a score through the Vaul drawer", async ({ p
     .toBeCloseTo(drawerBox ? drawerBox.x + drawerBox.width / 2 : Number.POSITIVE_INFINITY, 1);
   expect(handleBox?.width ?? 0).toBeGreaterThanOrEqual(44);
   expect(handleBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+
+  const dragSurface = drawer.locator(".score-progress");
+  const dragBox = await dragSurface.boundingBox();
+  if (!dragBox) throw new Error("Не удалось измерить область перетаскивания drawer");
+  await page.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2 + 300, { steps: 8 });
+  await page.mouse.up();
+  await expect(scoreDialog).toBeHidden();
+
+  await page.getByRole("button", { name: "Добавить счёт" }).click();
+  await expect(scoreDialog).toBeVisible();
   await page.getByRole("button", { name: "1", exact: true }).click();
   await expect.poll(async () => page.locator(".score-value .t-digit").first().evaluate((element) => getComputedStyle(element).animationName))
     .toContain("t-digit-pop-in");
@@ -52,7 +68,7 @@ test("opens an opponent and records a score through the Vaul drawer", async ({ p
   await page.getByRole("button", { name: "8", exact: true }).click();
   await page.getByRole("button", { name: "Сохранить" }).click();
 
-  await expect(page.getByRole("dialog", { name: "Добавить счёт" })).toBeHidden();
+  await expect(scoreDialog).toBeHidden();
   const addScoreButton = page.getByRole("button", { name: "Добавить счёт" });
   const undoScoreButton = page.getByRole("button", { name: "Отменить последний счёт" });
   await expect(undoScoreButton).toBeVisible();
@@ -92,7 +108,13 @@ test("opens the central add-score flow without waiting and uses the shared selec
     resolve(surface ? getComputedStyle(surface).transform : "none");
   })));
   expect(dropdownSurfaceTransform).not.toBe("none");
-  await expect(rootMenu.locator(".add-flow-menu")).toHaveCSS("transform", "none");
+  const menuState = await rootMenu.locator(".add-flow-menu").evaluate((element) => {
+    const matrix = new DOMMatrixReadOnly(getComputedStyle(element).transform);
+    return { x: matrix.m41, y: matrix.m42, filter: getComputedStyle(element).filter };
+  });
+  expect(menuState.x).toBe(0);
+  expect(menuState.y).toBe(0);
+  expect(["none", "blur(0px)"]).toContain(menuState.filter);
   await rootMenu.getByRole("button", { name: /Добавить счёт/ }).click();
 
   const opponentPicker = page.getByRole("dialog", { name: "Добавить счёт", exact: true });
@@ -346,9 +368,9 @@ test("collapses the opponent header and returns to the originating history", asy
     .toBeGreaterThanOrEqual(-6);
   expect(expandedScoreBox && expandedNameBox ? expandedScoreBox.y : 0)
     .toBeGreaterThan(expandedNameBox ? expandedNameBox.y + expandedNameBox.height : Number.POSITIVE_INFINITY);
-  await expect(page.locator(".opponent-header-avatar-content .profile-avatar-emoji")).toHaveCSS("font-size", "48px");
+  await expect(page.locator(".opponent-header-avatar-content .profile-avatar-emoji")).toHaveCSS("font-size", "40px");
 
-  await page.evaluate(() => window.scrollTo({ top: 130, behavior: "auto" }));
+  await page.evaluate(() => window.scrollTo({ top: 98, behavior: "auto" }));
   const intermediateState = await page.evaluate(() => new Promise<{ opacity: number; transform: string }>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
     const element = document.querySelector<HTMLElement>(".opponent-header-avatar-content");
     const styles = element ? getComputedStyle(element) : null;
@@ -356,18 +378,17 @@ test("collapses the opponent header and returns to the originating history", asy
   }))));
   expect(intermediateState.opacity).toBe(1);
   expect(intermediateState.transform).not.toBe("none");
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(260, 0);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(196, 0);
 
-  await expect.poll(async () => (await avatar.boundingBox())?.width ?? 0).toBeCloseTo(31.9, 0);
-  await expect(avatar).toHaveCSS("opacity", "1");
+  await expect.poll(async () => (await avatar.boundingBox())?.width ?? 0).toBeCloseTo(34.2, 0);
   await expect(summary).toHaveCSS("opacity", "0");
   const compactHeaderBox = await header.boundingBox();
   const compactAvatarBox = await avatar.boundingBox();
   const compactNameBox = await name.boundingBox();
   const compactScoreBox = await score.boundingBox();
   expect(compactHeaderBox?.y).toBeCloseTo(expandedHeaderBox?.y ?? Number.POSITIVE_INFINITY, 1);
-  expect(compactAvatarBox && compactHeaderBox ? compactAvatarBox.y : Number.POSITIVE_INFINITY)
-    .toBeLessThan(compactHeaderBox?.y ?? 0);
+  expect(compactAvatarBox ? compactAvatarBox.y + compactAvatarBox.height : Number.POSITIVE_INFINITY)
+    .toBeLessThanOrEqual(0);
   expect(compactNameBox && compactHeaderBox ? compactNameBox.x + compactNameBox.width / 2 : 0)
     .toBeCloseTo(compactHeaderBox ? compactHeaderBox.x + compactHeaderBox.width / 2 : Number.POSITIVE_INFINITY, 1);
   expect(compactScoreBox && compactHeaderBox ? compactScoreBox.x + compactScoreBox.width / 2 : 0)
@@ -386,6 +407,11 @@ test("collapses the opponent header and returns to the originating history", asy
     getComputedStyle(document.body).color,
   ]);
   expect(compactNameColor).toBe(pageTextColor);
+
+  await page.getByRole("tab", { name: "По дням" }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(196, 0);
+  await page.getByRole("tab", { name: "По играм" }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(196, 0);
 
   const outgoingOpponentScreen = page.locator('main[data-screen="opponent"]');
   const navigationState = () => page.evaluate(() => {

@@ -75,12 +75,12 @@
 .history-avatar {
   position: relative;
   display: grid;
-  width: 54px;
-  height: 54px;
+  width: 52px;
+  height: 52px;
   place-items: center;
   border-radius: 50%;
-  background: var(--color-avatar-base);
-  color: var(--color-text-inverse);
+  background: var(--color-surface-subtle);
+  color: var(--color-icon-muted);
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-heavy);
 }

@@ -29,7 +29,7 @@ when a control must remain circular as its size changes.
 
 | Exception | Why it is not a spacing/radius token |
 | --- | --- |
-| Collapsing opponent header coordinates and travel | Feature-local named variables encode the measured expanded/compact geometry: avatar top/half-size, island neck, compact text clearance and summary boundary. |
+| Collapsing opponent header coordinates and travel | Feature-local named variables encode the measured expanded/compact geometry: avatar top/half-size, viewport exit, compact text clearance and summary boundary. |
 | Action-menu transform origin and optical offsets | They preserve continuity with the physical `+` trigger. |
 | Header, history badge and FNTR badge optical offsets | Negative offsets align icons, sticky backdrops and badges to their visual boundaries; canonical values use the scale, while the measured `-5px` history and `-7px` FNTR offsets are named feature-local variables. |
 | Current 26 px page gutter | It is retained during the visual-parity pass; replacing it with 24 px requires a separate width/safe-area comparison. |
@@ -38,7 +38,7 @@ when a control must remain circular as its size changes.
 | 14 px overlay inset | On the 430 px design canvas it preserves the established 402 px sheet/snackbar width. |
 | Safe-area insets | Host values are supplied by Telegram/the browser and cannot be quantized. |
 | Numeric keypad cell size and avatar/control dimensions | They are component dimensions, not whitespace. |
-| One-pixel borders and SVG/filter parameters | They are rendering parameters. Goo remains blur `8` and alpha matrix gain `18`, bias `-7`. |
+| One-pixel borders | They are rendering parameters rather than layout spacing. |
 
 Any non-scale spacing or radius left after migration must be listed here with a
 component-specific reason; visual similarity alone is not a reason.
@@ -54,7 +54,7 @@ component-specific reason; visual similarity alone is not a reason.
 | `web/src/components/ActionSheet.css:24,35` | `38px` | Transform-origin coordinate. | Aligns the dropdown morph with the physical `+` trigger; it is not layout whitespace. |
 | `web/src/features/history/history.css:89` | `-5px` | Badge optical correction. | A scale value shifts the crown/loss badge visibly off the avatar edge; the exception is feature-local and named. |
 | `web/src/features/profile/profile.css:33` | `-7px` | FNTR badge optical correction. | Keeps the enlarged tilted badge centered on the avatar edge; the exception is feature-local and named. |
-| `web/src/features/opponent/opponent.css:2-8` | `54, 38, -91, 52, 1, 25, 226px` | Expanded/compact header coordinates. | These values define measured goo/avatar half-size, compact text clearance and Activity snap geometry, not reusable spacing. |
+| `web/src/features/opponent/opponent.css:2-7` | `54, 38, 52, 128, 164, 220px` | Expanded/compact header coordinates. | These values define the measured avatar exit, compact text clearance and Activity snap geometry, not reusable spacing. |
 
 ## Color semantics
 

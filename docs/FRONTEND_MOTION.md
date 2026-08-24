@@ -26,14 +26,16 @@ working UI win.
 | Interaction | Current contract | Classification |
 | --- | --- | --- |
 | `+` button | Appears by scaling `.5 -> 1` from its own center; no translation or rotation. | KEEP |
-| `+` menu | Dropdown-menu morph on the surface from the trigger origin; open 250 ms, close 150 ms; cards remain static inside. | KEEP |
+| `+` menu | Dropdown-menu morph on the surface from the trigger origin; open 250 ms, close 150 ms; cards remain static inside. Detail states swap as one 8 px / 3 px blur layer over 250 ms rather than animating their children separately. | KEEP |
 | Main tabbar | One persistent shared surface; indicator changes without text selection, overshoot or edge rebound. | KEEP |
 | Header text | Whole text states swap upward/downward with one coordinated timeline. | KEEP |
 | Numbers | One shared Number Pop-in implementation across Home, Profile and Opponent; no screen-specific delay. | KEEP |
 | Opponent identity | Avatar, name and score retain one unique shared identity from the source row into the opponent hero, including History rows. | KEEP |
-| Opponent collapse | Goo-filter uses blur `8` and alpha gain `18`, bias `-7`; content is painted outside the blur. Avatar never fades into existence. | KEEP |
+| Opponent collapse | The avatar shrinks and travels above the physical viewport edge. It never joins a simulated device cutout and is absent from the compact header. Name and score settle on two centered lines while the summary leaves with the hero. | KEEP |
 | Opponent snap | A partial deliberate collapse may spring to the Activity boundary; reduced motion disables the automatic spatial jump. | ADAPT |
-| Page back | The whole nested page exits right with a short, quickly settling spring; the tabbar remains fixed. | KEEP, device feel-check required |
+| Page back | The whole nested page exits right over 250 ms with the standard smooth-out curve; the tabbar remains fixed. | KEEP, device feel-check required |
+| Score drawer gesture | The whole Vaul surface is draggable; the visible handle remains a cue and a 44 px touch target, not the only gesture target. | KEEP |
+| Modal close | Avatar and opponent-edit dialogs reverse their 250 ms open transition over 150 ms instead of disappearing immediately. | KEEP |
 | Initial loading | Structural skeleton uses one opacity-only pulse, then content reveal; reduced motion removes the pulse/translation. | KEEP |
 | Decorative hearts/rings | Not part of the product motion language. | REPLACE / forbidden |
 

@@ -30,8 +30,28 @@ export function AvatarPicker(props: { open: boolean; submitting: boolean; onClos
   return (
     <AnimatePresence>
       {props.open ? (
-        <motion.div className="avatar-picker-overlay" role="presentation" onClick={props.onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0.12 : 0.16 }}>
-          <motion.section ref={dialogRef} tabIndex={-1} className="avatar-picker" role="dialog" aria-modal="true" aria-label="Выбрать аватар" onClick={(event) => event.stopPropagation()} initial={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(24px) scale(0.98)" }} animate={{ opacity: 1, transform: "translateY(0) scale(1)" }} exit={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(18px) scale(0.99)" }} transition={reduceMotion ? { duration: 0.12, ease: easeOut } : { type: "spring", bounce: 0, duration: 0.3 }}>
+        <motion.div
+          className="avatar-picker-overlay"
+          role="presentation"
+          onClick={props.onClose}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, transition: { duration: reduceMotion ? 0.12 : 0.15, ease: [0.22, 1, 0.36, 1] } }}
+          transition={{ duration: reduceMotion ? 0.12 : 0.25, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <motion.section
+            ref={dialogRef}
+            tabIndex={-1}
+            className="avatar-picker"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Выбрать аватар"
+            onClick={(event) => event.stopPropagation()}
+            initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
+            animate={{ opacity: 1, transform: "scale(1)" }}
+            exit={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)", transition: { duration: reduceMotion ? 0.12 : 0.15, ease: [0.22, 1, 0.36, 1] } }}
+            transition={{ duration: reduceMotion ? 0.12 : 0.25, ease: [0.22, 1, 0.36, 1] }}
+          >
             <header><MorphingHeading as="h2">Выбрать аватар</MorphingHeading><button className="modal-icon-button" type="button" aria-label="Закрыть" onClick={props.onClose}><AppIcon name="x" size={20} /></button></header>
             <div
               className="avatar-emoji-grid"
@@ -76,7 +96,7 @@ export function ActionMenu(props: {
   useModalDialog(Boolean(props.mode), props.onClose, dialogRef);
   const dropdownEase = [0.22, 1, 0.36, 1] as const;
   const surfaceTransition = reduceMotion
-    ? { duration: 0 }
+    ? { duration: 0.12, ease: dropdownEase }
     : { duration: props.mode === null ? 0.15 : 0.25, ease: dropdownEase };
   const titles: Record<Exclude<ActionSheet, null>, string> = {
     actions: "Добавить",
@@ -85,6 +105,26 @@ export function ActionMenu(props: {
     accept: "Добавить соперника",
   };
   const isRoot = props.mode === "actions";
+  const previousMode = useRef<ActionSheet>(null);
+  const stateDirection = previousMode.current === null ? 0 : isRoot ? -1 : 1;
+
+  useEffect(() => {
+    previousMode.current = props.mode;
+  }, [props.mode]);
+
+  const stateVariants = {
+    enter: (direction: number) => ({
+      opacity: direction === 0 ? 1 : 0,
+      transform: reduceMotion || direction === 0 ? "translateX(0)" : `translateX(${direction * 8}px)`,
+      filter: reduceMotion || direction === 0 ? "none" : "blur(3px)",
+    }),
+    center: { opacity: 1, transform: "translateX(0)", filter: "none" },
+    exit: (direction: number) => ({
+      opacity: direction === 0 ? 1 : 0,
+      transform: reduceMotion || direction === 0 ? "translateX(0)" : `translateX(${-direction * 8}px)`,
+      filter: reduceMotion || direction === 0 ? "none" : "blur(3px)",
+    }),
+  };
 
   return (
     <AnimatePresence initial={false}>
@@ -110,6 +150,7 @@ export function ActionMenu(props: {
               aria-label="Добавить"
               title="Добавить"
               layoutId={reduceMotion ? undefined : "add-flow-surface"}
+              transition={{ layout: { duration: reduceMotion ? 0 : 0.15, ease: dropdownEase } }}
               onClick={(event) => {
                 event.stopPropagation();
                 props.onOpen();
@@ -141,28 +182,40 @@ export function ActionMenu(props: {
             onClick={(event) => event.stopPropagation()}
             layout="size"
             layoutId={reduceMotion ? undefined : "add-flow-surface"}
-            initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.97)" }}
-            animate={{ opacity: 1, transform: "scale(1)" }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             exit={{
               opacity: 0,
-              transform: reduceMotion ? "scale(1)" : "scale(0.99)",
-              transition: { duration: reduceMotion ? 0 : 0.15, ease: dropdownEase },
+              transition: { duration: reduceMotion ? 0.12 : 0.15, ease: dropdownEase },
             }}
             transition={{ ...surfaceTransition, layout: { duration: reduceMotion ? 0 : 0.25, ease: dropdownEase } }}
           >
-            {isRoot ? (
-                <div className="action-list add-flow-menu" key="actions">
+            <AnimatePresence initial={false} mode="popLayout" custom={stateDirection}>
+              {isRoot ? (
+                <motion.div
+                  className="action-list add-flow-menu action-sheet-state"
+                  key="actions"
+                  custom={stateDirection}
+                  variants={stateVariants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{ duration: reduceMotion ? 0.12 : 0.25, ease: dropdownEase }}
+                >
                   <button type="button" onClick={props.onScore}><span className="action-icon action-icon-blue"><AppIcon name="add" size={27} /></span><span><strong>Добавить счёт</strong><small>Записать результат партии</small></span></button>
                   <button type="button" onClick={props.onShare}><span className="action-icon action-icon-green"><AppIcon name="send" size={25} /></span><span><strong>Отправить код</strong><small>Пригласить нового соперника</small></span></button>
                   <button type="button" onClick={props.onAccept}><span className="action-icon action-icon-pink"><AppIcon name="circle-plus" size={26} /></span><span><strong>Добавить соперника</strong><small>Ввести полученный код</small></span></button>
-                </div>
+                </motion.div>
               ) : (
                 <motion.div
-                  className="action-sheet-content action-sheet-detail"
+                  className="action-sheet-content action-sheet-detail action-sheet-state"
                   key={props.mode}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: reduceMotion ? 0.1 : 0.14, ease: easeOut }}
+                  custom={stateDirection}
+                  variants={stateVariants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{ duration: reduceMotion ? 0.12 : 0.25, ease: dropdownEase }}
                 >
                   <header>
                     <MorphingHeading as="h2">{titles[props.mode]}</MorphingHeading>
@@ -178,12 +231,7 @@ export function ActionMenu(props: {
                       <AppIcon name="arrow-left" size={20} />
                     </motion.button>
                   </header>
-                  <motion.div
-                    className="action-sheet-panel"
-                    initial={{ opacity: 0, transform: reduceMotion ? "translateY(0)" : "translateY(6px)" }}
-                    animate={{ opacity: 1, transform: "translateY(0)" }}
-                    transition={{ duration: reduceMotion ? 0.12 : 0.16, ease: easeOut }}
-                  >
+                  <div className="action-sheet-panel">
                     {props.mode === "opponents" ? <div className="action-list opponent-picker">
                       {props.opponents.map((opponent) => <button type="button" key={opponent.id} onClick={() => props.onScoreOpponent(opponent)}><span className="avatar"><ProfileAvatarContent value={opponent.avatar_value ?? null} defaultIconSize={22} /></span><span><strong>{opponentName(opponent)}</strong><small>{opponent.stats ? <ScorePair left={opponent.stats.wins} right={opponent.stats.losses} /> : "Нет матчей"}</small></span><AppIcon name="chevron-right" size={24} /></button>)}
                       {!props.opponents.length ? <p className="muted-copy">Сначала добавь соперника по коду.</p> : null}
@@ -202,9 +250,10 @@ export function ActionMenu(props: {
                       <input id="invite-code" value={props.input} onChange={(event) => props.onInput(event.target.value.toUpperCase())} placeholder="Например, ABC123" autoComplete="off" required />
                       <button className="sheet-primary-button" type="submit" disabled={props.submitting}>Добавить</button>
                     </form> : null}
-                  </motion.div>
+                  </div>
                 </motion.div>
               )}
+            </AnimatePresence>
           </motion.section>
         </motion.div>
       ) : null}

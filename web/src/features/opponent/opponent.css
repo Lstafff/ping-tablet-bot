@@ -1,11 +1,10 @@
 .opponent-collapsing-header {
   --opponent-avatar-expanded-top: 54px;
   --opponent-avatar-half-size: 38px;
-  --opponent-avatar-island-top: -91px;
   --opponent-compact-inline: 52px;
-  --opponent-name-optical-top: 1px;
-  --opponent-score-optical-top: 25px;
-  --opponent-summary-expanded-top: 226px;
+  --opponent-name-expanded-top: 128px;
+  --opponent-score-expanded-top: 164px;
+  --opponent-summary-expanded-top: 220px;
   position: sticky;
   z-index: 9;
   top: var(--sticky-page-top);
@@ -41,8 +40,8 @@
 }
 
 .opponent-header-avatar-stage,
-.opponent-header-name,
-.opponent-header-score,
+.opponent-header-name-stage,
+.opponent-header-score-stage,
 .opponent-header-summary {
   position: absolute;
   pointer-events: none;
@@ -60,45 +59,11 @@
   transform-origin: center;
 }
 
-.opponent-avatar-goo-defs {
-  position: absolute;
-  pointer-events: none;
-}
-
-.opponent-avatar-goo,
 .opponent-header-avatar-content {
   position: absolute;
   inset: 0;
   transform-origin: center;
   will-change: transform;
-}
-
-.opponent-avatar-goo {
-  overflow: visible;
-  pointer-events: none;
-}
-
-.opponent-avatar-goo-circle,
-.opponent-avatar-goo-island {
-  position: absolute;
-  display: block;
-  background: var(--color-surface-subtle);
-}
-
-.opponent-avatar-goo-circle {
-  inset: 0;
-  border-radius: 50%;
-  transform-origin: center;
-  will-change: transform;
-}
-
-.opponent-avatar-goo-island {
-  top: var(--opponent-avatar-island-top);
-  left: 50%;
-  width: 126px;
-  height: 37px;
-  border-radius: var(--radius-full);
-  transform: translateX(-50%);
 }
 
 .opponent-header-avatar-content {
@@ -107,33 +72,51 @@
   color: var(--color-icon-muted);
 }
 
-.opponent-header-name {
-  --opponent-collapse-transform: translate3d(0, 132px, 0) scale(1.45);
-
-  top: var(--opponent-name-optical-top);
+.opponent-header-name-stage,
+.opponent-header-score-stage {
   right: var(--opponent-compact-inline);
   left: var(--opponent-compact-inline);
+  display: flex;
+  justify-content: center;
+}
+
+.opponent-header-name-stage {
+  top: var(--opponent-name-expanded-top);
+}
+
+.opponent-header-score-stage {
+  top: var(--opponent-score-expanded-top);
+}
+
+.opponent-header-name-layout,
+.opponent-header-score-layout {
+  display: inline-grid;
+  max-width: 100%;
+  place-items: center;
+  transform-origin: center top;
+}
+
+.opponent-header-name {
+  max-width: 100%;
   margin: 0;
   overflow: hidden;
   color: var(--color-text-primary);
-  font-size: var(--font-size-title-3);
-  line-height: 23px;
+  font-size: var(--font-size-title-1);
+  line-height: var(--line-height-title);
   text-align: center;
   text-overflow: ellipsis;
   transform-origin: center top;
   white-space: nowrap;
+  will-change: transform;
 }
 
 .opponent-header-score {
-  --opponent-collapse-transform: translate3d(0, 143px, 0) scale(1.45);
-
-  top: var(--opponent-score-optical-top);
-  right: var(--opponent-compact-inline);
-  left: var(--opponent-compact-inline);
-  font-size: var(--font-size-subheadline);
-  font-weight: var(--font-weight-semibold);
-  line-height: 17px;
+  font-size: var(--font-size-display-medium);
+  font-weight: var(--font-weight-heavy);
+  letter-spacing: var(--letter-spacing-tight);
+  line-height: var(--line-height-display);
   transform-origin: center top;
+  will-change: transform;
 }
 
 .opponent-header-score strong,
@@ -159,7 +142,7 @@
 }
 
 .opponent-header-spacer {
-  height: 260px;
+  height: 204px;
 }
 
 .opponent-scoreline {
@@ -195,7 +178,7 @@
 }
 
 .match-activity {
-  margin-top: var(--space-24);
+  margin-top: var(--space-16);
 }
 
 .match-activity-heading {
@@ -344,6 +327,10 @@
   overflow-x: clip;
 }
 
+.opponent-stats-region {
+  min-height: calc(var(--tma-viewport-height, 100dvh) - var(--size-page-header) - var(--space-64));
+}
+
 .opponent-reveal-group {
   min-width: 0;
 }
@@ -404,7 +391,7 @@
 }
 
 .avatar.avatar-opponent .profile-avatar-emoji {
-  font-size: 48px;
+  font-size: 40px;
   transform: none;
 }
 
@@ -440,7 +427,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .opponent-header-avatar-content,
-  .opponent-avatar-goo-circle,
   .opponent-header-name,
   .opponent-header-score,
   .opponent-header-summary,

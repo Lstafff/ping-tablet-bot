@@ -47,6 +47,12 @@
   min-height: 0;
 }
 
+.action-sheet-state {
+  width: 100%;
+  transform-origin: center;
+  will-change: transform, opacity, filter;
+}
+
 .action-sheet-panel {
   width: 100%;
   min-height: 0;

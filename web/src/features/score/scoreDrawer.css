@@ -69,10 +69,26 @@
 }
 
 .score-header h1 {
+  display: grid;
+  gap: var(--space-2);
   margin: 0;
-  font-size: var(--font-size-title-3);
   line-height: var(--line-height-title);
   text-align: center;
+}
+
+.score-header h1 strong {
+  font-size: var(--font-size-title-3);
+  font-weight: var(--font-weight-heavy);
+}
+
+.score-header h1 small {
+  overflow: hidden;
+  color: var(--color-dark-text-secondary);
+  font-size: var(--font-size-subheadline);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .score-header button,

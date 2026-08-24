@@ -55,7 +55,7 @@ Telegram chat update                         Telegram Mini App
 
 ### Frontend system
 
-- Active product UI remains concentrated in `web/src/main.tsx` and `web/src/styles.css`; API transport/contracts, `BottomNavigation` and `AppIcon` are extracted boundaries.
+- `web/src/main.tsx` remains the orchestration boundary for data, mutations and navigation. Presentation is split by feature under `web/src/features/`, while reusable controls and motion identities live under `web/src/components/` and `web/src/lib/`; feature CSS stays with its owner and root styles cover the shell/shared rules.
 - `web/src/tokens.css` already separates semantic theme, accent, status, material and motion tokens. This is a strong base to keep.
 - Motion uses `motion/react`, shared easing/duration tokens and multiple `useReducedMotion` branches.
 - The copied `web/mini-app` and `web/primitives` trees are source libraries, not the active design system wholesale. Active code imports only Telegram runtime helpers and `GlassContainer` from them.

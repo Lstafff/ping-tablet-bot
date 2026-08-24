@@ -1,12 +1,13 @@
 import { motion, useReducedMotion } from "motion/react";
 
-import type { HistoryGame, HistoryView } from "../../api/types";
+import type { HistoryGame, HistoryView, Opponent } from "../../api/types";
 import { AppIcon } from "../../components/AppIcon";
 import { MorphingHeading } from "../../components/PageHeader";
+import { ProfileAvatarContent } from "../../components/ProfileAvatar";
 import { ProgressiveLoadTrigger } from "../../components/ProgressiveLoadTrigger";
 import { EloDeltaBadge, ScorePair } from "../../components/ScoreDisplay";
-import { easeInOut, opponentSharedLayoutId } from "../../lib/motion";
-import { historyGameKey, initials } from "../../lib/player";
+import { easeOut, opponentSharedLayoutId } from "../../lib/motion";
+import { historyGameKey } from "../../lib/player";
 import "./history.css";
 
 function historyGroup(value: string): string {
@@ -38,6 +39,7 @@ function groupHistory(games: HistoryGame[]): Array<{ label: string; games: Histo
 export function HistoryScreen({
   newestFirst,
   view,
+  opponents,
   loadingMore,
   loadError,
   onLoadMore,
@@ -45,12 +47,14 @@ export function HistoryScreen({
 }: {
   newestFirst: boolean;
   view: HistoryView | null;
+  opponents: Opponent[];
   loadingMore: boolean;
   loadError: string;
   onLoadMore(): void;
   onOpenOpponent(game: HistoryGame): void;
 }) {
   const reduceMotion = useReducedMotion();
+  const opponentById = new Map(opponents.map((opponent) => [opponent.id, opponent]));
   const sortedGames = [...(view?.games ?? [])].sort((left, right) => {
     const delta = new Date(right.played_at).valueOf() - new Date(left.played_at).valueOf();
     return newestFirst ? delta : -delta;
@@ -67,6 +71,7 @@ export function HistoryScreen({
             {group.games.map((game) => {
               const won = game.own_score > game.opponent_score;
               const layoutIdentity = `history-${historyGameKey(game)}`;
+              const opponent = opponentById.get(game.opponent_id);
               return (
                 <motion.button
                   className="history-row"
@@ -74,21 +79,21 @@ export function HistoryScreen({
                   key={`${game.opponent_id}-${game.played_at}`}
                   layout="position"
                   layoutDependency={newestFirst}
-                  transition={{ layout: reduceMotion ? { duration: 0 } : { duration: 0.18, ease: easeInOut } }}
+                  transition={{ layout: reduceMotion ? { duration: 0 } : { duration: 0.25, ease: easeOut } }}
                   onClick={() => onOpenOpponent(game)}
                 >
-                  <motion.span className="history-avatar" aria-hidden="true" layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "avatar")}>
-                    {initials(game.opponent_name)}
+                  <motion.span className="avatar history-avatar" aria-hidden="true" layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "avatar")} transition={{ layout: { duration: reduceMotion ? 0 : 0.25, ease: easeOut } }}>
+                    <ProfileAvatarContent value={opponent?.avatar_value ?? null} defaultIconSize={22} />
                     <i className={won ? "history-badge history-badge-win" : "history-badge history-badge-loss"}>
                       {won ? <AppIcon name="crown" size={15} strokeWidth={2.5} /> : <AppIcon name="x" size={15} strokeWidth={3} />}
                     </i>
                   </motion.span>
                   <span className="history-copy">
                     <small className={won ? "history-result-win" : "history-result-loss"}>{won ? "Победа" : "Поражение"}</small>
-                    <motion.strong layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "name")}>{game.opponent_name}</motion.strong>
+                    <motion.strong layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "name")} transition={{ layout: { duration: reduceMotion ? 0 : 0.25, ease: easeOut } }}>{game.opponent_name}</motion.strong>
                   </span>
                   <span className="history-result">
-                    <motion.strong className={won ? "history-score result-win" : "history-score result-loss"} layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "score")}><ScorePair left={game.own_score} right={game.opponent_score} /></motion.strong>
+                    <motion.strong className={won ? "history-score result-win" : "history-score result-loss"} layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "score")} transition={{ layout: { duration: reduceMotion ? 0 : 0.25, ease: easeOut } }}><ScorePair left={game.own_score} right={game.opponent_score} /></motion.strong>
                     <EloDeltaBadge value={game.elo_change} />
                   </span>
                 </motion.button>
