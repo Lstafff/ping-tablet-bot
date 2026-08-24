@@ -1,0 +1,36 @@
+.score-pair {
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.score-separator {
+  white-space: pre;
+}
+
+.elo-delta-badge {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  padding: var(--space-2) var(--space-8);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-caption-2);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-single);
+  white-space: nowrap;
+}
+
+.elo-delta-positive {
+  background: var(--color-success-badge);
+  color: var(--color-success-strong);
+}
+
+.elo-delta-negative {
+  background: var(--color-danger-badge);
+  color: var(--color-danger-strong);
+}
+
+.elo-delta-neutral {
+  background: var(--color-neutral-badge);
+  color: var(--color-neutral-badge-text);
+}

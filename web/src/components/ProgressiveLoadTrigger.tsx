@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import "./ProgressiveLoadTrigger.css";
 
 export function ProgressiveLoadTrigger({
   error,

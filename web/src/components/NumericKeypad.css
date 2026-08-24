@@ -1,0 +1,26 @@
+.numeric-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-content: center;
+  margin-top: var(--space-10);
+}
+
+.numeric-keypad button,
+.numeric-keypad > span {
+  display: grid;
+  min-height: 64px;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: var(--font-size-title-1);
+}
+
+.numeric-keypad button {
+  transition: transform var(--duration-press) var(--ease-out);
+}
+
+.numeric-keypad button:active {
+  transform: scale(0.95);
+}

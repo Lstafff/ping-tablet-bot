@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { AppIcon, AppIconName } from "./AppIcon";
 import { easeInOut, easeOut } from "../lib/motion";
 import { tma } from "../lib/tma";
+import "./BottomNavigation.css";
 // @ts-ignore The Deslop kit is JavaScript and supplies the chosen glass material.
 import { GlassContainer } from "../../mini-app/components/GlassEffect";
 

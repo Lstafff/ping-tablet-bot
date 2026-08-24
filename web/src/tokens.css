@@ -24,10 +24,8 @@
   --line-height-title: 1.15;
   --line-height-compact: 1.25;
   --line-height-body: 1.4;
-  --line-height-relaxed: 1.5;
 
   --letter-spacing-tight: -0.02em;
-  --letter-spacing-normal: 0;
   --letter-spacing-caps: 0.02em;
   --font-weight-regular: 400;
   --font-weight-medium: 450;
@@ -59,7 +57,6 @@
   --color-accent: #00b0ff;
   --color-accent-strong: #0aaef0;
   --color-on-accent: #ffffff;
-  --color-accent-shadow: rgba(0, 176, 255, 0.2);
 
   /* Status colors do not follow the user-selected accent. */
   --color-success: #02cb48;
@@ -67,7 +64,6 @@
   --color-success-soft: #eefbf3;
   --color-danger: #ff4652;
   --color-danger-strong: #d82f3d;
-  --color-danger-soft: #fff0f1;
   --color-warning: #f19e36;
   --color-success-badge: #eaf9ef;
   --color-danger-badge: #fff0f1;
@@ -97,13 +93,9 @@
   --color-dark-canvas: #000000;
   --color-dark-control: #191719;
   --color-dark-control-active: #343136;
-  --color-dark-surface: #171517;
-  --color-dark-surface-raised: #302d32;
   --color-dark-text-secondary: #aaa6ad;
   --color-dark-text-tertiary: #88858b;
   --color-dark-separator: #565259;
-  --color-dark-error-surface: #231619;
-  --color-dark-error-text: #ff6b78;
   --color-dark-disabled-surface: #5b585e;
   --color-dark-disabled-text: #111111;
   --color-snackbar-surface: var(--color-surface);
@@ -111,10 +103,10 @@
   --color-snackbar-text-secondary: #737679;
   --color-snackbar-icon: #8b8e91;
   --color-snackbar-backdrop: rgba(0, 0, 0, 0.42);
+  --color-modal-backdrop: rgba(0, 0, 0, 0.46);
 
   /* Product-specific colors and materials. */
-  --color-avatar-blue: #2f80cf;
-  --color-avatar-purple: #8f3fd6;
+  --color-fntr-badge: #2f80cf;
   --color-action-send: #35cf68;
   --color-action-accept: #f348a8;
   --color-telegram: #229ed9;
@@ -127,7 +119,6 @@
   --color-glass-edge: rgba(255, 255, 255, 0.72);
   --color-glass-surface: rgba(255, 255, 255, 0.94);
   --color-glass-muted: rgba(255, 255, 255, 0.58);
-  --color-glass-shadow: rgba(17, 17, 17, 0.1);
   --shadow-floating: 0 10px 24px rgba(0, 0, 0, 0.15);
   --shadow-toolbar: 0 14px 34px rgba(0, 0, 0, 0.12);
   --shadow-tray: 0 24px 70px rgba(0, 0, 0, 0.32);
@@ -137,8 +128,45 @@
   --shadow-picker: 0 20px 54px rgba(0, 0, 0, 0.16);
   --shadow-snackbar: 0 16px 46px rgba(0, 0, 0, 0.2);
 
+  /* Canonical layout spacing. */
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-6: 6px;
+  --space-8: 8px;
+  --space-10: 10px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-40: 40px;
+  --space-48: 48px;
+  --space-64: 64px;
+  --space-80: 80px;
+  --space-96: 96px;
+  --space-128: 128px;
+
+  /* Canonical surface radii. */
+  --radius-2: 2px;
+  --radius-4: 4px;
+  --radius-6: 6px;
+  --radius-8: 8px;
+  --radius-10: 10px;
+  --radius-12: 12px;
+  --radius-16: 16px;
+  --radius-20: 20px;
+  --radius-24: 24px;
+  --radius-32: 32px;
+  --radius-40: 40px;
+  --radius-48: 48px;
+  --radius-64: 64px;
+  --radius-full: 999px;
+
   /* Shared control geometry. */
   --space-page-gutter: 26px;
+  --space-content-bottom: 112px;
+  --space-floating-action-bottom: 99px;
+  --space-overlay-inline: 14px;
   --size-action-control: 56px;
   --size-modal-control: 36px;
   --size-modal-control-icon: 20px;
@@ -147,8 +175,6 @@
   /* Shared motion language. */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  --ease-standard: cubic-bezier(0.25, 0.1, 0.25, 1);
   --duration-press: 120ms;
   --duration-control: 180ms;
   --duration-morph: 240ms;

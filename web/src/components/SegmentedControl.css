@@ -1,0 +1,54 @@
+.segmented-control {
+  --segment-count: 3;
+
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--segment-count), minmax(0, 1fr));
+  gap: var(--space-4);
+  margin: var(--space-24) 0 var(--space-20);
+  padding: var(--space-4);
+  border-radius: var(--radius-12);
+  background: var(--color-surface-pressed);
+}
+
+.segment-active-indicator {
+  position: absolute;
+  z-index: 0;
+  top: var(--space-4);
+  bottom: var(--space-4);
+  left: var(--space-4);
+  width: calc((100% - var(--space-8) - (var(--segment-count) - 1) * var(--space-4)) / var(--segment-count));
+  border-radius: var(--radius-10);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-control);
+  transition: transform var(--duration-control) var(--ease-in-out);
+  will-change: transform;
+}
+
+.segment-button {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  min-height: 38px;
+  border: 0;
+  border-radius: var(--radius-10);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-bold);
+  transition: color var(--duration-control) var(--ease-in-out), transform var(--duration-press) var(--ease-out);
+}
+
+.segment-button-active {
+  color: var(--color-text-primary);
+}
+
+.segment-button:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .segment-active-indicator {
+    transition-duration: 0ms !important;
+  }
+}

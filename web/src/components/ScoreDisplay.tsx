@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import "./ScoreDisplay.css";
 
 export function EloDeltaBadge({ value }: { value?: number | null }) {
   const delta = value ?? 0;

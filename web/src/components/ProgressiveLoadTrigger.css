@@ -1,0 +1,23 @@
+.progressive-load {
+  display: grid;
+  min-height: 68px;
+  place-items: center;
+  padding: var(--space-12) 0 var(--space-32);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-subheadline);
+  text-align: center;
+}
+
+.progressive-load > span {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-8);
+}
+
+.progressive-load button {
+  min-height: 40px;
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  font-weight: var(--font-weight-bold);
+}

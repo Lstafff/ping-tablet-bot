@@ -2,19 +2,27 @@ import { AnimatePresence, animate, motion, useReducedMotion } from "motion/react
 import { useEffect, useLayoutEffect, useRef } from "react";
 
 import type { DailyView, ExtendedStats, GamesView, Opponent, OpponentStats, RecentGame, Stats } from "../../api/types";
+import { AnimatedNumber } from "../../components/AnimatedNumber";
 import { AppIcon } from "../../components/AppIcon";
 import { ProgressiveLoadTrigger } from "../../components/ProgressiveLoadTrigger";
 import { ProfileAvatarContent } from "../../components/ProfileAvatar";
 import { EloDeltaBadge, ScorePair, ScoreValue } from "../../components/ScoreDisplay";
 import { SegmentedControl } from "../../components/SegmentedControl";
-import { easeOut } from "../../lib/motion";
+import { easeOut, opponentSharedLayoutId } from "../../lib/motion";
 import { gamesCount, opponentName, winRate } from "../../lib/player";
 import { calculateOpponentHeaderCollapseState, calculateOpponentHeaderSnapTarget } from "./collapsingHeader";
+import "./opponent.css";
 
 export type StatsTab = "summary" | "days" | "games";
 
+function withOpponentCollapseTransform(_: unknown, generatedTransform: string): string {
+  const collapseTransform = "var(--opponent-collapse-transform)";
+  return generatedTransform === "none" ? collapseTransform : `${generatedTransform} ${collapseTransform}`;
+}
+
 export type OpponentScreenProps = {
   opponent: Opponent;
+  layoutIdentity: string | number;
   stats: OpponentStats;
   tab: StatsTab;
   daily: DailyView | null;
@@ -72,65 +80,83 @@ export function OpponentScreen(props: OpponentScreenProps) {
     />
   );
 
+  const reveal = (index: number) => ({
+    initial: reduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(12px)", filter: "blur(3px)" },
+    animate: { opacity: 1, transform: "translateY(0)", filter: "blur(0)" },
+    transition: { duration: reduceMotion ? 0.12 : 0.28, delay: reduceMotion ? 0 : index * 0.04, ease: easeOut },
+  });
+
   return (
     <>
-      <OpponentCollapsingHeader opponent={opponent} stats={stats.stats} onBack={props.onBack} />
+      <OpponentCollapsingHeader opponent={opponent} layoutIdentity={props.layoutIdentity} stats={stats.stats} onBack={props.onBack} />
 
-      <ActivityHeatmap games={props.chartGames} />
+      <motion.div className="opponent-reveal-group" {...reveal(0)}>
+        <ActivityHeatmap games={props.chartGames} />
+      </motion.div>
 
-      <section className="opponent-metrics" aria-label="Главная статистика">
-        <div><span>Мячи</span><strong><ScorePair left={stats.stats.points_for} right={stats.stats.points_against} /></strong></div>
-        <div><span>Текущая серия</span><strong>{stats.extended_stats.win_streak}</strong></div>
-      </section>
+      <motion.div className="opponent-reveal-group" {...reveal(1)}>
+        <section className="opponent-metrics" aria-label="Главная статистика">
+          <div><span>Мячи</span><strong><ScorePair left={<AnimatedNumber value={stats.stats.points_for} animateOnMount />} right={<AnimatedNumber value={stats.stats.points_against} animateOnMount />} /></strong></div>
+          <div><span>Текущая серия</span><strong><AnimatedNumber value={stats.extended_stats.win_streak} animateOnMount /></strong></div>
+        </section>
+      </motion.div>
 
-      <SegmentedControl
-        ariaLabel="Ваша статистика"
-        value={props.tab}
-        options={[
-          { value: "summary", label: "Общая" },
-          { value: "days", label: "По дням" },
-          { value: "games", label: "По играм" },
-        ]}
-        onChange={props.onTabChange}
-      />
+      <motion.div className="opponent-reveal-group" {...reveal(2)}>
+        <SegmentedControl
+          ariaLabel="Ваша статистика"
+          idPrefix="opponent-stats"
+          value={props.tab}
+          options={[
+            { value: "summary", label: "Общая" },
+            { value: "days", label: "По дням" },
+            { value: "games", label: "По играм" },
+          ]}
+          onChange={props.onTabChange}
+        />
 
-      <AnimatePresence initial={false} mode="popLayout" custom={tabDirection}>
-        <motion.div
-          className="opponent-tab-content"
-          key={props.tab}
-          custom={tabDirection}
-          variants={{
-            initial: (direction: number) => ({
-              opacity: 0,
-              transform: reduceMotion ? "translateX(0)" : `translateX(${direction >= 0 ? 14 : -14}px)`,
-            }),
-            animate: { opacity: 1, transform: "translateX(0)" },
-            exit: (direction: number) => ({
-              opacity: 0,
-              transform: reduceMotion ? "translateX(0)" : `translateX(${direction >= 0 ? -10 : 10}px)`,
-            }),
-          }}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }}
-        >
-          {tabContent}
-        </motion.div>
-      </AnimatePresence>
+        <AnimatePresence initial={false} mode="popLayout" custom={tabDirection}>
+          <motion.div
+            className="opponent-tab-content"
+            id={`opponent-stats-panel-${props.tab}`}
+            role="tabpanel"
+            aria-labelledby={`opponent-stats-tab-${props.tab}`}
+            key={props.tab}
+            custom={tabDirection}
+            variants={{
+              initial: (direction: number) => ({
+                opacity: 0,
+                transform: reduceMotion ? "translateX(0)" : `translateX(${direction >= 0 ? 14 : -14}px)`,
+              }),
+              animate: { opacity: 1, transform: "translateX(0)" },
+              exit: (direction: number) => ({
+                opacity: 0,
+                transform: reduceMotion ? "translateX(0)" : `translateX(${direction >= 0 ? -10 : 10}px)`,
+              }),
+            }}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }}
+          >
+            {tabContent}
+          </motion.div>
+        </AnimatePresence>
+      </motion.div>
     </>
   );
 }
 
-export function OpponentCollapsingHeader({ opponent, stats, onBack, pending = false }: { opponent: Opponent; stats?: Stats; onBack(): void; pending?: boolean }) {
+export function OpponentCollapsingHeader({ opponent, layoutIdentity = opponent.id, stats, onBack, pending = false }: { opponent: Opponent; layoutIdentity?: string | number; stats?: Stats; onBack(): void; pending?: boolean }) {
   const reduceMotion = useReducedMotion();
   const headerRef = useRef<HTMLElement>(null);
   const backdropRef = useRef<HTMLSpanElement>(null);
-  const avatarRef = useRef<HTMLSpanElement>(null);
+  const avatarSurfaceRef = useRef<HTMLSpanElement>(null);
+  const avatarContentRef = useRef<HTMLSpanElement>(null);
   const nameRef = useRef<HTMLHeadingElement>(null);
   const scoreRef = useRef<HTMLDivElement>(null);
   const summaryRef = useRef<HTMLParagraphElement>(null);
   const resolvedStats = stats ?? opponent.stats;
+  const gooFilterId = `opponent-avatar-goo-${opponent.id}`;
 
   useLayoutEffect(() => {
     let frame: number | null = null;
@@ -138,20 +164,24 @@ export function OpponentCollapsingHeader({ opponent, stats, onBack, pending = fa
       frame = null;
       const header = headerRef.current;
       const backdrop = backdropRef.current;
-      const avatar = avatarRef.current;
+      const avatarSurface = avatarSurfaceRef.current;
+      const avatarContent = avatarContentRef.current;
       const name = nameRef.current;
-      if (!header || !backdrop || !avatar || !name) return;
+      if (!header || !backdrop || !avatarSurface || !avatarContent || !name) return;
 
       const state = calculateOpponentHeaderCollapseState(window.scrollY, Boolean(reduceMotion));
-      avatar.style.opacity = String(state.avatarOpacity);
-      avatar.style.transform = reduceMotion
+      const avatarTransform = reduceMotion
         ? "none"
         : `translate3d(0, ${state.avatarTranslateY}px, 0) scale(${state.avatarScale})`;
-      name.style.transform = `translate3d(0, ${state.nameTranslateY}px, 0) scale(${state.nameScale})`;
+      avatarSurface.style.transform = avatarTransform;
+      avatarContent.style.transform = avatarTransform;
+      avatarSurface.style.visibility = reduceMotion && state.progress === 1 ? "hidden" : "visible";
+      avatarContent.style.visibility = reduceMotion && state.progress === 1 ? "hidden" : "visible";
+      name.style.setProperty("--opponent-collapse-transform", reduceMotion ? "translate3d(0, 0, 0) scale(1)" : `translate3d(0, ${state.nameTranslateY}px, 0) scale(${state.nameScale})`);
       const score = scoreRef.current;
       if (score) {
         score.style.fontWeight = String(state.scoreFontWeight);
-        score.style.transform = `translate3d(0, ${state.scoreTranslateY}px, 0) scale(${state.scoreScale})`;
+        score.style.setProperty("--opponent-collapse-transform", reduceMotion ? "translate3d(0, 0, 0) scale(1)" : `translate3d(0, ${state.scoreTranslateY}px, 0) scale(${state.scoreScale})`);
       }
       if (summaryRef.current) {
         summaryRef.current.style.opacity = String(state.summaryOpacity);
@@ -167,11 +197,7 @@ export function OpponentCollapsingHeader({ opponent, stats, onBack, pending = fa
       snapTimer = null;
       const scrollY = window.scrollY;
       const target = calculateOpponentHeaderSnapTarget(scrollY);
-      if (target === null) return;
-      if (reduceMotion) {
-        window.scrollTo({ top: target, behavior: "auto" });
-        return;
-      }
+      if (target === null || reduceMotion) return;
       snapping = true;
       snapAnimation = animate(scrollY, target, {
         type: "spring",
@@ -187,7 +213,7 @@ export function OpponentCollapsingHeader({ opponent, stats, onBack, pending = fa
     };
     const requestUpdate = () => {
       if (frame === null) frame = window.requestAnimationFrame(update);
-      if (snapping || pointerActive) return;
+      if (reduceMotion || snapping || pointerActive) return;
       if (snapTimer !== null) window.clearTimeout(snapTimer);
       snapTimer = window.setTimeout(snapToRestingState, 110);
     };
@@ -237,26 +263,49 @@ export function OpponentCollapsingHeader({ opponent, stats, onBack, pending = fa
         <button className="opponent-header-back" type="button" aria-label="Назад" title="Назад" onClick={onBack}>
           <AppIcon name="chevron-left" size={30} aria-hidden="true" />
         </button>
-        <span className="avatar avatar-opponent opponent-header-avatar" ref={avatarRef} aria-hidden="true">
-          <ProfileAvatarContent value={opponent.avatar_value ?? null} defaultIconSize={48} />
-        </span>
+        <motion.span
+          className="opponent-header-avatar-stage"
+          layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "avatar")}
+          transition={{ layout: { duration: 0.24, ease: easeOut } }}
+          aria-hidden="true"
+        >
+          <svg className="opponent-avatar-goo-defs" width="0" height="0" focusable="false" aria-hidden="true">
+            <defs>
+              <filter id={gooFilterId} x="-100%" y="-180%" width="300%" height="380%" colorInterpolationFilters="sRGB">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur" />
+                <feColorMatrix
+                  in="blur"
+                  type="matrix"
+                  values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7"
+                />
+              </filter>
+            </defs>
+          </svg>
+          <span className="opponent-avatar-goo" style={{ filter: `url(#${gooFilterId})` }}>
+            <span className="opponent-avatar-goo-island" />
+            <span className="opponent-avatar-goo-circle" ref={avatarSurfaceRef} />
+          </span>
+          <span className="avatar avatar-opponent opponent-header-avatar-content" ref={avatarContentRef}>
+            <ProfileAvatarContent value={opponent.avatar_value ?? null} defaultIconSize={48} />
+          </span>
+        </motion.span>
         {resolvedStats ? (
           <>
-            <h1 className="opponent-header-name" ref={nameRef}>{opponentName(opponent)}</h1>
-            <div className="opponent-scoreline opponent-header-score" ref={scoreRef} aria-label={`Побед ${resolvedStats.wins}, поражений ${resolvedStats.losses}`}>
-              <ScorePair left={<strong>{resolvedStats.wins}</strong>} right={<strong>{resolvedStats.losses}</strong>} />
-            </div>
-            <p className="opponent-header-summary" ref={summaryRef}><strong>{winRate(resolvedStats)}%</strong> побед · {gamesCount(resolvedStats)} партий</p>
+            <motion.h1 className="opponent-header-name" ref={nameRef} layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "name")} transformTemplate={withOpponentCollapseTransform} transition={{ layout: { duration: 0.24, ease: easeOut } }}>{opponentName(opponent)}</motion.h1>
+            <motion.div className="opponent-scoreline opponent-header-score" ref={scoreRef} layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "score")} transformTemplate={withOpponentCollapseTransform} transition={{ layout: { duration: 0.24, ease: easeOut } }} aria-label={`Побед ${resolvedStats.wins}, поражений ${resolvedStats.losses}`}>
+              <ScorePair left={<strong><AnimatedNumber value={resolvedStats.wins} animateOnMount /></strong>} right={<strong><AnimatedNumber value={resolvedStats.losses} animateOnMount /></strong>} />
+            </motion.div>
+            <p className="opponent-header-summary" ref={summaryRef}><strong><AnimatedNumber value={winRate(resolvedStats)} animateOnMount />%</strong> побед · <AnimatedNumber value={gamesCount(resolvedStats)} animateOnMount /> партий</p>
           </>
-        ) : <h1 className="opponent-header-name" ref={nameRef}>{opponentName(opponent)}</h1>}
+        ) : <motion.h1 className="opponent-header-name" ref={nameRef} layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "name")} transformTemplate={withOpponentCollapseTransform} transition={{ layout: { duration: 0.24, ease: easeOut } }}>{opponentName(opponent)}</motion.h1>}
       </header>
       <div className="opponent-header-spacer" aria-hidden="true" />
     </>
   );
 }
 
-export function OpponentOpeningScreen({ opponent, onBack }: { opponent: Opponent; onBack(): void }) {
-  return <OpponentCollapsingHeader opponent={opponent} stats={opponent.stats} onBack={onBack} pending />;
+export function OpponentOpeningScreen({ opponent, layoutIdentity, onBack }: { opponent: Opponent; layoutIdentity: string | number; onBack(): void }) {
+  return <OpponentCollapsingHeader opponent={opponent} layoutIdentity={layoutIdentity} stats={opponent.stats} onBack={onBack} pending />;
 }
 
 const activityWeekCount = 26;
@@ -351,9 +400,9 @@ export function StatsSummary({ stats }: { stats: ExtendedStats }) {
   return (
     <section className="details-section">
       <dl className="facts-list">
-        <div><dt>Текущая серия</dt><dd>{stats.win_streak}</dd></div>
-        <div><dt>Овертаймы</dt><dd><ScorePair left={stats.overtime_wins} right={stats.overtime_losses} /></dd></div>
-        <div><dt>Самая длинная партия</dt><dd>{stats.longest_own_score !== null ? <ScorePair left={stats.longest_own_score} right={stats.longest_opponent_score ?? "—"} /> : "—"}</dd></div>
+        <div><dt>Текущая серия</dt><dd><AnimatedNumber value={stats.win_streak} animateOnMount /></dd></div>
+        <div><dt>Овертаймы</dt><dd><ScorePair left={<AnimatedNumber value={stats.overtime_wins} animateOnMount />} right={<AnimatedNumber value={stats.overtime_losses} animateOnMount />} /></dd></div>
+        <div><dt>Самая длинная партия</dt><dd>{stats.longest_own_score !== null ? <ScorePair left={<AnimatedNumber value={stats.longest_own_score} animateOnMount />} right={<AnimatedNumber value={stats.longest_opponent_score ?? "—"} animateOnMount />} /> : "—"}</dd></div>
         <div><dt>Частый счёт</dt><dd><ScoreValue value={stats.most_common_score} /></dd></div>
       </dl>
     </section>

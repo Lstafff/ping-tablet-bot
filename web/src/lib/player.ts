@@ -1,4 +1,12 @@
-import type { Opponent, Stats } from "../api/types";
+import type { HistoryGame, Opponent, Stats, User } from "../api/types";
+
+export function userName(user: User): string {
+  if (user.display_name) return user.display_name;
+  if (user.username) {
+    return user.username.startsWith("@") ? user.username : `@${user.username}`;
+  }
+  return user.first_name || "Игрок";
+}
 
 export function opponentName(opponent: Opponent): string {
   if (opponent.display_name) {
@@ -20,6 +28,10 @@ export function initials(value: string): string {
     return `${words[0][0]}${words[1][0]}`.toUpperCase();
   }
   return clean.slice(0, 2).toUpperCase() || "—";
+}
+
+export function historyGameKey(game: Pick<HistoryGame, "game_id" | "opponent_id" | "opponent_score" | "own_score" | "played_at">): string {
+  return `${game.opponent_id}-${game.game_id ?? game.played_at}-${game.own_score}-${game.opponent_score}`;
 }
 
 export function gamesCount(stats: Stats): number {

@@ -1,0 +1,47 @@
+.app-snackbar-layer {
+  position: fixed;
+  z-index: 60;
+  top: calc(max(var(--space-16), env(safe-area-inset-top), var(--tma-safe-top)) + var(--space-8));
+  left: 50%;
+  width: min(calc(100% - 28px), 402px);
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.app-snackbar {
+  display: grid;
+  min-height: 52px;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: var(--space-8);
+  border-radius: var(--radius-full);
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-16);
+  background: var(--color-snackbar-surface);
+  color: var(--color-snackbar-text);
+  box-shadow: var(--shadow-snackbar);
+  font-size: var(--font-size-subheadline);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-compact);
+  pointer-events: auto;
+  touch-action: pan-x;
+}
+
+.app-snackbar-success {
+  color: var(--color-success-strong);
+}
+
+.app-snackbar-error {
+  color: var(--color-danger-strong);
+}
+
+.app-snackbar button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: currentColor;
+}

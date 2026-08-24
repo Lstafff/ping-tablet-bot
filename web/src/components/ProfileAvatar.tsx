@@ -1,4 +1,5 @@
 import { AppIcon } from "./AppIcon";
+import "./ProfileAvatar.css";
 
 export type ProfileAvatarKind = "default" | "emoji" | "image";
 

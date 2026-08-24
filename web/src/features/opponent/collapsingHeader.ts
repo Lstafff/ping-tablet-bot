@@ -1,4 +1,4 @@
-export const opponentHeaderCollapseDistance = 168;
+export const opponentHeaderCollapseDistance = 260;
 const reducedMotionThreshold = 0.16;
 const opponentHeaderSnapThreshold = opponentHeaderCollapseDistance * reducedMotionThreshold;
 
@@ -7,7 +7,6 @@ export type OpponentHeaderCollapseState = {
   progress: number;
   remaining: number;
   backdropOpacity: number;
-  avatarOpacity: number;
   avatarTranslateY: number;
   avatarScale: number;
   nameTranslateY: number;
@@ -31,14 +30,13 @@ export function calculateOpponentHeaderCollapseState(
     progress,
     remaining,
     backdropOpacity: Math.min(1, rawProgress * 1.5),
-    avatarOpacity: remaining,
-    avatarTranslateY: reduceMotion || progress === 0 ? 0 : -84 * progress,
-    avatarScale: reduceMotion ? 1 : 0.45 + 0.55 * remaining,
+    avatarTranslateY: reduceMotion || progress === 0 ? 0 : -108 * progress,
+    avatarScale: reduceMotion ? 1 : 0.42 + 0.58 * remaining,
 
-    nameTranslateY: reduceMotion ? 0 : 126 * remaining,
+    nameTranslateY: reduceMotion ? 0 : 132 * remaining,
     nameScale: reduceMotion ? 1 : 1 + 0.45 * remaining,
 
-    scoreTranslateY: reduceMotion ? 0 : 137 * remaining,
+    scoreTranslateY: reduceMotion ? 0 : 143 * remaining,
     scoreScale: reduceMotion ? 1 : 1 + 0.45 * remaining,
     scoreFontWeight: Math.round(400 + 150 * remaining),
 

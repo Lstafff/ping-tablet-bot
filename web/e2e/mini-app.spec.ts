@@ -16,7 +16,9 @@ test("opens an opponent and records a score through the Vaul drawer", async ({ p
   await expect(page.getByRole("heading", { name: "пинг понг каунтер" })).toBeVisible();
   await page.getByRole("button", { name: /Мария/ }).click();
   await expect(page.getByRole("heading", { name: "Мария" })).toBeVisible();
-  await expect(page.locator(".opponent-scoreline .rolling-number")).toHaveCount(0);
+  await expect(page.locator(".opponent-scoreline .rolling-number")).toHaveCount(2);
+  await expect.poll(async () => page.locator(".opponent-metrics .t-digit").first().evaluate((element) => getComputedStyle(element).animationName))
+    .toContain("t-digit-pop-in");
   await expect(page.getByRole("button", { name: "Отменить последний счёт" })).toHaveCount(0);
 
   const activityCalendarBox = await page.locator(".activity-calendar").boundingBox();
@@ -85,11 +87,12 @@ test("opens the central add-score flow without waiting and uses the shared selec
   const rootMenu = page.getByRole("dialog", { name: "Добавить", exact: true });
   await expect(rootMenu).toBeVisible();
   await expect(rootMenu.locator(".add-flow-menu")).toHaveCount(1);
-  const sharedSurfaceTransform = await page.evaluate(() => new Promise<string>((resolve) => requestAnimationFrame(() => {
+  const dropdownSurfaceTransform = await page.evaluate(() => new Promise<string>((resolve) => requestAnimationFrame(() => {
     const surface = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Добавить"]');
     resolve(surface ? getComputedStyle(surface).transform : "none");
   })));
-  expect(sharedSurfaceTransform).not.toBe("none");
+  expect(dropdownSurfaceTransform).not.toBe("none");
+  await expect(rootMenu.locator(".add-flow-menu")).toHaveCSS("transform", "none");
   await rootMenu.getByRole("button", { name: /Добавить счёт/ }).click();
 
   const opponentPicker = page.getByRole("dialog", { name: "Добавить счёт", exact: true });
@@ -97,13 +100,51 @@ test("opens the central add-score flow without waiting and uses the shared selec
   const drawer = page.locator(".score-drawer-content");
   await expect(drawer).toBeVisible();
   await expect(page.locator(".score-opponent-row")).toHaveCount(0);
-  await expect(drawer.getByRole("tab")).toHaveText(["Ты", "Противник"]);
+  await expect(drawer.getByRole("radio")).toHaveText(["Ты", "Противник"]);
 
   const indicator = drawer.locator(".segment-active-indicator");
   const ownPosition = await indicator.boundingBox();
-  await drawer.getByRole("tab", { name: "Противник" }).click();
-  await expect(drawer.getByRole("tab", { name: "Противник" })).toHaveAttribute("aria-selected", "true");
+  await drawer.getByRole("radio", { name: "Противник" }).click();
+  await expect(drawer.getByRole("radio", { name: "Противник" })).toHaveAttribute("aria-checked", "true");
   await expect.poll(async () => (await indicator.boundingBox())?.x ?? 0).toBeGreaterThan(ownPosition?.x ?? Number.POSITIVE_INFINITY);
+});
+
+test.describe("reduced motion", () => {
+  test.use({ reducedMotion: "reduce" });
+
+  test("keeps modal feedback and opponent states without positional travel", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/");
+    expect(await page.evaluate(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(true);
+    const addButton = page.getByRole("button", { name: "Добавить", exact: true });
+    await addButton.click();
+
+    const menu = page.getByRole("dialog", { name: "Добавить", exact: true });
+    await expect(menu).toBeVisible();
+    await expect(menu).toHaveCSS("transform", "none");
+    await expect(menu.getByRole("button", { name: /Добавить счёт/ })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await expect(addButton).toBeFocused();
+
+    await page.getByRole("button", { name: /Мария/ }).click();
+    await expect(page.getByRole("heading", { name: "Мария" })).toBeVisible();
+    await page.evaluate(() => window.scrollTo({ top: 130, behavior: "auto" }));
+    await page.waitForTimeout(180);
+
+    expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(130, 0);
+    await expect(page.locator(".opponent-header-avatar-content")).toHaveCSS("transform", "none");
+    await expect(page.locator(".opponent-header-name")).toHaveCSS("transform", "none");
+    await expect(page.locator(".opponent-header-score")).toHaveCSS("transform", "none");
+
+    const outgoingScreen = page.locator('main[data-screen="opponent"]');
+    await page.getByRole("button", { name: "Назад" }).click();
+    const reducedBackMatrix = await outgoingScreen.evaluate((element) => {
+      const matrix = new DOMMatrixReadOnly(getComputedStyle(element).transform);
+      return { scaleX: matrix.a, scaleY: matrix.d, translateX: matrix.e, translateY: matrix.f };
+    });
+    expect(reducedBackMatrix).toEqual({ scaleX: 1, scaleY: 1, translateX: 0, translateY: 0 });
+  });
 });
 
 test("expands invalid-score guidance by swipe and keeps its handle reachable", async ({ page }) => {
@@ -157,6 +198,10 @@ test("keeps the main tab indicator on one horizontal track", async ({ page }) =>
     await expect(page.getByRole("button", { name: tab })).toHaveAttribute("aria-current", "page");
     await page.waitForTimeout(220);
     await expect(page.locator(".page-header .text-state-swap")).toHaveCount(tab === "Профиль" ? 0 : 1);
+    if (tab === "Профиль") {
+      await expect.poll(async () => page.locator(".profile-metrics .t-digit").first().evaluate((element) => getComputedStyle(element).animationName))
+        .toContain("t-digit-pop-in");
+    }
     const box = await pill.boundingBox();
     if (!box) throw new Error("Не удалось измерить индикатор tabbar");
     positions.push({ x: box.x, y: box.y, height: box.height });
@@ -213,7 +258,12 @@ test("keeps history chrome sticky and restores a previously scrolled position be
   expect(releasedHeadingBottom).toBeLessThanOrEqual(releasedGroupBottom + 1);
   expect(releasedHeadingBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(stickyTop - 8);
 
-  await page.evaluate(() => window.scrollTo({ top: Math.min(420, document.documentElement.scrollHeight), behavior: "auto" }));
+  const stickyScroll = await page.locator(".history-group").nth(1).evaluate((group, top) => {
+    const heading = group.querySelector<HTMLElement>(".history-group-heading");
+    if (!heading) throw new Error("Не найден второй заголовок периода");
+    return heading.getBoundingClientRect().top + window.scrollY - top + 12;
+  }, stickyTop);
+  await page.evaluate((top) => window.scrollTo({ top, behavior: "auto" }), stickyScroll);
   const rememberedScroll = await page.evaluate(() => window.scrollY);
   expect(rememberedScroll).toBeGreaterThan(100);
   const headerAfter = await header.boundingBox();
@@ -277,9 +327,10 @@ test("collapses the opponent header and returns to the originating history", asy
   await mariaMatch.click();
 
   await expect(page.getByRole("heading", { name: "Мария" })).toBeVisible();
+  await page.waitForTimeout(280);
   await expect(page.getByRole("heading", { name: "статистика" })).toHaveCount(0);
   const header = page.locator(".opponent-collapsing-header");
-  const avatar = page.locator(".opponent-header-avatar");
+  const avatar = page.locator(".opponent-header-avatar-content");
   const name = page.locator(".opponent-header-name");
   const score = page.locator(".opponent-header-score");
   const summary = page.locator(".opponent-header-summary");
@@ -295,19 +346,20 @@ test("collapses the opponent header and returns to the originating history", asy
     .toBeGreaterThanOrEqual(-6);
   expect(expandedScoreBox && expandedNameBox ? expandedScoreBox.y : 0)
     .toBeGreaterThan(expandedNameBox ? expandedNameBox.y + expandedNameBox.height : Number.POSITIVE_INFINITY);
-  await expect(page.locator(".opponent-header-avatar .profile-avatar-emoji")).toHaveCSS("font-size", "48px");
+  await expect(page.locator(".opponent-header-avatar-content .profile-avatar-emoji")).toHaveCSS("font-size", "48px");
 
-  await page.evaluate(() => window.scrollTo({ top: 84, behavior: "auto" }));
-  const intermediateOpacity = await page.evaluate(() => new Promise<number>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
-    const element = document.querySelector<HTMLElement>(".opponent-header-avatar");
-    resolve(Number(element ? getComputedStyle(element).opacity : 0));
+  await page.evaluate(() => window.scrollTo({ top: 130, behavior: "auto" }));
+  const intermediateState = await page.evaluate(() => new Promise<{ opacity: number; transform: string }>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
+    const element = document.querySelector<HTMLElement>(".opponent-header-avatar-content");
+    const styles = element ? getComputedStyle(element) : null;
+    resolve({ opacity: Number(styles?.opacity ?? 0), transform: styles?.transform ?? "none" });
   }))));
-  expect(intermediateOpacity).toBeCloseTo(0.5, 1);
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(168, 0);
+  expect(intermediateState.opacity).toBe(1);
+  expect(intermediateState.transform).not.toBe("none");
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(260, 0);
 
-  await page.evaluate(() => window.scrollTo({ top: 200, behavior: "auto" }));
-  await expect.poll(async () => (await avatar.boundingBox())?.width ?? 0).toBeCloseTo(34.2, 0);
-  await expect(avatar).toHaveCSS("opacity", "0");
+  await expect.poll(async () => (await avatar.boundingBox())?.width ?? 0).toBeCloseTo(31.9, 0);
+  await expect(avatar).toHaveCSS("opacity", "1");
   await expect(summary).toHaveCSS("opacity", "0");
   const compactHeaderBox = await header.boundingBox();
   const compactAvatarBox = await avatar.boundingBox();
@@ -323,6 +375,9 @@ test("collapses the opponent header and returns to the originating history", asy
   expect(compactScoreBox && compactHeaderBox ? compactScoreBox.y + compactScoreBox.height : Number.POSITIVE_INFINITY)
     .toBeLessThanOrEqual(compactHeaderBox ? compactHeaderBox.y + compactHeaderBox.height : 0);
   expect(compactScoreBox?.height ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(18);
+  const activityBox = await page.locator(".match-activity").boundingBox();
+  expect(activityBox && compactHeaderBox ? activityBox.y - (compactHeaderBox.y + compactHeaderBox.height) : Number.POSITIVE_INFINITY)
+    .toBeLessThanOrEqual(28);
   await expect(score).toHaveCSS("font-weight", "400");
   const compactScoreColors = await page.locator(".opponent-header-score .score-pair > span").evaluateAll((parts) => parts.map((part) => getComputedStyle(part).color));
   expect(new Set(compactScoreColors).size).toBe(3);
@@ -333,12 +388,30 @@ test("collapses the opponent header and returns to the originating history", asy
   expect(compactNameColor).toBe(pageTextColor);
 
   const outgoingOpponentScreen = page.locator('main[data-screen="opponent"]');
+  const navigationState = () => page.evaluate(() => {
+    const slot = document.querySelector<HTMLElement>(".bottom-toolbar-slot");
+    if (!slot) throw new Error("Не найден tabbar");
+    const rect = slot.getBoundingClientRect();
+    return {
+      bottomGap: window.innerHeight - rect.bottom,
+      position: getComputedStyle(slot).position,
+      transform: getComputedStyle(slot).transform,
+    };
+  });
+  const navigationBeforeBack = await navigationState();
+  expect(navigationBeforeBack).toMatchObject({ position: "fixed", transform: "none" });
   await page.getByRole("button", { name: "Назад" }).click();
   await page.waitForTimeout(32);
   const opponentBackTranslate = await outgoingOpponentScreen.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m41);
   expect(opponentBackTranslate).toBeGreaterThan(0);
+  const navigationDuringBack = await navigationState();
+  expect(navigationDuringBack).toMatchObject({ position: "fixed", transform: "none" });
+  expect(navigationDuringBack.bottomGap).toBeCloseTo(navigationBeforeBack.bottomGap, 1);
   await expect(page.getByRole("button", { name: "История" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { name: "история" })).toBeVisible();
+  const navigationAfterBack = await navigationState();
+  expect(navigationAfterBack).toMatchObject({ position: "fixed", transform: "none" });
+  expect(navigationAfterBack.bottomGap).toBeCloseTo(navigationBeforeBack.bottomGap, 1);
 });
 
 test("manages an FNT rating from Levels and promotes the player to Pro", async ({ page }) => {
