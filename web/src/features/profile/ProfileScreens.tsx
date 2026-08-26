@@ -7,7 +7,7 @@ import { AppIcon } from "../../components/AppIcon";
 import { MorphingHeading } from "../../components/PageHeader";
 import { ProfileAvatarContent } from "../../components/ProfileAvatar";
 import { ScorePair } from "../../components/ScoreDisplay";
-import { easeInOut, easeOut } from "../../lib/motion";
+import { easeOut } from "../../lib/motion";
 import { gamesCount, userName, winRate } from "../../lib/player";
 import { levelIndexFor, playerLevels } from "./playerLevels";
 import "./profile.css";
@@ -32,8 +32,6 @@ export function ProfileScreen(props: { profile: Profile; editing: boolean; nameI
         <div className="profile-avatar-wrap">
           <motion.span
             className="profile-avatar"
-            layoutId={reduceMotion ? undefined : "profile-avatar-surface"}
-            transition={{ layout: { duration: 0.24, ease: easeInOut } }}
             aria-hidden="true"
           >
             <ProfileAvatarContent value={profile.user.avatar_value} />
@@ -44,17 +42,20 @@ export function ProfileScreen(props: { profile: Profile; editing: boolean; nameI
         {props.editing ? <form id="profile-name-form" className="profile-name-form" onSubmit={props.onSaveName}>
           <input autoFocus value={props.nameInput} onChange={(event) => props.onNameInput(event.target.value)} maxLength={64} aria-label="Имя профиля" />
         </form> : <MorphingHeading>{userName(profile.user)}</MorphingHeading>}
-        <p>{profile.user.username ? `@${profile.user.username}` : "Игрок Telegram"}</p>
+        <p className="profile-identity">
+          <span className="profile-elo-badge">{profile.user.elo_rating} ELO</span>
+          <span>{profile.user.username ? `@${profile.user.username}` : "Игрок Telegram"}</span>
+        </p>
       </section>
 
       <div className={props.editing ? "profile-locked-content profile-locked-content-disabled" : "profile-locked-content"} aria-disabled={props.editing}>
-        <div className="profile-divider"><span>Статистика</span></div>
-
         <section className="profile-metrics" aria-label="Статистика игрока">
           <div className="profile-metric"><span>Всего игр</span><strong><AnimatedNumber value={gamesCount(profile.stats)} animateOnMount /></strong></div>
           <div className="profile-metrics-divider" aria-hidden="true" />
           <div className="profile-metric"><span>Процент побед</span><strong><AnimatedNumber value={winRate(profile.stats)} animateOnMount />%</strong></div>
         </section>
+
+        <div className="profile-divider"><span>Статистика</span></div>
 
         <dl className="profile-facts profile-detailed-facts">
           <div><dt><AppIcon name="calendar" size={21} /><span>Начал играть</span></dt><dd>{formatProfileDate(profile.user.created_at)}</dd></div>

@@ -1,11 +1,10 @@
+import { Glass } from "@samasante/liquid-glass";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 import { AppIcon, AppIconName } from "./AppIcon";
 import { easeInOut, easeOut } from "../lib/motion";
 import { tma } from "../lib/tma";
 import "./BottomNavigation.css";
-// @ts-ignore The Deslop kit is JavaScript and supplies the chosen glass material.
-import { GlassContainer } from "../../mini-app/components/GlassEffect";
 
 export type MainTab = "matches" | "stats" | "profile";
 
@@ -47,29 +46,11 @@ export function BottomNavigation({
   const actionMorphTransition = reduceMotion ? { duration: 0 } : { duration: 0.18, ease: easeInOut };
 
   return (
-    <GlassContainer
+    <Glass
       className="bottom-nav"
-      style={{
-        "--primary-5": "var(--color-glass-muted)",
-        "--primary-10": "transparent",
-        "--primary-90": "var(--color-glass-edge)",
-        "--primary-20": "var(--color-glass-muted)",
-        "--black": "var(--color-text-primary)",
-        "--glass-blur": "var(--space-12)",
-        "--glass-saturate": "180%",
-        "--glass-brightness": "1.06",
-        "--glass-contrast": "1.04",
-      } as React.CSSProperties}
+      radius={26}
+      style={{ display: "block", overflow: "hidden" }}
     >
-      <svg className="bottom-nav-filter-defs" width="0" height="0" aria-hidden="true" focusable="false">
-        <defs>
-          <filter id="bottom-nav-liquid-refraction" x="-20%" y="-20%" width="140%" height="140%" colorInterpolationFilters="sRGB">
-            <feTurbulence type="fractalNoise" baseFrequency="0.012 0.018" numOctaves="1" seed="7" result="noise" />
-            <feGaussianBlur in="noise" stdDeviation="1.5" result="softNoise" />
-            <feDisplacementMap in="SourceGraphic" in2="softNoise" scale="12" xChannelSelector="R" yChannelSelector="G" />
-          </filter>
-        </defs>
-      </svg>
       <nav className="bottom-nav-content" aria-label="Разделы">
         <motion.div
             className="nav-tabs-grid"
@@ -158,6 +139,6 @@ export function BottomNavigation({
             ) : null}
           </AnimatePresence>
       </nav>
-    </GlassContainer>
+    </Glass>
   );
 }

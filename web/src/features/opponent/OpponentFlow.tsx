@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 
 import type { DailyView, ExtendedStats, GamesView, Opponent, OpponentStats, RecentGame, Stats } from "../../api/types";
 import { AnimatedNumber } from "../../components/AnimatedNumber";
-import { HeaderAvatarBackMorph } from "../../components/PageHeader";
+import { HeaderActionButton, HeaderAvatarBackMorph } from "../../components/PageHeader";
 import { ProgressiveLoadTrigger } from "../../components/ProgressiveLoadTrigger";
 import { ProfileAvatarContent } from "../../components/ProfileAvatar";
 import { EloDeltaBadge, ScorePair, ScoreValue } from "../../components/ScoreDisplay";
@@ -32,7 +32,6 @@ export type OpponentScreenProps = {
   onDaysLoadMore(): void;
   onGamesLoadMore(): void;
   onEdit(): void;
-  editingOpen: boolean;
   onBack(): void;
 };
 
@@ -48,18 +47,7 @@ export function OpponentScreen(props: OpponentScreenProps) {
   }, [props.tab]);
 
   const tabContent = !stats ? null : props.tab === "summary" ? (
-    <>
-      <StatsSummary stats={stats.extended_stats} />
-      {!props.editingOpen ? (
-        <button
-          className="secondary-button opponent-edit-inline"
-          type="button"
-          onClick={props.onEdit}
-        >
-          Редактировать
-        </button>
-      ) : <span className="opponent-edit-inline-placeholder" aria-hidden="true" />}
-    </>
+    <StatsSummary stats={stats.extended_stats} />
   ) : props.tab === "days" ? (
     <DailyTable
       view={props.daily}
@@ -84,7 +72,7 @@ export function OpponentScreen(props: OpponentScreenProps) {
 
   return (
     <>
-      <OpponentCollapsingHeader opponent={opponent} profileAvatar={props.profileAvatar} layoutIdentity={props.layoutIdentity} stats={stats?.stats ?? opponent.stats} onBack={props.onBack} pending={!stats} />
+      <OpponentCollapsingHeader opponent={opponent} profileAvatar={props.profileAvatar} layoutIdentity={props.layoutIdentity} stats={stats?.stats ?? opponent.stats} onBack={props.onBack} onEdit={props.onEdit} pending={!stats} />
 
       {stats ? (
         <>
@@ -146,7 +134,7 @@ export function OpponentScreen(props: OpponentScreenProps) {
   );
 }
 
-export function OpponentCollapsingHeader({ opponent, profileAvatar, layoutIdentity = opponent.id, stats, onBack, pending = false }: { opponent: Opponent; profileAvatar: string | null; layoutIdentity?: string | number; stats?: Stats; onBack(): void; pending?: boolean }) {
+export function OpponentCollapsingHeader({ opponent, profileAvatar, layoutIdentity = opponent.id, stats, onBack, onEdit, pending = false }: { opponent: Opponent; profileAvatar: string | null; layoutIdentity?: string | number; stats?: Stats; onBack(): void; onEdit(): void; pending?: boolean }) {
   const reduceMotion = useReducedMotion();
   const headerRef = useRef<HTMLElement>(null);
   const backdropRef = useRef<HTMLSpanElement>(null);
@@ -256,6 +244,7 @@ export function OpponentCollapsingHeader({ opponent, profileAvatar, layoutIdenti
       <header className="opponent-collapsing-header" ref={headerRef} aria-label={`Статистика с ${opponentName(opponent)}`} aria-busy={pending || undefined}>
         <span className="opponent-header-backdrop" ref={backdropRef} aria-hidden="true" />
         <HeaderAvatarBackMorph className="opponent-header-back" value={profileAvatar} onBack={onBack} />
+        <HeaderActionButton className="opponent-header-edit" icon="pencil" label="Редактировать" onClick={onEdit} />
         <motion.span
           className="opponent-header-avatar-stage"
           layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "avatar")}

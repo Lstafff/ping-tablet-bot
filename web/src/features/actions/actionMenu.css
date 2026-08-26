@@ -34,16 +34,6 @@
 }
 
 .floating-add-button {
-  --primary-5: var(--color-glass-muted);
-  --primary-10: transparent;
-  --primary-90: var(--color-glass-edge);
-  --primary-20: var(--color-glass-muted);
-  --black: var(--color-text-primary);
-  --glass-blur: var(--space-12);
-  --glass-saturate: 180%;
-  --glass-brightness: 1.06;
-  --glass-contrast: 1.04;
-
   position: relative;
   isolation: isolate;
   display: grid;
@@ -51,11 +41,11 @@
   height: 100%;
   place-items: center;
   overflow: hidden;
-  border: 1px solid var(--color-glass-edge);
+  border: 0;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-glass-highlight), var(--color-glass-muted));
-  color: var(--color-text-primary);
-  box-shadow: var(--shadow-toolbar), inset 0 1px 0 var(--color-glass-edge);
+  background: var(--color-floating-action);
+  color: var(--color-on-floating-action);
+  box-shadow: var(--shadow-floating);
   pointer-events: auto;
 }
 
@@ -73,7 +63,7 @@
 
 
 .action-overlay-expanded {
-  padding: var(--space-16) var(--space-overlay-inline) calc(var(--space-16) + max(env(safe-area-inset-bottom), var(--tma-safe-bottom)));
+  padding: var(--space-12) var(--space-overlay-inline) calc(var(--space-12) + max(env(safe-area-inset-bottom), var(--tma-safe-bottom)));
 }
 
 .avatar-picker-overlay {

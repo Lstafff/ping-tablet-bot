@@ -9,13 +9,16 @@
 
   display: inline-flex;
   align-items: baseline;
+  gap: 0;
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
 }
 
 .rolling-digit {
   position: relative;
   display: inline-grid;
-  width: 0.72em;
+  width: auto;
+  min-width: 0;
   height: 1em;
   overflow: hidden;
   line-height: var(--line-height-single);

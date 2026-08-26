@@ -1,4 +1,3 @@
-import { AppIcon } from "./AppIcon";
 import "./ProfileAvatar.css";
 
 export type ProfileAvatarKind = "default" | "emoji" | "image";
@@ -24,5 +23,5 @@ export function ProfileAvatarContent({
   if (kind === "emoji") {
     return <span className="profile-avatar-emoji">{value}</span>;
   }
-  return <AppIcon name="user" size={defaultIconSize} />;
+  return <span className="profile-avatar-emoji profile-avatar-default-emoji" style={{ fontSize: defaultIconSize }}>🏓</span>;
 }

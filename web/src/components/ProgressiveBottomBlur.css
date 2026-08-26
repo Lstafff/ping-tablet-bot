@@ -15,10 +15,20 @@
   mask-image: linear-gradient(to bottom, transparent, black 58%);
 }
 
+.progressive-bottom-blur-only {
+  background: transparent;
+  -webkit-backdrop-filter: blur(14px) saturate(115%);
+  backdrop-filter: blur(14px) saturate(115%);
+}
+
 @media (prefers-reduced-transparency: reduce) {
   .progressive-bottom-blur {
     background: linear-gradient(to bottom, transparent, var(--color-canvas));
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+  }
+
+  .progressive-bottom-blur-only {
+    background: linear-gradient(to bottom, transparent, var(--color-canvas));
   }
 }

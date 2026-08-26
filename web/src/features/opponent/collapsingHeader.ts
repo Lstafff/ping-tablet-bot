@@ -33,15 +33,15 @@ export function calculateOpponentHeaderCollapseState(
     avatarTranslateY: reduceMotion || progress === 0 ? 0 : -140 * progress,
     avatarScale: reduceMotion ? 1 : 0.45 + 0.55 * remaining,
 
-    nameTranslateY: reduceMotion || progress === 0 ? 0 : -127 * progress,
+    nameTranslateY: reduceMotion || progress === 0 ? 0 : -141 * progress,
     nameScale: reduceMotion ? 1 : 0.7142857 + 0.2857143 * remaining,
 
-    scoreTranslateY: reduceMotion || progress === 0 ? 0 : -139 * progress,
+    scoreTranslateY: reduceMotion || progress === 0 ? 0 : -155 * progress,
     scoreScale: reduceMotion ? 1 : 0.3125 + 0.6875 * remaining,
     scoreFontWeight: Math.round(400 + 200 * remaining),
 
-    summaryOpacity: remaining,
-    summaryTranslateY: reduceMotion ? 0 : -80 * progress,
+    summaryOpacity: Math.max(0, 1 - progress * 1.6),
+    summaryTranslateY: reduceMotion ? 0 : -opponentHeaderCollapseDistance * progress,
   };
 }
 

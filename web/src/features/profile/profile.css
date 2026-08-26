@@ -129,6 +129,26 @@
   font-size: var(--font-size-body);
 }
 
+.profile-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.profile-elo-badge {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border-radius: var(--radius-full);
+  padding: var(--space-4) var(--space-8);
+  background: var(--color-win-rate-low-surface);
+  color: var(--color-win-rate-low-text);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-single);
+  white-space: nowrap;
+}
+
 .profile-locked-content {
   transition: opacity var(--duration-control) var(--ease-out);
 }
@@ -163,6 +183,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr);
   align-items: center;
+  margin-top: var(--space-48);
 }
 
 .profile-metric {

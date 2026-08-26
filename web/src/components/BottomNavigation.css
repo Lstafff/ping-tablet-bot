@@ -24,14 +24,13 @@
   position: relative;
   isolation: isolate;
   width: 100%;
-  min-height: 70px;
+  height: var(--size-action-control);
   margin: 0;
   padding: 0;
   border: 1px solid var(--color-glass-edge);
   border-radius: var(--radius-full);
-  background: linear-gradient(135deg, var(--color-glass-highlight), var(--color-glass-muted));
+  background: var(--color-glass-muted);
   box-shadow: var(--shadow-toolbar), inset 0 1px 0 var(--color-glass-edge);
-  overflow: hidden;
 }
 
 .bottom-nav::after {
@@ -45,22 +44,15 @@
   content: "";
 }
 
-.bottom-nav-filter-defs {
-  position: absolute;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
-
 .bottom-nav-content {
   position: relative;
   z-index: 3;
-  min-height: 68px;
+  height: 50px;
 }
 
 .nav-tabs-grid {
   position: absolute;
-  inset: var(--space-4) var(--space-8);
+  inset: var(--space-2) var(--space-6);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   user-select: none;
@@ -86,7 +78,7 @@
   position: relative;
   z-index: 3;
   display: grid;
-  min-height: 68px;
+  min-height: 50px;
   place-items: center;
   overflow: hidden;
   border: 0;
@@ -99,7 +91,7 @@
 
 .nav-auxiliary-button {
   display: grid;
-  min-height: 68px;
+  min-height: 50px;
   place-items: center;
   border: 0;
   border-radius: var(--radius-full);
@@ -126,7 +118,7 @@
   position: relative;
   z-index: 1;
   display: grid;
-  min-height: 60px;
+  min-height: 46px;
   place-items: center;
   border: 0;
   border-radius: var(--radius-full);
@@ -189,35 +181,16 @@
 .nav-active-pill {
   position: absolute;
   z-index: 0;
-  top: var(--space-4);
-  bottom: var(--space-4);
+  top: var(--space-2);
+  bottom: var(--space-2);
   left: 0;
   width: calc(100% / 3);
   border-radius: var(--radius-full);
-  overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--color-glass-edge) 76%, transparent);
   background: color-mix(in srgb, var(--color-overlay-subtle) 78%, transparent);
   box-shadow: var(--shadow-control), inset 0 1px 0 var(--color-glass-highlight), inset 0 -1px 0 var(--color-glass-muted);
   transition: transform var(--duration-control) var(--ease-in-out);
   will-change: transform;
-}
-
-.nav-active-pill::before {
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  background: linear-gradient(135deg, var(--color-glass-highlight), transparent 52%, var(--color-glass-muted));
-  -webkit-backdrop-filter: blur(var(--space-6)) saturate(180%);
-  backdrop-filter: blur(var(--space-6)) saturate(180%);
-  pointer-events: none;
-  content: "";
-}
-
-@supports ((backdrop-filter: url("#bottom-nav-liquid-refraction")) or (-webkit-backdrop-filter: url("#bottom-nav-liquid-refraction"))) {
-  .nav-active-pill::before {
-    -webkit-backdrop-filter: url("#bottom-nav-liquid-refraction") blur(var(--space-6)) saturate(180%);
-    backdrop-filter: url("#bottom-nav-liquid-refraction") blur(var(--space-6)) saturate(180%);
-  }
 }
 
 .nav-button-save-label {
@@ -230,8 +203,7 @@
     background: var(--color-surface);
   }
 
-  .bottom-nav::after,
-  .nav-active-pill::before {
+  .bottom-nav::after {
     display: none;
   }
 

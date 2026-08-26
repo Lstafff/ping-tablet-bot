@@ -2,8 +2,8 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useId } from "react";
 
 import { easeInOut, easeOut } from "../lib/motion";
-import { AppIcon } from "./AppIcon";
-import { ProfileAvatarContent, profileAvatarKind } from "./ProfileAvatar";
+import { AppIcon, type AppIconName } from "./AppIcon";
+import { ProfileAvatarContent } from "./ProfileAvatar";
 import "./PageHeader.css";
 
 export function MorphingHeading({
@@ -152,55 +152,52 @@ function ScreenTitle({ children }: { children: string }) {
   return <MorphingHeading morphId="screen-header-title">{children}</MorphingHeading>;
 }
 
-function HeaderTrailingMorph({ newestFirst, onSort, onSettings }: { newestFirst?: boolean; onSort?(): void; onSettings?(): void }) {
+export function HeaderActionButton({ icon, label, onClick, flipped = false, className = "" }: { icon: AppIconName; label: string; onClick(): void; flipped?: boolean; className?: string }) {
   const reduceMotion = useReducedMotion();
-  const action = onSettings ? "settings" : onSort ? "sort" : null;
   const iconTransition = reduceMotion
     ? { layout: { duration: 0 }, opacity: { duration: 0.12, ease: easeOut }, transform: { duration: 0 } }
     : { layout: { duration: 0.24, ease: easeInOut }, opacity: { duration: 0.16, ease: easeOut }, transform: { duration: 0.24, ease: easeInOut } };
-  const icon = (
-    <motion.span
-      className={`page-header-action-icon${action === "sort" ? " history-sort-icon" : ""}`}
-      layoutId="screen-header-action-icon"
-      animate={{
-        opacity: action ? 1 : 0,
-        transform: `scale(${reduceMotion ? 1 : action ? 1 : 0.5}) scaleY(${action === "sort" && newestFirst === false ? -1 : 1})`,
-      }}
-      transition={iconTransition}
-    >
-      <AppIcon name={action === "settings" ? "settings" : "filter"} size={22} />
-    </motion.span>
-  );
+  const classes = ["page-header-action-button", className].filter(Boolean).join(" ");
 
+  return (
+    <button className={classes} type="button" onClick={onClick} aria-label={label} title={label}>
+      <motion.span
+        className={`page-header-action-icon${icon === "filter" ? " history-sort-icon" : ""}`}
+        layoutId="screen-header-action-icon"
+        animate={{ opacity: 1, transform: `scale(1) scaleY(${flipped ? -1 : 1})` }}
+        transition={iconTransition}
+      >
+        <AppIcon name={icon} size={22} />
+      </motion.span>
+    </button>
+  );
+}
+
+function HeaderTrailingMorph({ newestFirst, onSort, onSettings }: { newestFirst?: boolean; onSort?(): void; onSettings?(): void }) {
   if (onSort) {
     return (
-      <button
+      <HeaderActionButton
         className="history-sort-button"
-        type="button"
+        icon="filter"
         onClick={onSort}
-        aria-label={newestFirst ? "Сначала старые" : "Сначала новые"}
-        title={newestFirst ? "Сначала старые" : "Сначала новые"}
-      >
-        {icon}
-      </button>
+        label={newestFirst ? "Сначала старые" : "Сначала новые"}
+        flipped={newestFirst === false}
+      />
     );
   }
 
   if (onSettings) {
     return (
-      <button
-        className="page-header-action-button profile-settings-button"
-        type="button"
+      <HeaderActionButton
+        className="profile-settings-button"
+        icon="settings"
         onClick={onSettings}
-        aria-label="Настройки"
-        title="Настройки"
-      >
-        {icon}
-      </button>
+        label="Настройки"
+      />
     );
   }
 
-  return <span className="page-header-spacer page-header-action-pivot" aria-hidden="true">{icon}</span>;
+  return <span className="page-header-spacer page-header-action-pivot" aria-hidden="true" />;
 }
 
 function HeaderProfileAvatar({ value, back }: { value: string | null; back: boolean }) {
@@ -208,9 +205,6 @@ function HeaderProfileAvatar({ value, back }: { value: string | null; back: bool
   const morphTransition = reduceMotion
     ? { duration: 0.12, ease: easeOut }
     : { duration: 0.24, ease: easeInOut };
-  const avatarKind = profileAvatarKind(value);
-  const hasCustomAvatar = avatarKind !== "default";
-
   return (
     <motion.span
       className={`header-profile-avatar header-leading-surface${back ? " header-leading-surface-back" : ""}`}
@@ -223,15 +217,13 @@ function HeaderProfileAvatar({ value, back }: { value: string | null; back: bool
         animate={{ opacity: back ? 0 : 1, transform: reduceMotion || !back ? "scale(1)" : "scale(0.72)" }}
         transition={morphTransition}
       />
-      {hasCustomAvatar ? (
-        <motion.span
-          className="header-leading-custom-avatar"
-          animate={{ opacity: back ? 0 : 1, transform: reduceMotion || !back ? "scale(1)" : "scale(0.72)" }}
-          transition={morphTransition}
-        >
-          <ProfileAvatarContent value={value} defaultIconSize={22} />
-        </motion.span>
-      ) : null}
+      <motion.span
+        className="header-leading-custom-avatar"
+        animate={{ opacity: back ? 0 : 1, transform: reduceMotion || !back ? "scale(1)" : "scale(0.72)" }}
+        transition={morphTransition}
+      >
+        <ProfileAvatarContent value={value} defaultIconSize={22} />
+      </motion.span>
       <motion.svg className="header-leading-morph-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
         {back ? (
           <motion.path
@@ -240,11 +232,6 @@ function HeaderProfileAvatar({ value, back }: { value: string | null; back: bool
             animate={{ opacity: 1, pathLength: 1, transform: "scale(1)" }}
             transition={morphTransition}
           />
-        ) : !hasCustomAvatar ? (
-          <>
-            <motion.circle cx="12" cy="8" r="5" initial={{ opacity: 0, pathLength: 0 }} animate={{ opacity: 1, pathLength: 1 }} transition={morphTransition} />
-            <motion.path d="M20 21a8 8 0 0 0-16 0" initial={{ opacity: 0, pathLength: 0 }} animate={{ opacity: 1, pathLength: 1 }} transition={morphTransition} />
-          </>
         ) : null}
       </motion.svg>
     </motion.span>

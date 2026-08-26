@@ -20,6 +20,13 @@ describe("ProfileAvatarContent", () => {
     expect(container.querySelector("img")).not.toBeInTheDocument();
   });
 
+  it("uses the table-tennis emoji as the default avatar", () => {
+    const { container } = render(<ProfileAvatarContent value={null} />);
+
+    expect(container.querySelector(".profile-avatar-default-emoji")).toHaveTextContent("🏓");
+    expect(container.querySelector(".app-icon")).not.toBeInTheDocument();
+  });
+
   it("does not render the default icon together with an image", () => {
     const { container } = render(<ProfileAvatarContent value="data:image/png;base64,AAAA" />);
 

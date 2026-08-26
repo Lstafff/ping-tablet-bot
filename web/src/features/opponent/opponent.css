@@ -2,9 +2,9 @@
   --opponent-avatar-expanded-top: 54px;
   --opponent-avatar-half-size: 38px;
   --opponent-compact-inline: 52px;
-  --opponent-name-expanded-top: 128px;
-  --opponent-score-expanded-top: 164px;
-  --opponent-summary-expanded-top: 220px;
+  --opponent-name-expanded-top: 142px;
+  --opponent-score-expanded-top: 180px;
+  --opponent-summary-expanded-top: 234px;
   position: sticky;
   z-index: 9;
   top: var(--sticky-page-top);
@@ -34,6 +34,21 @@
   width: 44px;
   height: 44px;
   place-items: center;
+  color: var(--color-icon-muted);
+}
+
+.opponent-header-edit {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
   color: var(--color-icon-muted);
 }
 
@@ -327,29 +342,6 @@
 
 .opponent-reveal-group {
   min-width: 0;
-}
-
-.opponent-edit-inline,
-.opponent-edit-inline-placeholder {
-  display: block;
-  width: 100%;
-  min-height: var(--size-action-control);
-  margin-top: var(--space-16);
-  border-radius: calc(var(--size-action-control) / 2);
-}
-
-.opponent-edit-inline {
-  color: var(--color-text-primary);
-}
-
-.secondary-button {
-  min-height: 50px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-12);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-body);
-  font-weight: var(--font-weight-bold);
 }
 
 .table-result {

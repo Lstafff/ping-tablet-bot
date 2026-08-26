@@ -939,7 +939,6 @@ function App() {
           onDaysLoadMore={() => void loadOpponentDays((daily?.page ?? 1) + 1)}
           onGamesLoadMore={() => void loadOpponentGames((games?.page ?? 1) + 1)}
           onEdit={openEdit}
-          editingOpen={opponentEditSheet !== null}
           onBack={goBack}
         />
       );
@@ -1064,7 +1063,7 @@ function App() {
           </AnimatePresence>
         </div>
 
-        {canShowNavigation ? <ProgressiveBottomBlur /> : null}
+        {canShowNavigation ? <ProgressiveBottomBlur blurOnly={screen === "stats"} /> : null}
         {canShowNavigation ? (
           <div className={`bottom-toolbar-slot${reserveTabAdd ? " bottom-toolbar-slot-with-add" : ""}`}>
             <div className="bottom-nav-slot">

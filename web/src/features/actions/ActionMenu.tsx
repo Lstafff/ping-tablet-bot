@@ -10,8 +10,6 @@ import { ScorePair } from "../../components/ScoreDisplay";
 import { useModalDialog } from "../../lib/dialog";
 import { easeOut } from "../../lib/motion";
 import { opponentName } from "../../lib/player";
-// @ts-ignore The existing Deslop kit is JavaScript-only.
-import { GlassContainer } from "../../../mini-app/components/GlassEffect";
 import "../../components/ActionSheet.css";
 import "./actionMenu.css";
 
@@ -95,8 +93,8 @@ export function ActionMenu(props: {
 }) {
   const reduceMotion = useReducedMotion();
   const dialogRef = useRef<HTMLElement>(null);
-  const surfaceSession = useRef(0);
-  const previousShowTrigger = useRef(props.showTrigger);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const hasOpened = useRef(false);
   useModalDialog(Boolean(props.mode), props.onClose, dialogRef);
   const dropdownEase = [0.22, 1, 0.36, 1] as const;
   const surfaceTransition = reduceMotion
@@ -116,9 +114,18 @@ export function ActionMenu(props: {
     previousMode.current = props.mode;
   }, [props.mode]);
 
-  if (props.showTrigger && !previousShowTrigger.current) surfaceSession.current += 1;
-  previousShowTrigger.current = props.showTrigger;
-  const addSurfaceLayoutId = reduceMotion ? undefined : `add-flow-surface-${surfaceSession.current}`;
+  useEffect(() => {
+    if (props.mode) {
+      hasOpened.current = true;
+      return;
+    }
+    if (!hasOpened.current || !props.showTrigger) return;
+    hasOpened.current = false;
+    const frame = window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [props.mode, props.showTrigger]);
+
+  const addSurfaceLayoutId = reduceMotion ? undefined : "add-flow-surface";
 
   const stateVariants = {
     enter: (direction: number) => ({
@@ -135,20 +142,17 @@ export function ActionMenu(props: {
   };
 
   return (
-    <LayoutGroup id="add-flow" key={surfaceSession.current}>
+    <LayoutGroup id="add-flow">
       <motion.div className="action-layer" layoutRoot>
         <AnimatePresence initial={false}>
       {!props.mode && props.showTrigger ? (
-        <motion.div
+        <div
           className="floating-add-slot"
           key="add-trigger"
-          initial={{ opacity: 1 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0, pointerEvents: "none" }}
-          transition={{ duration: reduceMotion ? 0.12 : 0.15, ease: dropdownEase }}
         >
           <div className="floating-add-scale">
             <motion.button
+              ref={triggerRef}
               className="floating-add-button"
               type="button"
               aria-label="Добавить"
@@ -160,7 +164,6 @@ export function ActionMenu(props: {
                 props.onOpen();
               }}
             >
-              <GlassContainer />
               <motion.span
                 className="add-flow-plus"
                 initial={false}
@@ -170,7 +173,7 @@ export function ActionMenu(props: {
               </motion.span>
             </motion.button>
           </div>
-        </motion.div>
+        </div>
       ) : props.mode ? (
         <motion.div
           className={isRoot ? "action-overlay" : "action-overlay action-overlay-expanded"}

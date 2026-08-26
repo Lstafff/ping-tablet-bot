@@ -29,6 +29,16 @@ test("opens an opponent and records a score through the Vaul drawer", async ({ p
   await page.getByRole("button", { name: "Редактировать" }).click();
   const editDialog = page.getByRole("dialog", { name: "Что изменить?" });
   await expect(editDialog).toBeVisible();
+  await expect.poll(async () => {
+    const editDialogBox = await editDialog.boundingBox();
+    const backgroundActionBox = await page.getByRole("button", { name: "Добавить счёт" }).boundingBox();
+    if (!editDialogBox || !backgroundActionBox) return Number.POSITIVE_INFINITY;
+    return Math.abs((editDialogBox.y + editDialogBox.height) - (backgroundActionBox.y + backgroundActionBox.height));
+  }).toBeLessThanOrEqual(1);
+  const editDialogSettledBox = await editDialog.boundingBox();
+  const toolbarBox = await page.locator(".bottom-nav").boundingBox();
+  expect(editDialogSettledBox && toolbarBox ? editDialogSettledBox.y + editDialogSettledBox.height : 0)
+    .toBeCloseTo(toolbarBox ? toolbarBox.y + toolbarBox.height : Number.POSITIVE_INFINITY, 1);
   await expect(editDialog.getByRole("button", { name: /Общий счёт партий/ })).toContainText("Не повлияет на ELO");
   await expect(editDialog.getByRole("button", { name: /Количество мячей/ })).toContainText("Не повлияет на ELO");
   await expect(editDialog.getByRole("button", { name: /Обнулить статистику/ })).toContainText("Только у себя, не изменит ELO");
@@ -334,12 +344,39 @@ test("expands invalid-score guidance by swipe and keeps its handle reachable", a
 test("keeps the main tab indicator on one horizontal track", async ({ page }) => {
   await page.goto("/");
   const pill = page.locator(".nav-active-pill");
+  const tabbar = page.locator(".bottom-nav");
+  const addButton = page.getByRole("button", { name: "Добавить", exact: true });
+  const tabbarBox = await tabbar.boundingBox();
+  const addButtonBox = await addButton.boundingBox();
+  expect(tabbarBox?.height).toBeCloseTo(52, 0);
+  expect(addButtonBox?.width).toBeCloseTo(52, 0);
+  expect(addButtonBox?.height).toBeCloseTo(52, 0);
+  expect(addButtonBox && tabbarBox ? addButtonBox.y + addButtonBox.height / 2 : 0)
+    .toBeCloseTo(tabbarBox ? tabbarBox.y + tabbarBox.height / 2 : Number.POSITIVE_INFINITY, 1);
+  await expect(tabbar).toHaveAttribute("data-liquid-glass", "material");
   const positions: Array<{ x: number; y: number; height: number }> = [];
 
   for (const tab of ["История", "Главная", "Профиль", "История"]) {
     await page.getByRole("button", { name: tab }).click();
     await expect(page.getByRole("button", { name: tab })).toHaveAttribute("aria-current", "page");
-    await page.waitForTimeout(220);
+    const addAppearanceSamples = await page.evaluate(async () => {
+      const samples: Array<{ opacity: number; transform: string; wrapperTransform: string }> = [];
+      for (let index = 0; index < 8; index += 1) {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        const button = document.querySelector<HTMLElement>(".floating-add-button");
+        const wrapper = document.querySelector<HTMLElement>(".floating-add-scale");
+        if (!button || !wrapper) continue;
+        samples.push({
+          opacity: Number(getComputedStyle(button).opacity),
+          transform: getComputedStyle(button).transform,
+          wrapperTransform: getComputedStyle(wrapper).transform,
+        });
+      }
+      return samples;
+    });
+    expect(addAppearanceSamples.length).toBeGreaterThan(0);
+    expect(addAppearanceSamples.every(({ opacity, transform, wrapperTransform }) => opacity === 1 && transform === "none" && wrapperTransform === "none")).toBe(true);
+    await page.waitForTimeout(90);
     await expect(page.locator(".page-header .text-state-swap")).toHaveCount(1);
     await expect(page.getByRole("button", { name: "Добавить", exact: true })).toBeVisible();
     if (tab === "Профиль") {
@@ -363,6 +400,9 @@ test("keeps history chrome sticky and restores a previously scrolled position be
   await page.getByRole("button", { name: "История" }).click();
   const historyRows = page.locator(".history-row");
   await loadUntilCount(page, historyRows, 8);
+  const historyBlur = page.locator(".progressive-bottom-blur-only");
+  await expect(historyBlur).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect.poll(() => historyBlur.evaluate((element) => getComputedStyle(element).backdropFilter)).toContain("blur(14px)");
 
   const sortButton = page.locator(".history-sort-button");
   await sortButton.click();
@@ -424,7 +464,7 @@ test("keeps history chrome sticky and restores a previously scrolled position be
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(rememberedScroll, -1);
 });
 
-test("keeps the compact avatar stationary and morphs it from the profile", async ({ page }) => {
+test("keeps the compact avatar stationary without flying from the profile", async ({ page }) => {
   await page.goto("/");
   const avatar = page.locator(".header-profile-avatar");
   await expect(avatar).toBeVisible();
@@ -442,18 +482,12 @@ test("keeps the compact avatar stationary and morphs it from the profile", async
   await expect(avatar).toHaveCount(0);
   await page.getByRole("button", { name: "Главная" }).click();
   await expect(avatar).toBeVisible();
-  await page.waitForTimeout(32);
-  await expect(avatar).not.toHaveCSS("transform", "none");
-  await expect.poll(() => avatar.evaluate((element) => getComputedStyle(element).transform)).toBe("none");
   await expect(avatar).toHaveCSS("transform", "none");
   const profileToMatchesBox = await avatar.boundingBox();
 
   await page.getByRole("button", { name: "Профиль" }).click();
   await page.getByRole("button", { name: "История" }).click();
   await expect(avatar).toBeVisible();
-  await page.waitForTimeout(32);
-  await expect(avatar).not.toHaveCSS("transform", "none");
-  await expect.poll(() => avatar.evaluate((element) => getComputedStyle(element).transform)).toBe("none");
   await expect(avatar).toHaveCSS("transform", "none");
   const profileToHistoryBox = await avatar.boundingBox();
   expect(profileToHistoryBox?.x).toBeCloseTo(profileToMatchesBox?.x ?? Number.POSITIVE_INFINITY, 1);
@@ -504,12 +538,13 @@ test("collapses the opponent header and returns to the originating history", asy
   const name = page.locator(".opponent-header-name");
   const score = page.locator(".opponent-header-score");
   const summary = page.locator(".opponent-header-summary");
-  const statsRegionBox = await page.locator(".opponent-stats-region").boundingBox();
   const editButtonBox = await page.getByRole("button", { name: "Редактировать" }).boundingBox();
-  expect(statsRegionBox && editButtonBox ? statsRegionBox.y + statsRegionBox.height - (editButtonBox.y + editButtonBox.height) : Number.POSITIVE_INFINITY)
-    .toBeLessThanOrEqual(8);
   await expect(header).toHaveCSS("position", "sticky");
   const expandedHeaderBox = await header.boundingBox();
+  expect(editButtonBox && expandedHeaderBox ? editButtonBox.x : 0)
+    .toBeGreaterThan(expandedHeaderBox ? expandedHeaderBox.x + expandedHeaderBox.width / 2 : Number.POSITIVE_INFINITY);
+  expect(editButtonBox && expandedHeaderBox ? editButtonBox.y + editButtonBox.height / 2 : 0)
+    .toBeCloseTo(expandedHeaderBox ? expandedHeaderBox.y + expandedHeaderBox.height / 2 : Number.POSITIVE_INFINITY, 1);
   const expandedAvatarBox = await avatar.boundingBox();
   const expandedNameBox = await name.boundingBox();
   const expandedScoreBox = await score.boundingBox();
@@ -517,11 +552,19 @@ test("collapses the opponent header and returns to the originating history", asy
   expect(expandedAvatarBox && expandedHeaderBox ? expandedAvatarBox.x + expandedAvatarBox.width / 2 : 0)
     .toBeCloseTo(expandedHeaderBox ? expandedHeaderBox.x + expandedHeaderBox.width / 2 : Number.POSITIVE_INFINITY, 1);
   expect(expandedNameBox && expandedAvatarBox ? expandedNameBox.y - (expandedAvatarBox.y + expandedAvatarBox.height) : Number.POSITIVE_INFINITY)
-    .toBeGreaterThanOrEqual(-6);
+    .toBeGreaterThanOrEqual(10);
   expect(expandedScoreBox && expandedNameBox ? expandedScoreBox.y : 0)
     .toBeGreaterThan(expandedNameBox ? expandedNameBox.y + expandedNameBox.height : Number.POSITIVE_INFINITY);
   await expect(page.locator(".opponent-header-avatar-content .profile-avatar-emoji")).toHaveCSS("font-size", "40px");
+  const digitGaps = await page.locator(".opponent-metrics .rolling-number").first().locator(".rolling-digit").evaluateAll((digits) => digits.slice(0, -1).map((digit, index) => {
+    const current = digit.getBoundingClientRect();
+    const next = digits[index + 1].getBoundingClientRect();
+    return next.left - current.right;
+  }));
+  expect(digitGaps.every((gap) => Math.abs(gap) <= 0.5)).toBe(true);
 
+  await page.mouse.move(12, 180);
+  await page.mouse.down();
   await page.evaluate(() => window.scrollTo({ top: 98, behavior: "auto" }));
   const intermediateState = await page.evaluate(() => new Promise<{ opacity: number; transform: string }>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
     const element = document.querySelector<HTMLElement>(".opponent-header-avatar-content");
@@ -530,6 +573,11 @@ test("collapses the opponent header and returns to the originating history", asy
   }))));
   expect(intermediateState.opacity).toBe(1);
   expect(intermediateState.transform).not.toBe("none");
+  const intermediateSummaryBox = await summary.boundingBox();
+  const intermediateActivityBox = await page.locator(".match-activity").boundingBox();
+  expect(intermediateSummaryBox && intermediateActivityBox ? intermediateSummaryBox.y + intermediateSummaryBox.height : Number.POSITIVE_INFINITY)
+    .toBeLessThanOrEqual(intermediateActivityBox?.y ?? 0);
+  await page.mouse.up();
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(196, 0);
 
   await expect.poll(async () => (await avatar.boundingBox())?.width ?? 0).toBeCloseTo(34.2, 0);
@@ -602,6 +650,15 @@ test("manages an FNT rating from Levels and promotes the player to Pro", async (
   await expect(page.locator(".profile-actions")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Настройки" })).toBeVisible();
   await expect(page.locator(".profile-facts").first().getByText("Рейтинг", { exact: true })).toHaveCount(0);
+  const profileIdentityBox = await page.locator(".profile-identity").boundingBox();
+  const profileMetricsBox = await page.locator(".profile-metrics").boundingBox();
+  expect(profileMetricsBox && profileIdentityBox ? profileMetricsBox.y - (profileIdentityBox.y + profileIdentityBox.height) : 0)
+    .toBeCloseTo(48, 0);
+  const dividerBox = await page.locator(".profile-divider").boundingBox();
+  expect(dividerBox?.y ?? 0).toBeGreaterThan(profileMetricsBox?.y ?? Number.POSITIVE_INFINITY);
+  await expect(page.locator(".profile-elo-badge")).toContainText("ELO");
+  await expect(page.locator(".profile-elo-badge")).toHaveCSS("background-color", "rgb(255, 242, 243)");
+  await expect(page.locator(".profile-elo-badge")).toHaveCSS("color", "rgb(201, 64, 74)");
 
   await page.locator(".profile-fact-link").click();
   await expect(page.locator("main.screen")).toHaveCount(1);
