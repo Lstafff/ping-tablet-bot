@@ -9,6 +9,18 @@ async function loadUntilCount(page: Page, rows: Locator, expectedCount: number) 
   await expect(rows).toHaveCount(expectedCount);
 }
 
+test("starts the public browser preview without requesting the Telegram SDK", async ({ page }) => {
+  const telegramSdkRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("telegram-web-app.js")) telegramSdkRequests.push(request.url());
+  });
+
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", { name: "пинг понг каунтер" })).toBeVisible();
+  expect(telegramSdkRequests).toEqual([]);
+});
+
 test("opens an opponent and records a score through the Vaul drawer", async ({ page }) => {
   await page.goto("/");
 
@@ -35,15 +47,18 @@ test("opens an opponent and records a score through the Vaul drawer", async ({ p
     if (!editDialogBox || !backgroundActionBox) return Number.POSITIVE_INFINITY;
     return Math.abs((editDialogBox.y + editDialogBox.height) - (backgroundActionBox.y + backgroundActionBox.height));
   }).toBeLessThanOrEqual(1);
+  await expect.poll(async () => editDialog.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).a)).toBeCloseTo(1, 2);
   const editDialogSettledBox = await editDialog.boundingBox();
   const toolbarBox = await page.locator(".bottom-nav").boundingBox();
-  expect(editDialogSettledBox && toolbarBox ? editDialogSettledBox.y + editDialogSettledBox.height : 0)
-    .toBeCloseTo(toolbarBox ? toolbarBox.y + toolbarBox.height : Number.POSITIVE_INFINITY, 1);
+  expect(editDialogSettledBox && toolbarBox
+    ? Math.abs((editDialogSettledBox.y + editDialogSettledBox.height) - (toolbarBox.y + toolbarBox.height))
+    : Number.POSITIVE_INFINITY).toBeLessThanOrEqual(1);
   await expect(editDialog.getByRole("button", { name: /Общий счёт партий/ })).toContainText("Не повлияет на ELO");
   await expect(editDialog.getByRole("button", { name: /Количество мячей/ })).toContainText("Не повлияет на ELO");
   await expect(editDialog.getByRole("button", { name: /Обнулить статистику/ })).toContainText("Только у себя, не изменит ELO");
   await expect(editDialog.getByRole("button", { name: /Удалить соперника/ })).toContainText("Только у себя, не изменит ELO");
-  await expect.poll(async () => editDialog.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).a)).toBeCloseTo(1, 2);
+  await expect(editDialog.getByRole("button", { name: /Обнулить статистику/ }).locator("strong")).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(editDialog.getByRole("button", { name: /Удалить соперника/ }).locator("strong")).toHaveCSS("color", "rgb(255, 255, 255)");
   await editDialog.getByRole("button", { name: "Закрыть" }).click();
   await expect(editDialog).toHaveCount(0);
 
@@ -346,15 +361,49 @@ test("keeps the main tab indicator on one horizontal track", async ({ page }) =>
   const pill = page.locator(".nav-active-pill");
   const tabbar = page.locator(".bottom-nav");
   const addButton = page.getByRole("button", { name: "Добавить", exact: true });
+  const addMaterial = page.locator(".floating-add-material");
+  const screenBox = await page.locator("main.screen").boundingBox();
   const tabbarBox = await tabbar.boundingBox();
   const addButtonBox = await addButton.boundingBox();
-  expect(tabbarBox?.height).toBeCloseTo(52, 0);
-  expect(addButtonBox?.width).toBeCloseTo(52, 0);
-  expect(addButtonBox?.height).toBeCloseTo(52, 0);
+  expect(tabbarBox?.height).toBeCloseTo(60, 0);
+  expect(addButtonBox?.width).toBeCloseTo(60, 0);
+  expect(addButtonBox?.height).toBeCloseTo(60, 0);
+  expect(addButtonBox && tabbarBox ? addButtonBox.x - (tabbarBox.x + tabbarBox.width) : 0).toBeCloseTo(4, 1);
   expect(addButtonBox && tabbarBox ? addButtonBox.y + addButtonBox.height / 2 : 0)
     .toBeCloseTo(tabbarBox ? tabbarBox.y + tabbarBox.height / 2 : Number.POSITIVE_INFINITY, 1);
+  expect(addButtonBox ? addButtonBox.x + addButtonBox.width : 0)
+    .toBeCloseTo(screenBox ? screenBox.x + screenBox.width : Number.POSITIVE_INFINITY, 1);
+  await expect(page.locator(".progressive-bottom-blur")).toHaveCount(0);
   await expect(tabbar).toHaveAttribute("data-liquid-glass", "material");
-  const positions: Array<{ x: number; y: number; height: number }> = [];
+  await expect(addMaterial).toHaveAttribute("data-liquid-glass", "material");
+  await expect(addMaterial).toHaveCSS("width", "60px");
+  await expect(addMaterial).toHaveCSS("height", "60px");
+  const material = await tabbar.evaluate((element) => ({
+    backdropFilter: getComputedStyle(element).backdropFilter,
+    background: getComputedStyle(element).backgroundColor,
+    manualOverlay: getComputedStyle(element, "::after").content,
+    labelSizes: [...element.querySelectorAll(".nav-button-label")].map((label) => getComputedStyle(label).fontSize),
+  }));
+  expect(material.backdropFilter).toContain("blur(6px)");
+  expect(material.backdropFilter).toContain("url(");
+  expect(material.background).toBe("rgba(255, 255, 255, 0.24)");
+  expect(material.manualOverlay).toBe("none");
+  expect(material.labelSizes).toEqual(["11px", "11px", "11px"]);
+  const addMaterialStyle = await addMaterial.evaluate((element) => ({
+    backdropFilter: getComputedStyle(element).backdropFilter,
+    background: getComputedStyle(element).backgroundColor,
+  }));
+  expect(addMaterialStyle.backdropFilter).toContain("blur(6px)");
+  expect(addMaterialStyle.backdropFilter).toContain("url(");
+  expect(addMaterialStyle.background).toMatch(/0(?:,? )0(?:,? )0/);
+  const positions: Array<{ x: number; y: number; width: number; height: number; buttonWidth: number; buttonPadding: string }> = [];
+  const tabButtonBoxes = await page.locator(".nav-button").evaluateAll((buttons) => buttons.map((button) => {
+    const box = button.getBoundingClientRect();
+    return { left: box.left, right: box.right, width: box.width };
+  }));
+  expect(tabButtonBoxes[1].left).toBeCloseTo(tabButtonBoxes[0].right, 1);
+  expect(tabButtonBoxes[2].left).toBeCloseTo(tabButtonBoxes[1].right, 1);
+  expect(tabbarBox?.width ?? 0).toBeCloseTo(tabButtonBoxes.reduce((sum, box) => sum + box.width, 12), 1);
 
   for (const tab of ["История", "Главная", "Профиль", "История"]) {
     await page.getByRole("button", { name: tab }).click();
@@ -378,21 +427,69 @@ test("keeps the main tab indicator on one horizontal track", async ({ page }) =>
     expect(addAppearanceSamples.every(({ opacity, transform, wrapperTransform }) => opacity === 1 && transform === "none" && wrapperTransform === "none")).toBe(true);
     await page.waitForTimeout(90);
     await expect(page.locator(".page-header .text-state-swap")).toHaveCount(1);
+    await expect(page.locator("main.screen")).toHaveCSS("filter", "none");
     await expect(page.getByRole("button", { name: "Добавить", exact: true })).toBeVisible();
     if (tab === "Профиль") {
       await expect.poll(async () => page.locator(".profile-metrics .t-digit").first().evaluate((element) => getComputedStyle(element).animationName))
         .toContain("t-digit-pop-in");
     }
     const box = await pill.boundingBox();
+    const activeButton = page.getByRole("button", { name: tab });
+    const activeButtonBox = await activeButton.boundingBox();
     if (!box) throw new Error("Не удалось измерить индикатор tabbar");
-    positions.push({ x: box.x, y: box.y, height: box.height });
+    if (!activeButtonBox) throw new Error("Не удалось измерить активную кнопку tabbar");
+    positions.push({
+      x: box.x,
+      y: box.y,
+      width: box.width,
+      height: box.height,
+      buttonWidth: activeButtonBox.width,
+      buttonPadding: await activeButton.evaluate((element) => getComputedStyle(element).padding),
+    });
+    await expect(activeButton).toHaveCSS("color", "rgb(10, 174, 240)");
+    await expect(activeButton).toHaveCSS("padding-left", "20px");
+    await expect(activeButton).toHaveCSS("padding-right", "20px");
+    await expect(activeButton.locator(".nav-button-content")).toHaveCSS("padding-left", "0px");
+    await expect(activeButton.locator(".nav-button-content")).toHaveCSS("padding-right", "0px");
+    await expect(pill).toHaveCSS("background-color", "rgba(255, 255, 255, 0.94)");
   }
 
   expect(new Set(positions.map(({ y }) => y)).size).toBe(1);
   expect(new Set(positions.map(({ height }) => height)).size).toBe(1);
+  expect(positions.every(({ width, buttonWidth }) => Math.abs(width - buttonWidth) <= 1)).toBe(true);
+  expect(positions.every(({ buttonPadding }) => buttonPadding === "0px 20px")).toBe(true);
   expect(positions[0].x).toBeLessThan(positions[1].x);
   expect(positions[1].x).toBeLessThan(positions[2].x);
   expect(positions[3].x).toBeCloseTo(positions[0].x, 2);
+
+  const trailingSlot = page.locator(".page-header-action-icon");
+  const trailingSlotHandle = await trailingSlot.elementHandle();
+  const trailingSlotBefore = await trailingSlot.boundingBox();
+  if (!trailingSlotHandle || !trailingSlotBefore) throw new Error("Не найден правый слот хедера");
+  await page.getByRole("button", { name: "Профиль" }).click();
+  await page.waitForTimeout(32);
+  const trailingSlotDuring = await trailingSlotHandle.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return { connected: element.isConnected, x: box.x, y: box.y, transform: getComputedStyle(element).transform };
+  });
+  expect(trailingSlotDuring.connected).toBe(true);
+  expect(trailingSlotDuring.x).toBeCloseTo(trailingSlotBefore.x, 1);
+  expect(trailingSlotDuring.y).toBeCloseTo(trailingSlotBefore.y, 1);
+  expect(trailingSlotDuring.transform).toBe("none");
+  const settingsButton = page.getByRole("button", { name: "Настройки" });
+  await expect(settingsButton).toBeVisible();
+  const settingsHandle = await settingsButton.elementHandle();
+  if (!settingsHandle) throw new Error("Не найдена кнопка настроек");
+  await page.getByRole("button", { name: "Главная" }).click();
+  await page.waitForTimeout(32);
+  const settingsExit = await settingsHandle.evaluate((element) => ({
+    connected: element.isConnected,
+    opacity: Number(getComputedStyle(element).opacity),
+    scale: new DOMMatrixReadOnly(getComputedStyle(element).transform).a,
+  }));
+  expect(settingsExit.connected).toBe(true);
+  expect(settingsExit.opacity < 1 || settingsExit.scale < 1).toBe(true);
+  await expect(settingsButton).toHaveCount(0);
 });
 
 test("keeps history chrome sticky and restores a previously scrolled position before paint", async ({ page }) => {
@@ -400,10 +497,6 @@ test("keeps history chrome sticky and restores a previously scrolled position be
   await page.getByRole("button", { name: "История" }).click();
   const historyRows = page.locator(".history-row");
   await loadUntilCount(page, historyRows, 8);
-  const historyBlur = page.locator(".progressive-bottom-blur-only");
-  await expect(historyBlur).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-  await expect.poll(() => historyBlur.evaluate((element) => getComputedStyle(element).backdropFilter)).toContain("blur(14px)");
-
   const sortButton = page.locator(".history-sort-button");
   await sortButton.click();
   const movingRows = await historyRows.evaluateAll((rows) => rows.filter((row) => getComputedStyle(row).transform !== "none").length);
@@ -539,12 +632,16 @@ test("collapses the opponent header and returns to the originating history", asy
   const score = page.locator(".opponent-header-score");
   const summary = page.locator(".opponent-header-summary");
   const editButtonBox = await page.getByRole("button", { name: "Редактировать" }).boundingBox();
+  const editIconBox = await page.locator(".opponent-header-edit .app-icon").boundingBox();
+  const backIconBox = await page.locator(".opponent-header-back .header-leading-morph-icon").boundingBox();
   await expect(header).toHaveCSS("position", "sticky");
   const expandedHeaderBox = await header.boundingBox();
   expect(editButtonBox && expandedHeaderBox ? editButtonBox.x : 0)
     .toBeGreaterThan(expandedHeaderBox ? expandedHeaderBox.x + expandedHeaderBox.width / 2 : Number.POSITIVE_INFINITY);
   expect(editButtonBox && expandedHeaderBox ? editButtonBox.y + editButtonBox.height / 2 : 0)
     .toBeCloseTo(expandedHeaderBox ? expandedHeaderBox.y + expandedHeaderBox.height / 2 : Number.POSITIVE_INFINITY, 1);
+  expect(editIconBox?.width ?? 0).toBeCloseTo(backIconBox?.width ?? Number.POSITIVE_INFINITY, 1);
+  expect(editIconBox?.height ?? 0).toBeCloseTo(backIconBox?.height ?? Number.POSITIVE_INFINITY, 1);
   const expandedAvatarBox = await avatar.boundingBox();
   const expandedNameBox = await name.boundingBox();
   const expandedScoreBox = await score.boundingBox();
@@ -657,8 +754,10 @@ test("manages an FNT rating from Levels and promotes the player to Pro", async (
   const dividerBox = await page.locator(".profile-divider").boundingBox();
   expect(dividerBox?.y ?? 0).toBeGreaterThan(profileMetricsBox?.y ?? Number.POSITIVE_INFINITY);
   await expect(page.locator(".profile-elo-badge")).toContainText("ELO");
-  await expect(page.locator(".profile-elo-badge")).toHaveCSS("background-color", "rgb(255, 242, 243)");
-  await expect(page.locator(".profile-elo-badge")).toHaveCSS("color", "rgb(201, 64, 74)");
+  await expect(page.locator(".profile-identity")).toHaveCSS("padding-top", "8px");
+  await expect(page.locator(".profile-identity > span")).toHaveText(["@alexey", "·", "720 ELO"]);
+  await expect(page.locator(".profile-elo-badge")).toHaveCSS("background-color", "rgb(0, 176, 255)");
+  await expect(page.locator(".profile-elo-badge")).toHaveCSS("color", "rgb(255, 255, 255)");
 
   await page.locator(".profile-fact-link").click();
   await expect(page.locator("main.screen")).toHaveCount(1);

@@ -132,7 +132,12 @@
 .profile-identity {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--space-6);
+  padding-top: var(--space-8);
+}
+
+.profile-identity-separator {
+  color: var(--color-text-secondary);
 }
 
 .profile-elo-badge {
@@ -141,8 +146,8 @@
   align-items: center;
   border-radius: var(--radius-full);
   padding: var(--space-4) var(--space-8);
-  background: var(--color-win-rate-low-surface);
-  color: var(--color-win-rate-low-text);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
   font-size: var(--font-size-caption);
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-single);

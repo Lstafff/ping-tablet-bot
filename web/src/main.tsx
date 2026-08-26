@@ -23,7 +23,6 @@ import { ErrorScreen, InitialAppSkeleton } from "./components/AppLoading";
 import { BottomNavigation, MainTab } from "./components/BottomNavigation";
 import { PageHeader } from "./components/PageHeader";
 export { LegacyMorphingHeaderTitle, LegacyWaveHeaderTitle } from "./components/PageHeader";
-import { ProgressiveBottomBlur } from "./components/ProgressiveBottomBlur";
 import { Snackbar, type SnackbarTone } from "./components/Snackbar";
 import { ActionMenu, AvatarPicker, type ActionSheet } from "./features/actions/ActionMenu";
 import { HistoryScreen } from "./features/history/HistoryScreen";
@@ -1002,25 +1001,22 @@ function App() {
                 initial: (motion: ScreenMotion) => ({
                   opacity: motion.kind === "tab" || motion.kind === "reveal" ? 0 : 1,
                   transform: reduceMotion
-                    ? "translateX(0)"
+                    ? "translateX(0px)"
                     : motion.kind === "tab"
                       ? `translateX(${motion.direction > 0 ? 14 : -14}px)`
-                      : "translateX(0)",
-                  filter: motion.kind === "reveal" && !reduceMotion ? "blur(2px)" : "blur(0)",
+                      : "translateX(0px)",
                   zIndex: 0,
                 }),
                 animate: {
                   opacity: 1,
                   transform: "translate(0, 0)",
-                  filter: "blur(0)",
                   zIndex: 0,
                 },
                 exit: (motion: ScreenMotion) => {
                   if (motion.kind === "reveal") {
                     return {
                       opacity: 0,
-                      transform: "translateX(0)",
-                      filter: reduceMotion ? "blur(0)" : "blur(2px)",
+                      transform: "translateX(0px)",
                       zIndex: 0,
                       transition: { duration: 0.16, ease: easeInOut },
                     };
@@ -1028,7 +1024,7 @@ function App() {
                   if (motion.kind === "back") {
                     return {
                       opacity: reduceMotion ? 0 : 1,
-                      transform: reduceMotion ? "translateX(0)" : "translate3d(102vw, 0, 0)",
+                      transform: reduceMotion ? "translateX(0px)" : "translate3d(102vw, 0, 0)",
                       zIndex: 2,
                       transition: { duration: reduceMotion ? 0.12 : 0.25, ease: easeOut },
                     };
@@ -1036,8 +1032,7 @@ function App() {
                   if (motion.kind === "forward") {
                     return {
                       opacity: 0,
-                      transform: "translateX(0)",
-                      filter: "blur(0)",
+                      transform: "translateX(0px)",
                       zIndex: 0,
                       transition: { duration: 0.12, ease: easeOut },
                     };
@@ -1045,11 +1040,11 @@ function App() {
                   if (motion.kind === "tab") {
                     return {
                       opacity: 0,
-                      transform: reduceMotion ? "translateX(0)" : `translateX(${motion.direction > 0 ? -14 : 14}px)`,
+                      transform: reduceMotion ? "translateX(0px)" : `translateX(${motion.direction > 0 ? -14 : 14}px)`,
                       zIndex: 0,
                     };
                   }
-                  return { opacity: 1, transform: "translateX(0)", filter: "blur(0)", zIndex: 0, transition: { duration: 0 } };
+                  return { opacity: 1, transform: "translateX(0px)", zIndex: 0, transition: { duration: 0 } };
                 },
               }}
               initial="initial"
@@ -1063,7 +1058,6 @@ function App() {
           </AnimatePresence>
         </div>
 
-        {canShowNavigation ? <ProgressiveBottomBlur blurOnly={screen === "stats"} /> : null}
         {canShowNavigation ? (
           <div className={`bottom-toolbar-slot${reserveTabAdd ? " bottom-toolbar-slot-with-add" : ""}`}>
             <div className="bottom-nav-slot">
@@ -1079,6 +1073,27 @@ function App() {
                 onAuxiliaryAction={screen === "opponent" && lastSavedGameId !== null ? () => void undoScore() : undefined}
               />
             </div>
+            {reserveTabAdd ? (
+              <ActionMenu
+                mode={actionSheet}
+                showTrigger={showTabAdd}
+                opponents={opponents}
+                code={inviteCode}
+                input={inviteInput}
+                submitting={inviteSubmitting}
+                onOpen={() => setActionSheet("actions")}
+                onClose={() => setActionSheet(null)}
+                onBack={() => setActionSheet("actions")}
+                onScore={() => setActionSheet("opponents")}
+                onScoreOpponent={openScoreForOpponent}
+                onShare={() => void openInvite("share")}
+                onAccept={() => void openInvite("accept")}
+                onInput={setInviteInput}
+                onCopyInvite={() => void copyInvite()}
+                onShareInvite={() => void shareInvite()}
+                onAcceptInvite={acceptInvite}
+              />
+            ) : null}
           </div>
         ) : null}
         {selectedOpponent ? (
@@ -1104,25 +1119,6 @@ function App() {
             }}
           />
         ) : null}
-        <ActionMenu
-          mode={actionSheet}
-          showTrigger={showTabAdd}
-          opponents={opponents}
-          code={inviteCode}
-          input={inviteInput}
-          submitting={inviteSubmitting}
-          onOpen={() => setActionSheet("actions")}
-          onClose={() => setActionSheet(null)}
-          onBack={() => setActionSheet("actions")}
-          onScore={() => setActionSheet("opponents")}
-          onScoreOpponent={openScoreForOpponent}
-          onShare={() => void openInvite("share")}
-          onAccept={() => void openInvite("accept")}
-          onInput={setInviteInput}
-          onCopyInvite={() => void copyInvite()}
-          onShareInvite={() => void shareInvite()}
-          onAcceptInvite={acceptInvite}
-        />
         <AnimatePresence initial={false}>
           {opponentEditSheet ? (
             <OpponentEditMenu

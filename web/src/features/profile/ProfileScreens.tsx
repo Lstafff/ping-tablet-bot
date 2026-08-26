@@ -1,4 +1,4 @@
-import { motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type FormEvent } from "react";
 
 import type { Profile } from "../../api/types";
@@ -37,14 +37,17 @@ export function ProfileScreen(props: { profile: Profile; editing: boolean; nameI
             <ProfileAvatarContent value={profile.user.avatar_value} />
           </motion.span>
           {profile.user.rating_is_fnt ? <FntrBadge className="profile-avatar-fntr-badge" /> : null}
-          {props.editing ? <motion.button className="profile-avatar-edit modal-icon-button" type="button" aria-label="Изменить аватар" initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.94)" }} animate={{ opacity: 1, transform: "scale(1)" }} transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }} onClick={props.onAvatarEdit}><AppIcon name="pencil" size={14} /></motion.button> : null}
+          <AnimatePresence initial={false}>
+            {props.editing ? <motion.button className="profile-avatar-edit modal-icon-button" type="button" aria-label="Изменить аватар" initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.94)" }} animate={{ opacity: 1, transform: "scale(1)" }} exit={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.94)" }} transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }} onClick={props.onAvatarEdit}><AppIcon name="pencil" size={14} /></motion.button> : null}
+          </AnimatePresence>
         </div>
         {props.editing ? <form id="profile-name-form" className="profile-name-form" onSubmit={props.onSaveName}>
           <input autoFocus value={props.nameInput} onChange={(event) => props.onNameInput(event.target.value)} maxLength={64} aria-label="Имя профиля" />
         </form> : <MorphingHeading>{userName(profile.user)}</MorphingHeading>}
         <p className="profile-identity">
-          <span className="profile-elo-badge">{profile.user.elo_rating} ELO</span>
           <span>{profile.user.username ? `@${profile.user.username}` : "Игрок Telegram"}</span>
+          <span className="profile-identity-separator" aria-hidden="true">·</span>
+          <span className="profile-elo-badge">{profile.user.elo_rating} ELO</span>
         </p>
       </section>
 

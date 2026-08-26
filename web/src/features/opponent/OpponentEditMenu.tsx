@@ -138,14 +138,12 @@ export function OpponentEditMenu(props: {
   const stateVariants = {
     enter: (direction: number) => ({
       opacity: direction === 0 ? 1 : 0,
-      transform: reduceMotion || direction === 0 ? "translateX(0)" : `translateX(${direction * 8}px)`,
-      filter: reduceMotion || direction === 0 ? "none" : "blur(3px)",
+      transform: reduceMotion || direction === 0 ? "translateX(0px)" : `translateX(${direction * 8}px)`,
     }),
-    center: { opacity: 1, transform: "translateX(0)", filter: "none" },
+    center: { opacity: 1, transform: "translateX(0px)" },
     exit: (direction: number) => ({
       opacity: direction === 0 ? 1 : 0,
-      transform: reduceMotion || direction === 0 ? "translateX(0)" : `translateX(${-direction * 8}px)`,
-      filter: reduceMotion || direction === 0 ? "none" : "blur(3px)",
+      transform: reduceMotion || direction === 0 ? "translateX(0px)" : `translateX(${-direction * 8}px)`,
     }),
   };
 
@@ -167,9 +165,9 @@ export function OpponentEditMenu(props: {
         aria-modal="true"
         aria-label={titles[mode]}
         onClick={(event) => event.stopPropagation()}
-        initial={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(12px) scale(0.96)" }}
-        animate={{ opacity: 1, transform: "translateY(0) scale(1)" }}
-        exit={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(12px) scale(0.96)", transition: { duration: reduceMotion ? 0.12 : 0.15, ease: [0.22, 1, 0.36, 1] } }}
+        initial={{ opacity: 0, transform: reduceMotion ? "translateY(0px) scale(1)" : "translateY(12px) scale(0.96)" }}
+        animate={{ opacity: 1, transform: "translateY(0px) scale(1)" }}
+        exit={{ opacity: 0, transform: reduceMotion ? "translateY(0px) scale(1)" : "translateY(12px) scale(0.96)", transition: { duration: reduceMotion ? 0.12 : 0.15, ease: [0.22, 1, 0.36, 1] } }}
         transition={{ duration: reduceMotion ? 0.12 : 0.25, ease: [0.22, 1, 0.36, 1] }}
       >
         <AnimatePresence initial={false} mode="popLayout" custom={stateDirection}>
@@ -191,6 +189,7 @@ export function OpponentEditMenu(props: {
                 key={isRoot ? "close" : "back"}
                 initial={{ opacity: 0, transform: reduceMotion ? "rotate(0deg) scale(1)" : "rotate(-45deg) scale(0.94)" }}
                 animate={{ opacity: 1, transform: "rotate(0deg) scale(1)" }}
+                exit={{ opacity: 0, transform: reduceMotion ? "rotate(0deg) scale(1)" : "rotate(45deg) scale(0.94)" }}
                 transition={{ duration: 0.18, ease: easeOut }}
               >
                 <AppIcon name={isRoot ? "x" : "arrow-left"} size={20} />

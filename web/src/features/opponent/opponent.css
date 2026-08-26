@@ -52,6 +52,13 @@
   color: var(--color-icon-muted);
 }
 
+.opponent-header-edit .app-icon {
+  width: 34px;
+  height: 34px;
+  padding: var(--space-6);
+  overflow: visible;
+}
+
 .opponent-header-avatar-stage,
 .opponent-header-name-stage,
 .opponent-header-score-stage,
@@ -428,10 +435,6 @@
   color: var(--color-text-primary);
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-semibold);
-}
-
-.opponent-edit-list > button:nth-last-child(-n + 2) strong {
-  color: var(--color-tray-danger-text);
 }
 
 .opponent-edit-form,

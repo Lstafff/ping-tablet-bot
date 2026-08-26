@@ -14,12 +14,6 @@ const tabs: ReadonlyArray<{ id: MainTab; label: string; icon: AppIconName }> = [
   { id: "profile", label: "Профиль", icon: "user" },
 ] as const;
 
-const tabPosition: Record<MainTab, number> = {
-  stats: 0,
-  matches: 1,
-  profile: 2,
-};
-
 export function BottomNavigation({
   active,
   onSelect,
@@ -47,8 +41,8 @@ export function BottomNavigation({
 
   return (
     <Glass
-      className="bottom-nav"
-      radius={26}
+      className={actionVisible ? "bottom-nav bottom-nav-action" : "bottom-nav"}
+      radius={30}
       style={{ display: "block", overflow: "hidden" }}
     >
       <nav className="bottom-nav-content" aria-label="Разделы">
@@ -59,11 +53,6 @@ export function BottomNavigation({
             transition={{ duration: reduceMotion ? 0.12 : 0.1, delay: !actionVisible && !reduceMotion ? 0.08 : 0, ease: easeOut }}
             aria-hidden={actionVisible}
           >
-            <span
-              className="nav-active-pill"
-              aria-hidden="true"
-              style={{ transform: `translateX(${tabPosition[active] * 100}%)` }}
-            />
             {tabs.map(({ id, label, icon }) => {
               const isActive = active === id;
               return (
@@ -80,6 +69,14 @@ export function BottomNavigation({
                     onSelect(id);
                   }}
                 >
+                  {isActive ? (
+                    <motion.span
+                      className="nav-active-pill"
+                      layoutId="main-tab-active-pill"
+                      aria-hidden="true"
+                      transition={{ layout: reduceMotion ? { duration: 0 } : { duration: 0.18, ease: easeInOut } }}
+                    />
+                  ) : null}
                   <span className="nav-button-content">
                     <AppIcon name={icon} aria-hidden="true" size={22} />
                     <span className="nav-button-label" aria-hidden="true">{label}</span>

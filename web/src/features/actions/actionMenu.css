@@ -6,15 +6,11 @@
   pointer-events: none;
 }
 
-.floating-add-slot {
-  position: absolute;
+.floating-add-host {
+  position: relative;
   z-index: 3;
-  right: var(--space-overlay-inline);
-  bottom: calc(var(--space-12) + max(env(safe-area-inset-bottom), var(--tma-safe-bottom)));
-  left: var(--space-overlay-inline);
-  width: min(calc(100% - var(--space-overlay-inline) - var(--space-overlay-inline)), 402px);
+  width: var(--size-action-control);
   height: var(--size-action-control);
-  margin: 0 auto;
   pointer-events: none;
 }
 
@@ -43,13 +39,23 @@
   overflow: hidden;
   border: 0;
   border-radius: 50%;
-  background: var(--color-floating-action);
+  padding: 0;
+  background: transparent;
   color: var(--color-on-floating-action);
-  box-shadow: var(--shadow-floating);
   pointer-events: auto;
 }
 
-.floating-add-button > .add-flow-plus {
+.floating-add-material {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  outline: 1px solid color-mix(in srgb, var(--color-glass-edge) 24%, transparent);
+  background: color-mix(in srgb, var(--color-floating-action) 76%, transparent);
+  box-shadow: var(--shadow-floating), inset 0 1px 0 color-mix(in srgb, var(--color-glass-highlight) 28%, transparent);
+  color: var(--color-on-floating-action);
+}
+
+.floating-add-material .add-flow-plus {
   position: relative;
   z-index: 3;
   display: grid;
@@ -57,7 +63,7 @@
   transition: transform var(--duration-press) var(--ease-out);
 }
 
-.floating-add-button:active > .add-flow-plus {
+.floating-add-button:active .add-flow-plus {
   transform: scale(0.9);
 }
 

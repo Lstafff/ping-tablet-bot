@@ -28,6 +28,7 @@ const browserWebApp = {
     },
     onEvent: noop,
     offEvent: noop,
+    ready: noop,
     expand: noop,
     setHeaderColor: noop,
     setBackgroundColor: noop,

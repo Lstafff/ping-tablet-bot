@@ -38,14 +38,12 @@ function TextStateSwapHeading({ as = "h1", children, className }: { as?: "h1" | 
             key={children}
             initial={{
               opacity: 0,
-              transform: reduceMotion ? "translateY(0)" : "translateY(4px)",
-              filter: reduceMotion ? "blur(0)" : "blur(2px)",
+              transform: reduceMotion ? "translateY(0px)" : "translateY(4px)",
             }}
-            animate={{ opacity: 1, transform: "translateY(0)", filter: "blur(0)" }}
+            animate={{ opacity: 1, transform: "translateY(0px)" }}
             exit={{
               opacity: 0,
-              transform: reduceMotion ? "translateY(0)" : "translateY(-4px)",
-              filter: reduceMotion ? "blur(0)" : "blur(2px)",
+              transform: reduceMotion ? "translateY(0px)" : "translateY(-4px)",
             }}
             transition={{ duration: reduceMotion ? 0.12 : 0.15, ease: easeInOut }}
           >
@@ -71,9 +69,9 @@ export function LegacyWaveHeaderTitle({ as = "h1", children, className }: { as?:
               <motion.span
                 className="screen-title-glyph"
                 key={`${children}-${index}-${glyph}`}
-                initial={{ opacity: 0, transform: reduceMotion ? "translateY(0)" : "translateY(100%)" }}
-                animate={{ opacity: 1, transform: "translateY(0)" }}
-                exit={{ opacity: 0, transform: reduceMotion ? "translateY(0)" : "translateY(-100%)" }}
+                initial={{ opacity: 0, transform: reduceMotion ? "translateY(0%)" : "translateY(100%)" }}
+                animate={{ opacity: 1, transform: "translateY(0%)" }}
+                exit={{ opacity: 0, transform: reduceMotion ? "translateY(0%)" : "translateY(-100%)" }}
                 transition={{ duration: 0.12, delay: reduceMotion ? 0 : index * 0.003, ease: easeOut }}
               >
                 {glyph === " " ? "\u00a0" : glyph}
@@ -131,9 +129,9 @@ export function LegacyMorphingHeaderTitle({
                   key={glyph}
                   initial={{
                     opacity: 0,
-                    transform: reduceMotion ? "translateX(0)" : "translateX(-100%)",
+                    transform: reduceMotion ? "translateX(0%)" : "translateX(-100%)",
                   }}
-                  animate={{ opacity: 1, transform: "translateX(0)" }}
+                  animate={{ opacity: 1, transform: "translateX(0%)" }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: reduceMotion ? 0.12 : 0.14, ease: easeOut }}
                 >
@@ -154,50 +152,52 @@ function ScreenTitle({ children }: { children: string }) {
 
 export function HeaderActionButton({ icon, label, onClick, flipped = false, className = "" }: { icon: AppIconName; label: string; onClick(): void; flipped?: boolean; className?: string }) {
   const reduceMotion = useReducedMotion();
-  const iconTransition = reduceMotion
-    ? { layout: { duration: 0 }, opacity: { duration: 0.12, ease: easeOut }, transform: { duration: 0 } }
-    : { layout: { duration: 0.24, ease: easeInOut }, opacity: { duration: 0.16, ease: easeOut }, transform: { duration: 0.24, ease: easeInOut } };
   const classes = ["page-header-action-button", className].filter(Boolean).join(" ");
 
   return (
-    <button className={classes} type="button" onClick={onClick} aria-label={label} title={label}>
-      <motion.span
-        className={`page-header-action-icon${icon === "filter" ? " history-sort-icon" : ""}`}
-        layoutId="screen-header-action-icon"
-        animate={{ opacity: 1, transform: `scale(1) scaleY(${flipped ? -1 : 1})` }}
-        transition={iconTransition}
-      >
-        <AppIcon name={icon} size={22} />
-      </motion.span>
-    </button>
+    <motion.button
+      className={classes}
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.12, ease: easeOut }}
+    >
+      <span className="page-header-action-icon">
+        <AnimatePresence initial={false} mode="sync">
+          <motion.span
+            className={`header-action-glyph${icon === "filter" ? " history-sort-icon" : ""}`}
+            key={icon}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transform: `scaleY(${flipped ? -1 : 1})` }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0.1 : 0.14, ease: easeOut }}
+          >
+            <AppIcon name={icon} size={22} />
+          </motion.span>
+        </AnimatePresence>
+      </span>
+    </motion.button>
   );
 }
 
 function HeaderTrailingMorph({ newestFirst, onSort, onSettings }: { newestFirst?: boolean; onSort?(): void; onSettings?(): void }) {
-  if (onSort) {
-    return (
-      <HeaderActionButton
-        className="history-sort-button"
-        icon="filter"
-        onClick={onSort}
-        label={newestFirst ? "Сначала старые" : "Сначала новые"}
-        flipped={newestFirst === false}
-      />
-    );
-  }
+  const action = onSort
+    ? { className: "history-sort-button", icon: "filter" as const, onClick: onSort, label: newestFirst ? "Сначала старые" : "Сначала новые", flipped: newestFirst === false }
+    : onSettings
+      ? { className: "profile-settings-button", icon: "settings" as const, onClick: onSettings, label: "Настройки", flipped: false }
+      : null;
 
-  if (onSettings) {
-    return (
-      <HeaderActionButton
-        className="profile-settings-button"
-        icon="settings"
-        onClick={onSettings}
-        label="Настройки"
-      />
-    );
-  }
-
-  return <span className="page-header-spacer page-header-action-pivot" aria-hidden="true" />;
+  return (
+    <span className="page-header-spacer page-header-action-pivot" aria-hidden={!onSort && !onSettings}>
+      <AnimatePresence initial={false}>
+        {action ? <HeaderActionButton key="header-action" {...action} /> : null}
+      </AnimatePresence>
+    </span>
+  );
 }
 
 function HeaderProfileAvatar({ value, back }: { value: string | null; back: boolean }) {
@@ -225,14 +225,18 @@ function HeaderProfileAvatar({ value, back }: { value: string | null; back: bool
         <ProfileAvatarContent value={value} defaultIconSize={22} />
       </motion.span>
       <motion.svg className="header-leading-morph-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
-        {back ? (
-          <motion.path
-            d="m15 18-6-6 6-6"
-            initial={{ opacity: 0, pathLength: 0, transform: reduceMotion ? "scale(1)" : "scale(0.72)" }}
-            animate={{ opacity: 1, pathLength: 1, transform: "scale(1)" }}
-            transition={morphTransition}
-          />
-        ) : null}
+        <AnimatePresence initial={false}>
+          {back ? (
+            <motion.path
+              key="back"
+              d="m15 18-6-6 6-6"
+              initial={{ opacity: 0, pathLength: 0, transform: reduceMotion ? "scale(1)" : "scale(0.72)" }}
+              animate={{ opacity: 1, pathLength: 1, transform: "scale(1)" }}
+              exit={{ opacity: 0, pathLength: 0, transform: reduceMotion ? "scale(1)" : "scale(0.72)" }}
+              transition={morphTransition}
+            />
+          ) : null}
+        </AnimatePresence>
       </motion.svg>
     </motion.span>
   );

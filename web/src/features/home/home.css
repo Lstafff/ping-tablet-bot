@@ -72,7 +72,7 @@
 }
 
 .family-balance {
-  padding: var(--space-32) 0 var(--space-48);
+  padding: var(--space-32) 0 var(--space-16);
 }
 
 .scoreline {

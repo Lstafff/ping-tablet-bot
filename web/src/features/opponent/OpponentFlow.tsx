@@ -65,8 +65,9 @@ export function OpponentScreen(props: OpponentScreenProps) {
   );
 
   const reveal = (index: number) => ({
-    initial: reduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(12px)", filter: "blur(3px)" },
-    animate: { opacity: 1, transform: "translateY(0)", filter: "blur(0)" },
+    initial: reduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(12px)" },
+    animate: { opacity: 1, transform: "translateY(0px)" },
+    exit: reduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(-8px)" },
     transition: { duration: reduceMotion ? 0.12 : 0.28, delay: reduceMotion ? 0 : index * 0.04, ease: easeOut },
   });
 
@@ -111,12 +112,12 @@ export function OpponentScreen(props: OpponentScreenProps) {
                 variants={{
                   initial: (direction: number) => ({
                     opacity: 0,
-                    transform: reduceMotion ? "translateX(0)" : `translateX(${direction >= 0 ? 14 : -14}px)`,
+                    transform: reduceMotion ? "translateX(0px)" : `translateX(${direction >= 0 ? 14 : -14}px)`,
                   }),
-                  animate: { opacity: 1, transform: "translateX(0)" },
+                  animate: { opacity: 1, transform: "translateX(0px)" },
                   exit: (direction: number) => ({
                     opacity: 0,
-                    transform: reduceMotion ? "translateX(0)" : `translateX(${direction >= 0 ? -10 : 10}px)`,
+                    transform: reduceMotion ? "translateX(0px)" : `translateX(${direction >= 0 ? -10 : 10}px)`,
                   }),
                 }}
                 initial="initial"

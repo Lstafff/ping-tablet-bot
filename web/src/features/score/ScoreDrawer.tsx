@@ -142,12 +142,16 @@ function ScoreValidationSnackbar({ message }: { message: string }) {
                 aria-label="Правила счёта"
                 tabIndex={-1}
                 style={{ y: dragY }}
-                transition={{ layout: layoutTransition }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ layout: layoutTransition, opacity: { duration: reduceMotion ? 0.12 : 0.18, ease: easeOut } }}
               >
                 <motion.div
                   className="score-rules-list"
-                  initial={{ opacity: 0, transform: reduceMotion ? "translateY(0)" : "translateY(6px)" }}
-                  animate={{ opacity: 1, transform: "translateY(0)" }}
+                  initial={{ opacity: 0, transform: reduceMotion ? "translateY(0px)" : "translateY(6px)" }}
+                  animate={{ opacity: 1, transform: "translateY(0px)" }}
+                  exit={{ opacity: 0, transform: reduceMotion ? "translateY(0px)" : "translateY(-6px)" }}
                   transition={{ duration: reduceMotion ? 0.12 : 0.18, delay: reduceMotion ? 0 : 0.04, ease: easeOut }}
                 >
                   {scoreRules.map((rule) => (
@@ -188,9 +192,9 @@ function ScoreValidationSnackbar({ message }: { message: string }) {
                   }
                 }}
                 style={{ y: dragY }}
-                initial={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(-8px) scale(0.96)" }}
-                animate={{ opacity: 1, transform: "translateY(0) scale(1)" }}
-                exit={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(-8px) scale(0.96)" }}
+                initial={{ opacity: 0, transform: reduceMotion ? "translateY(0px) scale(1)" : "translateY(-8px) scale(0.96)" }}
+                animate={{ opacity: 1, transform: "translateY(0px) scale(1)" }}
+                exit={{ opacity: 0, transform: reduceMotion ? "translateY(0px) scale(1)" : "translateY(-8px) scale(0.96)" }}
                 transition={{ layout: layoutTransition, opacity: { duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }, transform: { duration: reduceMotion ? 0.12 : 0.18, ease: easeOut } }}
               >
                 <span>{message}</span>

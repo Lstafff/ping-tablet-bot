@@ -1,3 +1,4 @@
+import { Glass } from "@samasante/liquid-glass";
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
@@ -47,9 +48,9 @@ export function AvatarPicker(props: { open: boolean; submitting: boolean; onClos
             aria-modal="true"
             aria-label="Выбрать аватар"
             onClick={(event) => event.stopPropagation()}
-            initial={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(12px) scale(0.96)" }}
-            animate={{ opacity: 1, transform: "translateY(0) scale(1)" }}
-            exit={{ opacity: 0, transform: reduceMotion ? "translateY(0) scale(1)" : "translateY(12px) scale(0.96)", transition: { duration: reduceMotion ? 0.12 : 0.15, ease: [0.22, 1, 0.36, 1] } }}
+            initial={{ opacity: 0, transform: reduceMotion ? "translateY(0px) scale(1)" : "translateY(12px) scale(0.96)" }}
+            animate={{ opacity: 1, transform: "translateY(0px) scale(1)" }}
+            exit={{ opacity: 0, transform: reduceMotion ? "translateY(0px) scale(1)" : "translateY(12px) scale(0.96)", transition: { duration: reduceMotion ? 0.12 : 0.15, ease: [0.22, 1, 0.36, 1] } }}
             transition={{ duration: reduceMotion ? 0.12 : 0.25, ease: [0.22, 1, 0.36, 1] }}
           >
             <header><MorphingHeading as="h2">Выбрать аватар</MorphingHeading><button className="modal-icon-button" type="button" aria-label="Закрыть" onClick={props.onClose}><AppIcon name="x" size={20} /></button></header>
@@ -130,74 +131,81 @@ export function ActionMenu(props: {
   const stateVariants = {
     enter: (direction: number) => ({
       opacity: direction === 0 ? 1 : 0,
-      transform: reduceMotion || direction === 0 ? "translateX(0)" : `translateX(${direction * 8}px)`,
-      filter: reduceMotion || direction === 0 ? "none" : "blur(3px)",
+      transform: reduceMotion || direction === 0 ? "translateX(0px)" : `translateX(${direction * 8}px)`,
     }),
-    center: { opacity: 1, transform: "translateX(0)", filter: "none" },
+    center: { opacity: 1, transform: "translateX(0px)" },
     exit: (direction: number) => ({
       opacity: direction === 0 ? 1 : 0,
-      transform: reduceMotion || direction === 0 ? "translateX(0)" : `translateX(${-direction * 8}px)`,
-      filter: reduceMotion || direction === 0 ? "none" : "blur(3px)",
+      transform: reduceMotion || direction === 0 ? "translateX(0px)" : `translateX(${-direction * 8}px)`,
     }),
   };
 
   return (
     <LayoutGroup id="add-flow">
+      <div className="floating-add-host">
+        <AnimatePresence initial={false}>
+          {!props.mode && props.showTrigger ? (
+            <div
+              className="floating-add-scale"
+              key="add-trigger"
+            >
+              <motion.button
+                ref={triggerRef}
+                className="floating-add-button"
+                type="button"
+                aria-label="Добавить"
+                title="Добавить"
+                layoutId={addSurfaceLayoutId}
+                transition={{ layout: { duration: reduceMotion ? 0 : 0.15, ease: dropdownEase } }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  props.onOpen();
+                }}
+              >
+                <Glass
+                  className="floating-add-material"
+                  radius={30}
+                  style={{ display: "grid", overflow: "hidden", placeItems: "center" }}
+                >
+                  <motion.span
+                    className="add-flow-plus"
+                    initial={false}
+                    animate={{ opacity: 1, transform: "scale(1)" }}
+                  >
+                    <AppIcon name="add" aria-hidden="true" size={32} strokeWidth={2} />
+                  </motion.span>
+                </Glass>
+              </motion.button>
+            </div>
+          ) : null}
+        </AnimatePresence>
+      </div>
       <motion.div className="action-layer" layoutRoot>
         <AnimatePresence initial={false}>
-      {!props.mode && props.showTrigger ? (
-        <div
-          className="floating-add-slot"
-          key="add-trigger"
-        >
-          <div className="floating-add-scale">
-            <motion.button
-              ref={triggerRef}
-              className="floating-add-button"
-              type="button"
-              aria-label="Добавить"
-              title="Добавить"
-              layoutId={addSurfaceLayoutId}
-              transition={{ layout: { duration: reduceMotion ? 0 : 0.15, ease: dropdownEase } }}
-              onClick={(event) => {
-                event.stopPropagation();
-                props.onOpen();
-              }}
+          {props.mode ? (
+            <motion.div
+              className={isRoot ? "action-overlay" : "action-overlay action-overlay-expanded"}
+              role="presentation"
+              onClick={props.onClose}
             >
-              <motion.span
-                className="add-flow-plus"
-                initial={false}
-                animate={{ opacity: 1, transform: "scale(1)" }}
+              <motion.section
+                ref={dialogRef}
+                tabIndex={-1}
+                className={isRoot ? "action-sheet action-sheet-root" : "action-sheet action-sheet-expanded"}
+                role="dialog"
+                aria-modal="true"
+                aria-label={titles[props.mode]}
+                onClick={(event) => event.stopPropagation()}
+                layout
+                layoutId={addSurfaceLayoutId}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{
+                  opacity: 0,
+                  transition: { duration: reduceMotion ? 0.12 : 0.15, ease: dropdownEase },
+                }}
+                transition={{ ...surfaceTransition, layout: { duration: reduceMotion ? 0 : 0.25, ease: dropdownEase } }}
               >
-                <AppIcon name="add" aria-hidden="true" size={32} strokeWidth={2} />
-              </motion.span>
-            </motion.button>
-          </div>
-        </div>
-      ) : props.mode ? (
-        <motion.div
-          className={isRoot ? "action-overlay" : "action-overlay action-overlay-expanded"}
-          role="presentation"
-          onClick={props.onClose}
-        >
-          <motion.section
-            ref={dialogRef}
-            tabIndex={-1}
-            className={isRoot ? "action-sheet action-sheet-root" : "action-sheet action-sheet-expanded"}
-            role="dialog"
-            aria-modal="true"
-            aria-label={titles[props.mode]}
-            onClick={(event) => event.stopPropagation()}
-            layout
-            layoutId={addSurfaceLayoutId}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{
-              opacity: 0,
-              transition: { duration: reduceMotion ? 0.12 : 0.15, ease: dropdownEase },
-            }}
-            transition={{ ...surfaceTransition, layout: { duration: reduceMotion ? 0 : 0.25, ease: dropdownEase } }}
-          >
             <AnimatePresence initial={false} mode="popLayout" custom={stateDirection}>
               {isRoot ? (
                 <motion.div
@@ -234,6 +242,7 @@ export function ActionMenu(props: {
                       onClick={props.onBack}
                       initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.92)" }}
                       animate={{ opacity: 1, transform: "scale(1)" }}
+                      exit={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.92)" }}
                       transition={{ duration: reduceMotion ? 0.12 : 0.14, ease: easeOut }}
                     >
                       <AppIcon name="arrow-left" size={20} />
@@ -262,9 +271,9 @@ export function ActionMenu(props: {
                 </motion.div>
               )}
             </AnimatePresence>
-          </motion.section>
-        </motion.div>
-      ) : null}
+              </motion.section>
+            </motion.div>
+          ) : null}
         </AnimatePresence>
       </motion.div>
     </LayoutGroup>

@@ -50,7 +50,7 @@
 .action-sheet-state {
   width: 100%;
   transform-origin: center;
-  will-change: transform, opacity, filter;
+  will-change: transform, opacity;
 }
 
 .action-sheet-panel {

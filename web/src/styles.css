@@ -1,6 +1,6 @@
 @font-face {
   font-family: "Tennis SF Pro Rounded Debug";
-  src: url("./assets/fonts/SF-Pro-Rounded-Debug.ttf") format("truetype");
+  src: url("./assets/fonts/SF-Pro-Rounded-Debug.woff2") format("woff2-variations");
   font-style: normal;
   font-weight: 100 900;
   font-display: swap;
@@ -66,7 +66,7 @@ input:focus-visible {
   --sticky-page-top: max(var(--space-24), env(safe-area-inset-top), var(--tma-safe-top));
   --sticky-page-gutter-left: max(var(--space-page-gutter), env(safe-area-inset-left), var(--tma-safe-left));
   --sticky-page-gutter-right: max(var(--space-page-gutter), env(safe-area-inset-right), var(--tma-safe-right));
-  width: min(100%, 430px);
+  width: min(100%, var(--size-app-shell-max));
   min-height: var(--tma-viewport-height, 100dvh);
   overflow-x: clip;
   margin: 0 auto;
@@ -151,7 +151,7 @@ h2 {
 }
 
 @media (max-width: 359px) {
-  .app-shell {
+  :root {
     --space-page-gutter: var(--space-20);
   }
 }
