@@ -1,3 +1,7 @@
+.screen[data-screen="stats"] {
+  overflow-x: visible;
+}
+
 .history-group-heading {
   min-height: 44px;
   align-items: center;

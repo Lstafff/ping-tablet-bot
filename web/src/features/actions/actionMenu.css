@@ -9,13 +9,12 @@
 .floating-add-slot {
   position: absolute;
   z-index: 3;
-  top: calc(100% - var(--space-floating-action-bottom) - max(env(safe-area-inset-bottom), var(--tma-safe-bottom)) - var(--size-action-control));
-  right: auto;
-  bottom: auto;
-  left: max(0px, calc((100vw - 430px) / 2));
-  width: min(100vw, 430px);
+  right: var(--space-overlay-inline);
+  bottom: calc(var(--space-12) + max(env(safe-area-inset-bottom), var(--tma-safe-bottom)));
+  left: var(--space-overlay-inline);
+  width: min(calc(100% - var(--space-overlay-inline) - var(--space-overlay-inline)), 402px);
   height: var(--size-action-control);
-  margin: 0;
+  margin: 0 auto;
   pointer-events: none;
 }
 
@@ -26,7 +25,7 @@
 
 .floating-add-scale {
   position: absolute;
-  right: var(--space-24);
+  right: 0;
   bottom: 0;
   width: var(--size-action-control);
   height: var(--size-action-control);
@@ -35,25 +34,40 @@
 }
 
 .floating-add-button {
+  --primary-5: var(--color-glass-muted);
+  --primary-10: transparent;
+  --primary-90: var(--color-glass-edge);
+  --primary-20: var(--color-glass-muted);
+  --black: var(--color-text-primary);
+  --glass-blur: var(--space-12);
+  --glass-saturate: 180%;
+  --glass-brightness: 1.06;
+  --glass-contrast: 1.04;
+
+  position: relative;
+  isolation: isolate;
   display: grid;
   width: 100%;
   height: 100%;
   place-items: center;
-  border: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-glass-edge);
   border-radius: 50%;
-  background: var(--color-floating-action);
-  color: var(--color-on-floating-action);
-  box-shadow: var(--shadow-floating);
+  background: linear-gradient(135deg, var(--color-glass-highlight), var(--color-glass-muted));
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-toolbar), inset 0 1px 0 var(--color-glass-edge);
   pointer-events: auto;
 }
 
-.floating-add-button > span {
+.floating-add-button > .add-flow-plus {
+  position: relative;
+  z-index: 3;
   display: grid;
   place-items: center;
   transition: transform var(--duration-press) var(--ease-out);
 }
 
-.floating-add-button:active > span {
+.floating-add-button:active > .add-flow-plus {
   transform: scale(0.9);
 }
 
@@ -107,6 +121,7 @@
 .avatar-emoji-grid {
   display: grid;
   min-height: 0;
+  max-height: 380px;
   grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: var(--space-2);
   overflow-y: auto;
@@ -118,7 +133,7 @@
 
 .avatar-emoji-grid button {
   min-width: 0;
-  min-height: 44px;
+  min-height: var(--size-page-header);
   border: 0;
   border-radius: var(--radius-12);
   background: transparent;

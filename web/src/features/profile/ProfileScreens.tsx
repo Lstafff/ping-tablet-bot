@@ -1,6 +1,5 @@
 import { motion, useReducedMotion } from "motion/react";
-import { type FormEvent, useRef } from "react";
-import { flushSync } from "react-dom";
+import { type FormEvent } from "react";
 
 import type { Profile } from "../../api/types";
 import { AnimatedNumber } from "../../components/AnimatedNumber";
@@ -24,14 +23,9 @@ function FntrBadge({ className = "" }: { className?: string }) {
   return <span className={`fntr-badge${className ? ` ${className}` : ""}`}>ФНТР</span>;
 }
 
-export function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: string; submitting: boolean; onLevel(): void; onEdit(): void; onAvatarEdit(): void; onNameInput(value: string): void; onSaveName(event: FormEvent<HTMLFormElement>): void }) {
+export function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: string; submitting: boolean; onLevel(): void; onAvatarEdit(): void; onNameInput(value: string): void; onSaveName(event: FormEvent<HTMLFormElement>): void }) {
   const { profile } = props;
   const reduceMotion = useReducedMotion();
-  const nameInputRef = useRef<HTMLInputElement>(null);
-  const startEditing = () => {
-    flushSync(() => props.onEdit());
-    nameInputRef.current?.focus({ preventScroll: true });
-  };
   return (
     <>
       <section className="profile-hero family-profile-hero">
@@ -48,18 +42,12 @@ export function ProfileScreen(props: { profile: Profile; editing: boolean; nameI
           {props.editing ? <motion.button className="profile-avatar-edit modal-icon-button" type="button" aria-label="Изменить аватар" initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.94)" }} animate={{ opacity: 1, transform: "scale(1)" }} transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }} onClick={props.onAvatarEdit}><AppIcon name="pencil" size={14} /></motion.button> : null}
         </div>
         {props.editing ? <form id="profile-name-form" className="profile-name-form" onSubmit={props.onSaveName}>
-          <input ref={nameInputRef} autoFocus value={props.nameInput} onChange={(event) => props.onNameInput(event.target.value)} maxLength={64} aria-label="Имя профиля" />
+          <input autoFocus value={props.nameInput} onChange={(event) => props.onNameInput(event.target.value)} maxLength={64} aria-label="Имя профиля" />
         </form> : <MorphingHeading>{userName(profile.user)}</MorphingHeading>}
         <p>{profile.user.username ? `@${profile.user.username}` : "Игрок Telegram"}</p>
       </section>
 
       <div className={props.editing ? "profile-locked-content profile-locked-content-disabled" : "profile-locked-content"} aria-disabled={props.editing}>
-        <section className="profile-actions" aria-label="Действия профиля">
-          <button type="button" disabled aria-label="Рейтинг недоступен"><span><AppIcon name="star" size={31} /></span><small>Рейтинг</small></button>
-          <button type="button" onClick={props.onLevel} disabled={props.editing}><span><AppIcon name="chart" size={31} /></span><small>Уровень</small></button>
-          <button type="button" onClick={startEditing} disabled={props.editing}><span><AppIcon name="settings" size={31} /></span><small>Настройки</small></button>
-        </section>
-
         <div className="profile-divider"><span>Статистика</span></div>
 
         <section className="profile-metrics" aria-label="Статистика игрока">

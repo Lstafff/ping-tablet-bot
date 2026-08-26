@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 
 import type { DailyView, ExtendedStats, GamesView, Opponent, OpponentStats, RecentGame, Stats } from "../../api/types";
 import { AnimatedNumber } from "../../components/AnimatedNumber";
-import { AppIcon } from "../../components/AppIcon";
+import { HeaderAvatarBackMorph } from "../../components/PageHeader";
 import { ProgressiveLoadTrigger } from "../../components/ProgressiveLoadTrigger";
 import { ProfileAvatarContent } from "../../components/ProfileAvatar";
 import { EloDeltaBadge, ScorePair, ScoreValue } from "../../components/ScoreDisplay";
@@ -17,6 +17,7 @@ export type StatsTab = "summary" | "days" | "games";
 
 export type OpponentScreenProps = {
   opponent: Opponent;
+  profileAvatar: string | null;
   layoutIdentity: string | number;
   stats: OpponentStats | null;
   tab: StatsTab;
@@ -83,7 +84,7 @@ export function OpponentScreen(props: OpponentScreenProps) {
 
   return (
     <>
-      <OpponentCollapsingHeader opponent={opponent} layoutIdentity={props.layoutIdentity} stats={stats?.stats ?? opponent.stats} onBack={props.onBack} pending={!stats} />
+      <OpponentCollapsingHeader opponent={opponent} profileAvatar={props.profileAvatar} layoutIdentity={props.layoutIdentity} stats={stats?.stats ?? opponent.stats} onBack={props.onBack} pending={!stats} />
 
       {stats ? (
         <>
@@ -145,7 +146,7 @@ export function OpponentScreen(props: OpponentScreenProps) {
   );
 }
 
-export function OpponentCollapsingHeader({ opponent, layoutIdentity = opponent.id, stats, onBack, pending = false }: { opponent: Opponent; layoutIdentity?: string | number; stats?: Stats; onBack(): void; pending?: boolean }) {
+export function OpponentCollapsingHeader({ opponent, profileAvatar, layoutIdentity = opponent.id, stats, onBack, pending = false }: { opponent: Opponent; profileAvatar: string | null; layoutIdentity?: string | number; stats?: Stats; onBack(): void; pending?: boolean }) {
   const reduceMotion = useReducedMotion();
   const headerRef = useRef<HTMLElement>(null);
   const backdropRef = useRef<HTMLSpanElement>(null);
@@ -254,9 +255,7 @@ export function OpponentCollapsingHeader({ opponent, layoutIdentity = opponent.i
     <>
       <header className="opponent-collapsing-header" ref={headerRef} aria-label={`Статистика с ${opponentName(opponent)}`} aria-busy={pending || undefined}>
         <span className="opponent-header-backdrop" ref={backdropRef} aria-hidden="true" />
-        <button className="opponent-header-back" type="button" aria-label="Назад" title="Назад" onClick={onBack}>
-          <AppIcon name="chevron-left" size={30} aria-hidden="true" />
-        </button>
+        <HeaderAvatarBackMorph className="opponent-header-back" value={profileAvatar} onBack={onBack} />
         <motion.span
           className="opponent-header-avatar-stage"
           layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "avatar")}

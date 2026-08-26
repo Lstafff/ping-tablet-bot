@@ -10,6 +10,8 @@ import { ScorePair } from "../../components/ScoreDisplay";
 import { useModalDialog } from "../../lib/dialog";
 import { easeOut } from "../../lib/motion";
 import { opponentName } from "../../lib/player";
+// @ts-ignore The existing Deslop kit is JavaScript-only.
+import { GlassContainer } from "../../../mini-app/components/GlassEffect";
 import "../../components/ActionSheet.css";
 import "./actionMenu.css";
 
@@ -142,7 +144,7 @@ export function ActionMenu(props: {
           key="add-trigger"
           initial={{ opacity: 1 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          exit={{ opacity: 0, pointerEvents: "none" }}
           transition={{ duration: reduceMotion ? 0.12 : 0.15, ease: dropdownEase }}
         >
           <div className="floating-add-scale">
@@ -158,6 +160,7 @@ export function ActionMenu(props: {
                 props.onOpen();
               }}
             >
+              <GlassContainer />
               <motion.span
                 className="add-flow-plus"
                 initial={false}

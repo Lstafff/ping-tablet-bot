@@ -152,22 +152,23 @@ function ScreenTitle({ children }: { children: string }) {
   return <MorphingHeading morphId="screen-header-title">{children}</MorphingHeading>;
 }
 
-function HeaderSortMorph({ newestFirst, onSort }: { newestFirst?: boolean; onSort?(): void }) {
+function HeaderTrailingMorph({ newestFirst, onSort, onSettings }: { newestFirst?: boolean; onSort?(): void; onSettings?(): void }) {
   const reduceMotion = useReducedMotion();
+  const action = onSettings ? "settings" : onSort ? "sort" : null;
   const iconTransition = reduceMotion
     ? { layout: { duration: 0 }, opacity: { duration: 0.12, ease: easeOut }, transform: { duration: 0 } }
     : { layout: { duration: 0.24, ease: easeInOut }, opacity: { duration: 0.16, ease: easeOut }, transform: { duration: 0.24, ease: easeInOut } };
   const icon = (
     <motion.span
-      className="history-sort-icon"
-      layoutId="screen-header-sort-icon"
+      className={`page-header-action-icon${action === "sort" ? " history-sort-icon" : ""}`}
+      layoutId="screen-header-action-icon"
       animate={{
-        opacity: onSort ? 1 : 0,
-        transform: `scale(${reduceMotion ? 1 : onSort ? 1 : 0.5}) scaleY(${newestFirst === false ? -1 : 1})`,
+        opacity: action ? 1 : 0,
+        transform: `scale(${reduceMotion ? 1 : action ? 1 : 0.5}) scaleY(${action === "sort" && newestFirst === false ? -1 : 1})`,
       }}
       transition={iconTransition}
     >
-      <AppIcon name="filter" size={22} />
+      <AppIcon name={action === "settings" ? "settings" : "filter"} size={22} />
     </motion.span>
   );
 
@@ -185,7 +186,21 @@ function HeaderSortMorph({ newestFirst, onSort }: { newestFirst?: boolean; onSor
     );
   }
 
-  return <span className="page-header-spacer history-sort-pivot" aria-hidden="true">{icon}</span>;
+  if (onSettings) {
+    return (
+      <button
+        className="page-header-action-button profile-settings-button"
+        type="button"
+        onClick={onSettings}
+        aria-label="Настройки"
+        title="Настройки"
+      >
+        {icon}
+      </button>
+    );
+  }
+
+  return <span className="page-header-spacer page-header-action-pivot" aria-hidden="true">{icon}</span>;
 }
 
 function HeaderProfileAvatar({ value, back }: { value: string | null; back: boolean }) {
@@ -236,20 +251,21 @@ function HeaderProfileAvatar({ value, back }: { value: string | null; back: bool
   );
 }
 
-function HeaderProfileMorph({ value, onBack }: { value: string | null; onBack?(): void }) {
+export function HeaderAvatarBackMorph({ value, onBack, className = "" }: { value: string | null; onBack?(): void; className?: string }) {
+  const classes = ["header-profile-button", "header-profile-static", "header-leading-slot", className].filter(Boolean).join(" ");
   return (
-    <span className="header-profile-button header-profile-static header-leading-slot">
+    <span className={classes}>
       <HeaderProfileAvatar value={value} back={Boolean(onBack)} />
       {onBack ? <button className="header-leading-action" type="button" aria-label="Назад" title="Назад" onClick={onBack} /> : null}
     </span>
   );
 }
 
-export function PageHeader({ title, sticky = false, onBack, profileAvatar, sortNewestFirst, onSort }: { title: string; sticky?: boolean; onBack?(): void; profileAvatar?: string | null; sortNewestFirst?: boolean; onSort?(): void }) {
+export function PageHeader({ title, sticky = false, onBack, profileAvatar, sortNewestFirst, onSort, onSettings }: { title: string; sticky?: boolean; onBack?(): void; profileAvatar?: string | null; sortNewestFirst?: boolean; onSort?(): void; onSettings?(): void }) {
   return (
     <header className={sticky ? "page-header page-header-sticky" : "page-header"}>
       {profileAvatar !== undefined ? (
-        <HeaderProfileMorph value={profileAvatar} onBack={onBack} />
+        <HeaderAvatarBackMorph value={profileAvatar} onBack={onBack} />
       ) : onBack ? (
         <button type="button" aria-label="Назад" title="Назад" onClick={onBack}>
           <AppIcon name="chevron-left" size={30} aria-hidden="true" />
@@ -258,7 +274,7 @@ export function PageHeader({ title, sticky = false, onBack, profileAvatar, sortN
         <span className="page-header-spacer" aria-hidden="true" />
       )}
       <ScreenTitle>{title}</ScreenTitle>
-      {profileAvatar !== undefined ? <HeaderSortMorph newestFirst={sortNewestFirst} onSort={onSort} /> : <span className="page-header-spacer" aria-hidden="true" />}
+      <HeaderTrailingMorph newestFirst={sortNewestFirst} onSort={onSort} onSettings={onSettings} />
     </header>
   );
 }

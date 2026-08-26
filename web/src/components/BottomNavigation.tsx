@@ -11,7 +11,7 @@ export type MainTab = "matches" | "stats" | "profile";
 
 const tabs: ReadonlyArray<{ id: MainTab; label: string; icon: AppIconName }> = [
   { id: "stats", label: "История", icon: "clock" },
-  { id: "matches", label: "Матчи", icon: "swords" },
+  { id: "matches", label: "Главная", icon: "swords" },
   { id: "profile", label: "Профиль", icon: "user" },
 ] as const;
 
@@ -50,13 +50,26 @@ export function BottomNavigation({
     <GlassContainer
       className="bottom-nav"
       style={{
-        "--primary-5": "var(--color-glass-highlight)",
+        "--primary-5": "var(--color-glass-muted)",
         "--primary-10": "transparent",
-        "--primary-90": "var(--color-glass-surface)",
+        "--primary-90": "var(--color-glass-edge)",
         "--primary-20": "var(--color-glass-muted)",
         "--black": "var(--color-text-primary)",
+        "--glass-blur": "var(--space-12)",
+        "--glass-saturate": "180%",
+        "--glass-brightness": "1.06",
+        "--glass-contrast": "1.04",
       } as React.CSSProperties}
     >
+      <svg className="bottom-nav-filter-defs" width="0" height="0" aria-hidden="true" focusable="false">
+        <defs>
+          <filter id="bottom-nav-liquid-refraction" x="-20%" y="-20%" width="140%" height="140%" colorInterpolationFilters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="0.012 0.018" numOctaves="1" seed="7" result="noise" />
+            <feGaussianBlur in="noise" stdDeviation="1.5" result="softNoise" />
+            <feDisplacementMap in="SourceGraphic" in2="softNoise" scale="12" xChannelSelector="R" yChannelSelector="G" />
+          </filter>
+        </defs>
+      </svg>
       <nav className="bottom-nav-content" aria-label="Разделы">
         <motion.div
             className="nav-tabs-grid"
@@ -86,7 +99,10 @@ export function BottomNavigation({
                     onSelect(id);
                   }}
                 >
-                  <span className="nav-button-content"><AppIcon name={icon} aria-hidden="true" size={25} /></span>
+                  <span className="nav-button-content">
+                    <AppIcon name={icon} aria-hidden="true" size={22} />
+                    <span className="nav-button-label" aria-hidden="true">{label}</span>
+                  </span>
                 </motion.button>
               );
             })}

@@ -96,7 +96,7 @@
   height: 40px;
   flex: 1;
   border: 0;
-  border-bottom: 1px solid var(--color-border-strong);
+  border-bottom: 1px solid var(--color-border);
   border-radius: 0;
   background: transparent;
   color: var(--color-text-primary);
@@ -111,7 +111,7 @@
 }
 
 .profile-name-form input:focus-visible {
-  border-bottom-color: var(--color-text-secondary);
+  border-bottom-color: var(--color-border);
   outline: 0;
 }
 
@@ -129,42 +129,6 @@
   font-size: var(--font-size-body);
 }
 
-.profile-actions {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-16);
-  margin-top: var(--space-32);
-}
-
-.profile-actions > button {
-  display: grid;
-  justify-items: center;
-  gap: var(--space-10);
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: inherit;
-}
-
-.profile-actions > button > span {
-  display: grid;
-  width: 66px;
-  height: 66px;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-}
-
-.profile-actions small {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-body);
-}
-
-.profile-actions > button:active {
-  transform: scale(0.96);
-}
-
 .profile-locked-content {
   transition: opacity var(--duration-control) var(--ease-out);
 }
@@ -175,16 +139,12 @@
   user-select: none;
 }
 
-.profile-actions > button:disabled {
-  color: inherit;
-}
-
 .profile-divider {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: var(--space-16);
-  margin: var(--space-48) 0 var(--space-32);
+  margin: var(--space-32) 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-subheadline);
   font-weight: var(--font-weight-medium);

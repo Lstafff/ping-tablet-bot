@@ -34,8 +34,6 @@
   width: 44px;
   height: 44px;
   place-items: center;
-  border: 0;
-  background: transparent;
   color: var(--color-icon-muted);
 }
 
@@ -325,10 +323,6 @@
 .opponent-tab-content {
   min-width: 0;
   overflow-x: clip;
-}
-
-.opponent-stats-region {
-  min-height: calc(var(--tma-viewport-height, 100dvh) - var(--size-page-header) - var(--space-64));
 }
 
 .opponent-reveal-group {

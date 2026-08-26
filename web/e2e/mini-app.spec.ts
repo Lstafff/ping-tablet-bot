@@ -27,8 +27,12 @@ test("opens an opponent and records a score through the Vaul drawer", async ({ p
     .toBeCloseTo(activityCalendarBox ? activityCalendarBox.x + activityCalendarBox.width : Number.POSITIVE_INFINITY, 1);
 
   await page.getByRole("button", { name: "Редактировать" }).click();
-  const editDialog = page.getByRole("dialog", { name: "Изменить" });
+  const editDialog = page.getByRole("dialog", { name: "Что изменить?" });
   await expect(editDialog).toBeVisible();
+  await expect(editDialog.getByRole("button", { name: /Общий счёт партий/ })).toContainText("Не повлияет на ELO");
+  await expect(editDialog.getByRole("button", { name: /Количество мячей/ })).toContainText("Не повлияет на ELO");
+  await expect(editDialog.getByRole("button", { name: /Обнулить статистику/ })).toContainText("Только у себя, не изменит ELO");
+  await expect(editDialog.getByRole("button", { name: /Удалить соперника/ })).toContainText("Только у себя, не изменит ELO");
   await expect.poll(async () => editDialog.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).a)).toBeCloseTo(1, 2);
   await editDialog.getByRole("button", { name: "Закрыть" }).click();
   await expect(editDialog).toHaveCount(0);
@@ -87,7 +91,7 @@ test("appends every progressive history batch without replacing existing rows", 
   await loadUntilCount(page, historyRows, 8);
   await expect(historyRows.filter({ hasText: "Мария" }).first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Матчи" }).click();
+  await page.getByRole("button", { name: "Главная" }).click();
   await page.locator(".opponent-card").filter({ hasText: "Мария" }).click();
   await page.getByRole("tab", { name: "По дням" }).click();
   await loadUntilCount(page, page.locator(".opponent-tab-content .table-row"), 7);
@@ -118,7 +122,25 @@ test("opens the central add-score flow without waiting and uses the shared selec
   await rootMenu.getByRole("button", { name: /Добавить счёт/ }).click();
 
   const opponentPicker = page.getByRole("dialog", { name: "Добавить счёт", exact: true });
-  await opponentPicker.getByRole("button", { name: /Мария/ }).click();
+  const handoffSamples = await opponentPicker.getByRole("button", { name: /Мария/ }).evaluate(async (button) => {
+    (button as HTMLButtonElement).click();
+    const samples: Array<{ actionScale: number | null; hasFloatingTrigger: boolean }> = [];
+    for (let index = 0; index < 12; index += 1) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const actionSurface = document.querySelector<HTMLElement>(".action-sheet");
+      const matrix = actionSurface ? new DOMMatrixReadOnly(getComputedStyle(actionSurface).transform) : null;
+      samples.push({
+        actionScale: matrix?.a ?? null,
+        hasFloatingTrigger: Boolean(document.querySelector(".floating-add-button")),
+      });
+    }
+    return samples;
+  });
+  expect(handoffSamples.every(({ hasFloatingTrigger }) => !hasFloatingTrigger)).toBe(true);
+  const actionScales = handoffSamples.flatMap(({ actionScale }) => actionScale === null ? [] : [actionScale]);
+  if (actionScales.length > 1) {
+    expect(Math.min(...actionScales)).toBeGreaterThanOrEqual(actionScales[0] - 0.05);
+  }
   const drawer = page.locator(".score-drawer-content");
   await expect(drawer).toBeVisible();
   await expect(page.locator(".score-opponent-row")).toHaveCount(0);
@@ -205,12 +227,14 @@ test("keeps nested transitions anchored and closes the avatar picker visibly", a
     shadow: "none",
     borderStyle: "solid",
     borderWidth: "1px",
-    borderColor: "rgb(102, 105, 107)",
+    borderColor: "rgb(237, 237, 237)",
   });
 
   await page.getByRole("button", { name: "Изменить аватар" }).click();
   const avatarDialog = page.getByRole("dialog", { name: "Выбрать аватар" });
   await expect(avatarDialog).toBeVisible();
+  const emojiGridHeight = await avatarDialog.locator(".avatar-emoji-grid").evaluate((element) => element.clientHeight);
+  expect(emojiGridHeight).toBeLessThanOrEqual(380);
   const avatarDialogHandle = await avatarDialog.elementHandle();
   if (!avatarDialogHandle) throw new Error("Не найден dialog выбора аватара");
   await avatarDialog.getByRole("button", { name: "Закрыть" }).click();
@@ -246,6 +270,8 @@ test.describe("reduced motion", () => {
 
     await page.getByRole("button", { name: /Мария/ }).click();
     await expect(page.getByRole("heading", { name: "Мария" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Редактировать" })).toBeVisible();
+    await page.waitForTimeout(180);
     await page.evaluate(() => window.scrollTo({ top: 130, behavior: "auto" }));
     await page.waitForTimeout(180);
 
@@ -310,11 +336,12 @@ test("keeps the main tab indicator on one horizontal track", async ({ page }) =>
   const pill = page.locator(".nav-active-pill");
   const positions: Array<{ x: number; y: number; height: number }> = [];
 
-  for (const tab of ["История", "Матчи", "Профиль", "История"]) {
+  for (const tab of ["История", "Главная", "Профиль", "История"]) {
     await page.getByRole("button", { name: tab }).click();
     await expect(page.getByRole("button", { name: tab })).toHaveAttribute("aria-current", "page");
     await page.waitForTimeout(220);
-    await expect(page.locator(".page-header .text-state-swap")).toHaveCount(tab === "Профиль" ? 0 : 1);
+    await expect(page.locator(".page-header .text-state-swap")).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Добавить", exact: true })).toBeVisible();
     if (tab === "Профиль") {
       await expect.poll(async () => page.locator(".profile-metrics .t-digit").first().evaluate((element) => getComputedStyle(element).animationName))
         .toContain("t-digit-pop-in");
@@ -413,7 +440,7 @@ test("keeps the compact avatar stationary and morphs it from the profile", async
 
   await page.getByRole("button", { name: "Профиль" }).click();
   await expect(avatar).toHaveCount(0);
-  await page.getByRole("button", { name: "Матчи" }).click();
+  await page.getByRole("button", { name: "Главная" }).click();
   await expect(avatar).toBeVisible();
   await page.waitForTimeout(32);
   await expect(avatar).not.toHaveCSS("transform", "none");
@@ -438,6 +465,17 @@ test("collapses the opponent header and returns to the originating history", asy
   await page.getByRole("button", { name: "История" }).click();
   await loadUntilCount(page, page.locator(".history-row"), 8);
 
+  const firstBadge = page.locator(".history-badge").first();
+  const firstBadgeBox = await firstBadge.boundingBox();
+  if (!firstBadgeBox) throw new Error("Не найден badge результата в истории");
+  const badgeVisibleAtLeftEdge = await page.evaluate(({ x, y }) => Boolean(
+    document.elementFromPoint(x, y)?.closest(".history-badge"),
+  ), { x: firstBadgeBox.x + 1, y: firstBadgeBox.y + firstBadgeBox.height / 2 });
+  expect(badgeVisibleAtLeftEdge).toBe(true);
+
+  const profileAvatarBefore = await page.locator(".page-header .header-profile-avatar").boundingBox();
+  if (!profileAvatarBefore) throw new Error("Не найден аватар в хэдере истории");
+
   const mariaMatch = page.getByRole("button", { name: /Победа Мария/ }).last();
   await mariaMatch.scrollIntoViewIfNeeded();
   await expect(mariaMatch).toBeVisible();
@@ -453,6 +491,12 @@ test("collapses the opponent header and returns to the originating history", asy
   expect(historyExitState.connected ? historyExitState.opacity : 0).toBeLessThan(0.5);
 
   await expect(page.getByRole("heading", { name: "Мария" })).toBeVisible();
+  const backMorph = page.locator(".opponent-header-back .header-leading-surface-back");
+  await expect(backMorph).toBeVisible();
+  await expect(page.locator(".opponent-header-back > .app-icon")).toHaveCount(0);
+  const backMorphBox = await backMorph.boundingBox();
+  expect(backMorphBox?.x).toBeCloseTo(profileAvatarBefore.x, 1);
+  expect(backMorphBox?.y).toBeCloseTo(profileAvatarBefore.y, 1);
   await page.waitForTimeout(280);
   await expect(page.getByRole("heading", { name: "статистика" })).toHaveCount(0);
   const header = page.locator(".opponent-collapsing-header");
@@ -460,6 +504,10 @@ test("collapses the opponent header and returns to the originating history", asy
   const name = page.locator(".opponent-header-name");
   const score = page.locator(".opponent-header-score");
   const summary = page.locator(".opponent-header-summary");
+  const statsRegionBox = await page.locator(".opponent-stats-region").boundingBox();
+  const editButtonBox = await page.getByRole("button", { name: "Редактировать" }).boundingBox();
+  expect(statsRegionBox && editButtonBox ? statsRegionBox.y + statsRegionBox.height - (editButtonBox.y + editButtonBox.height) : Number.POSITIVE_INFINITY)
+    .toBeLessThanOrEqual(8);
   await expect(header).toHaveCSS("position", "sticky");
   const expandedHeaderBox = await header.boundingBox();
   const expandedAvatarBox = await avatar.boundingBox();
@@ -551,10 +599,11 @@ test("manages an FNT rating from Levels and promotes the player to Pro", async (
   await expect(page.locator(".profile-facts")).toHaveCount(1);
   await expect(page.getByText("ещё про вас", { exact: true })).toHaveCount(0);
 
-  await expect(page.getByRole("button", { name: "Рейтинг недоступен" })).toBeDisabled();
+  await expect(page.locator(".profile-actions")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Настройки" })).toBeVisible();
   await expect(page.locator(".profile-facts").first().getByText("Рейтинг", { exact: true })).toHaveCount(0);
 
-  await page.getByRole("button", { name: /Уровень/ }).click();
+  await page.locator(".profile-fact-link").click();
   await expect(page.locator("main.screen")).toHaveCount(1);
   await expect(page.locator("main.screen")).toHaveCSS("opacity", "1");
   const levelsList = page.locator(".levels-list");
@@ -564,7 +613,7 @@ test("manages an FNT rating from Levels and promotes the player to Pro", async (
   expect(ratingEditorBox?.y ?? 0).toBeGreaterThan(levelsListBox?.y ?? Number.POSITIVE_INFINITY);
 
   await page.getByLabel("Рейтинг или ссылка на профиль ФНТР").fill("https://ttfr.ru/sportsman/9");
-  await page.getByRole("button", { name: "Добавить", exact: true }).click();
+  await ratingEditor.getByRole("button", { name: "Добавить", exact: true }).click();
 
   await expect(page.getByRole("heading", { name: "Профик" })).toBeVisible();
   await expect(page.locator(".level-icon-fntr-badge")).toHaveText("ФНТР");

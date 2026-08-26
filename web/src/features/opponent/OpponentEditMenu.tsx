@@ -93,7 +93,7 @@ export function OpponentEditMenu(props: {
   const [pairSide, setPairSide] = useState<ScoreSide>("own");
   const touchedPairSides = useRef<Set<ScoreSide>>(new Set());
   const titles: Record<Exclude<OpponentEditSheet, null>, string> = {
-    actions: "Изменить",
+    actions: "Что изменить?",
     games: "Изменить счёт",
     points: "Изменить мячи",
     reset: "Сбросить статистику",
@@ -200,10 +200,10 @@ export function OpponentEditMenu(props: {
           <div className="action-sheet-panel">
                   {mode === "actions" ? (
                     <div className="action-list opponent-edit-list">
-                      <button type="button" onClick={() => props.onMode("games")}><span className="action-icon action-icon-blue"><AppIcon name="award" size={25} /></span><span><strong>Изменить счёт</strong><small>Обновить общий итог матчей</small></span></button>
-                      <button type="button" onClick={() => props.onMode("points")}><span className="action-icon action-icon-green"><AppIcon name="circle-pile" size={25} /></span><span><strong>Изменить мячи</strong><small>Обновить количество мячей</small></span></button>
-                      <button type="button" onClick={() => props.onMode("reset")}><span className="action-icon action-icon-gray"><AppIcon name="refresh" size={25} /></span><span><strong>Сбросить статистику</strong><small>Обнулить только у себя</small></span></button>
-                      <button type="button" onClick={() => props.onMode("delete")}><span className="action-icon action-icon-red"><AppIcon name="trash" size={24} /></span><span><strong>Удалить соперника</strong><small>Убрать только из своего списка</small></span></button>
+                      <button type="button" onClick={() => props.onMode("games")}><span className="action-icon action-icon-blue"><AppIcon name="award" size={25} /></span><span><strong>Общий счёт партий</strong><small>Не повлияет на ELO</small></span></button>
+                      <button type="button" onClick={() => props.onMode("points")}><span className="action-icon action-icon-green"><AppIcon name="circle-pile" size={25} /></span><span><strong>Количество мячей</strong><small>Не повлияет на ELO</small></span></button>
+                      <button type="button" onClick={() => props.onMode("reset")}><span className="action-icon action-icon-gray"><AppIcon name="refresh" size={25} /></span><span><strong>Обнулить статистику</strong><small>Только у себя, не изменит ELO</small></span></button>
+                      <button type="button" onClick={() => props.onMode("delete")}><span className="action-icon action-icon-red"><AppIcon name="trash" size={24} /></span><span><strong>Удалить соперника</strong><small>Только у себя, не изменит ELO</small></span></button>
                     </div>
                   ) : null}
                   {pairMode ? (

@@ -4,9 +4,15 @@
   right: var(--space-overlay-inline);
   bottom: calc(var(--space-12) + max(env(safe-area-inset-bottom), var(--tma-safe-bottom)));
   left: var(--space-overlay-inline);
-  width: min(calc(100% - 28px), 402px);
+  width: min(calc(100% - var(--space-overlay-inline) - var(--space-overlay-inline)), 402px);
   margin: 0 auto;
   pointer-events: none;
+}
+
+.bottom-toolbar-slot-with-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--size-action-control);
+  gap: var(--space-10);
 }
 
 .bottom-nav-slot {
@@ -16,14 +22,34 @@
 
 .bottom-nav {
   position: relative;
+  isolation: isolate;
   width: 100%;
   min-height: 70px;
   margin: 0;
   padding: 0;
   border: 1px solid var(--color-glass-edge);
   border-radius: var(--radius-full);
-  box-shadow: none;
+  background: linear-gradient(135deg, var(--color-glass-highlight), var(--color-glass-muted));
+  box-shadow: var(--shadow-toolbar), inset 0 1px 0 var(--color-glass-edge);
   overflow: hidden;
+}
+
+.bottom-nav::after {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 1px 0 var(--color-glass-highlight), inset -1px 0 var(--color-glass-muted);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  content: "";
+}
+
+.bottom-nav-filter-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
 }
 
 .bottom-nav-content {
@@ -34,7 +60,7 @@
 
 .nav-tabs-grid {
   position: absolute;
-  inset: var(--space-4) var(--space-12);
+  inset: var(--space-4) var(--space-8);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   user-select: none;
@@ -106,14 +132,25 @@
   border-radius: var(--radius-full);
   background: transparent;
   color: var(--color-text-tertiary);
-  transition: transform var(--duration-press) var(--ease-out), opacity var(--duration-press) var(--ease-out);
+  transition: transform var(--duration-press) var(--ease-out), opacity var(--duration-press) var(--ease-out), color var(--duration-control) var(--ease-out);
 }
 
 .nav-button-content {
   position: relative;
   z-index: 1;
   display: grid;
+  gap: var(--space-2);
   place-items: center;
+  line-height: var(--line-height-single);
+}
+
+.nav-button-label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-bold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav-save-button .nav-button-content {
@@ -122,7 +159,11 @@
 }
 
 .nav-button-active {
-  color: var(--color-on-accent);
+  color: var(--color-text-primary);
+}
+
+.nav-button:active {
+  transform: scale(0.97);
 }
 
 .nav-button:focus-visible,
@@ -141,7 +182,7 @@
 
   .nav-button-active:focus-visible .nav-button-content,
   .nav-save-button:focus-visible .nav-button-content {
-    color: var(--color-on-accent);
+    color: var(--color-text-primary);
   }
 }
 
@@ -153,12 +194,58 @@
   left: 0;
   width: calc(100% / 3);
   border-radius: var(--radius-full);
-  background: var(--color-accent);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-glass-edge) 76%, transparent);
+  background: color-mix(in srgb, var(--color-overlay-subtle) 78%, transparent);
+  box-shadow: var(--shadow-control), inset 0 1px 0 var(--color-glass-highlight), inset 0 -1px 0 var(--color-glass-muted);
   transition: transform var(--duration-control) var(--ease-in-out);
   will-change: transform;
+}
+
+.nav-active-pill::before {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--color-glass-highlight), transparent 52%, var(--color-glass-muted));
+  -webkit-backdrop-filter: blur(var(--space-6)) saturate(180%);
+  backdrop-filter: blur(var(--space-6)) saturate(180%);
+  pointer-events: none;
+  content: "";
+}
+
+@supports ((backdrop-filter: url("#bottom-nav-liquid-refraction")) or (-webkit-backdrop-filter: url("#bottom-nav-liquid-refraction"))) {
+  .nav-active-pill::before {
+    -webkit-backdrop-filter: url("#bottom-nav-liquid-refraction") blur(var(--space-6)) saturate(180%);
+    backdrop-filter: url("#bottom-nav-liquid-refraction") blur(var(--space-6)) saturate(180%);
+  }
 }
 
 .nav-button-save-label {
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-bold);
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .bottom-nav {
+    background: var(--color-surface);
+  }
+
+  .bottom-nav::after,
+  .nav-active-pill::before {
+    display: none;
+  }
+
+  .nav-active-pill {
+    background: var(--color-surface-pressed);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-active-pill {
+    transition: opacity var(--duration-control) var(--ease-out);
+  }
+
+  .nav-button:active {
+    transform: none;
+  }
 }

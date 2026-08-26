@@ -42,7 +42,7 @@ import "./styles.css";
 type Screen = "home" | "stats" | "profile" | "levels" | "opponent";
 type ConfirmAction = "reset" | "delete";
 type InviteMode = "share" | "accept";
-type ScoreReturnTarget = "home" | "opponent";
+type ScoreReturnTarget = "home" | "stats" | "profile" | "opponent";
 type PendingAction = "score" | "opponent" | "invite" | "rating" | "profile" | "avatar";
 type PaginationRequest = { token: number; inFlight: boolean };
 type SnackbarNotice = { id: number; tone: SnackbarTone; message: string } | null;
@@ -513,7 +513,8 @@ function App() {
   const openScoreForOpponent = (opponent: Opponent) => {
     setSelectedOpponent(opponent);
     setActionSheet(null);
-    openScore("home");
+    const returnTarget: ScoreReturnTarget = screen === "stats" || screen === "profile" ? screen : "home";
+    openScore(returnTarget);
     window.requestAnimationFrame(() => {
       window.setTimeout(() => {
         void loadOpponent(opponent, "summary", 1, false)
@@ -533,7 +534,7 @@ function App() {
   const backFromScoreToOpponentPicker = () => {
     resetScoreDraft();
     setScoreDrawerOpen(false);
-    setScreen("home");
+    setScreen(scoreReturnTarget === "stats" || scoreReturnTarget === "profile" ? scoreReturnTarget : "home");
     setActionSheet("opponents");
     window.scrollTo({ top: 0, behavior: "auto" });
   };
@@ -547,7 +548,7 @@ function App() {
     } else {
       setSelectedOpponent(null);
       setOpponentStats(null);
-      setScreen("home");
+      setScreen(scoreReturnTarget === "stats" || scoreReturnTarget === "profile" ? scoreReturnTarget : "home");
     }
     window.scrollTo({ top: 0, behavior: "auto" });
   };
@@ -781,6 +782,12 @@ function App() {
     }
   };
 
+  const startProfileEditing = () => {
+    if (!profile) return;
+    setProfileNameInput(userName(profile.user));
+    setProfileEditing(true);
+  };
+
   const saveAvatar = async (avatarValue: string) => {
     setActionPending("avatar", true);
     setError("");
@@ -879,10 +886,6 @@ function App() {
             setSnackbar(null);
             setScreen("levels");
           }}
-          onEdit={() => {
-            setProfileNameInput(userName(profile.user));
-            setProfileEditing(true);
-          }}
           onAvatarEdit={() => {
             setError("");
             setAvatarPickerOpen(true);
@@ -921,6 +924,7 @@ function App() {
       return (
         <OpponentScreen
           opponent={selectedOpponent}
+          profileAvatar={profile.user.avatar_value}
           layoutIdentity={opponentLayoutIdentity}
           stats={opponentStats}
           tab={statsTab}
@@ -944,6 +948,8 @@ function App() {
   })();
 
   const canShowNavigation = profile && !loading && (screen === "home" || screen === "stats" || screen === "profile" || screen === "opponent");
+  const showTabAdd = Boolean(profile) && !loading && isMainTabScreen(screen) && !profileEditing && screenTransition === "default" && !scoreDrawerOpen;
+  const reserveTabAdd = Boolean(profile) && !loading && isMainTabScreen(screen) && !profileEditing && (showTabAdd || actionSheet !== null);
   const activeTab: MainTab = screen === "stats" || screen === "profile" ? screen : "matches";
   const savedHistoryScroll = screen === "stats" ? Number(sessionStorage.getItem("ping-tablet:scroll:stats") ?? 0) : 0;
   const screenMotion: ScreenMotion = !loading && !hasRevealedInitialContent.current
@@ -960,13 +966,14 @@ function App() {
     <MotionConfig reducedMotion="user">
       <LayoutGroup id="ping-tablet-layout">
         <div className="app-shell" data-vaul-drawer-wrapper="">
-          {!loading && profile && (screen === "home" || screen === "stats") ? (
+          {!loading && profile && isMainTabScreen(screen) ? (
             <PageHeader
-              title={screen === "home" ? "пинг понг каунтер" : "история"}
+              title={screen === "home" ? "пинг понг каунтер" : screen === "stats" ? "история" : "профиль"}
               sticky={screen === "stats"}
-              profileAvatar={profile.user.avatar_value}
+              profileAvatar={screen === "profile" ? undefined : profile.user.avatar_value}
               sortNewestFirst={screen === "stats" ? historyNewestFirst : undefined}
               onSort={screen === "stats" ? () => setHistoryNewestFirst((value) => !value) : undefined}
+              onSettings={screen === "profile" && !profileEditing ? startProfileEditing : undefined}
             />
           ) : null}
           <Snackbar
@@ -1059,7 +1066,7 @@ function App() {
 
         {canShowNavigation ? <ProgressiveBottomBlur /> : null}
         {canShowNavigation ? (
-          <div className="bottom-toolbar-slot">
+          <div className={`bottom-toolbar-slot${reserveTabAdd ? " bottom-toolbar-slot-with-add" : ""}`}>
             <div className="bottom-nav-slot">
               <BottomNavigation
                 active={activeTab}
@@ -1100,7 +1107,7 @@ function App() {
         ) : null}
         <ActionMenu
           mode={actionSheet}
-          showTrigger={screen === "home" && screenTransition === "default" && Boolean(profile)}
+          showTrigger={showTabAdd}
           opponents={opponents}
           code={inviteCode}
           input={inviteInput}
