@@ -1,9 +1,9 @@
-import { Glass } from "@samasante/liquid-glass";
-import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "motion/react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { AnimatePresence, LayoutGroup, useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
+import { memo, type FormEvent, useEffect, useRef } from "react";
 
 import type { Opponent } from "../../api/types";
-import avatarEmojis from "../../avatar-emojis.json";
+import { AdaptiveGlass } from "../../components/AdaptiveGlass";
 import { AppIcon } from "../../components/AppIcon";
 import { MorphingHeading } from "../../components/PageHeader";
 import { ProfileAvatarContent } from "../../components/ProfileAvatar";
@@ -16,64 +16,7 @@ import "./actionMenu.css";
 
 export type ActionSheet = "actions" | "opponents" | "share" | "accept" | null;
 
-const EMOJI_BATCH_SIZE = 320;
-
-export function AvatarPicker(props: { open: boolean; submitting: boolean; onClose(): void; onEmoji(value: string): void }) {
-  const reduceMotion = useReducedMotion();
-  const [visibleEmojiCount, setVisibleEmojiCount] = useState(EMOJI_BATCH_SIZE);
-  const dialogRef = useRef<HTMLElement>(null);
-  useModalDialog(props.open, props.onClose, dialogRef);
-
-  useEffect(() => {
-    if (props.open) setVisibleEmojiCount(EMOJI_BATCH_SIZE);
-  }, [props.open]);
-
-  return (
-    <AnimatePresence>
-      {props.open ? (
-        <motion.div
-          className="avatar-picker-overlay"
-          role="presentation"
-          onClick={props.onClose}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0, transition: { duration: reduceMotion ? 0.12 : 0.15, ease: [0.22, 1, 0.36, 1] } }}
-          transition={{ duration: reduceMotion ? 0.12 : 0.25, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <motion.section
-            ref={dialogRef}
-            tabIndex={-1}
-            className="avatar-picker"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Выбрать аватар"
-            onClick={(event) => event.stopPropagation()}
-            initial={{ opacity: 0, transform: reduceMotion ? "translateY(0px) scale(1)" : "translateY(12px) scale(0.96)" }}
-            animate={{ opacity: 1, transform: "translateY(0px) scale(1)" }}
-            exit={{ opacity: 0, transform: reduceMotion ? "translateY(0px) scale(1)" : "translateY(12px) scale(0.96)", transition: { duration: reduceMotion ? 0.12 : 0.15, ease: [0.22, 1, 0.36, 1] } }}
-            transition={{ duration: reduceMotion ? 0.12 : 0.25, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <header><MorphingHeading as="h2">Выбрать аватар</MorphingHeading><button className="modal-icon-button" type="button" aria-label="Закрыть" onClick={props.onClose}><AppIcon name="x" size={20} /></button></header>
-            <div
-              className="avatar-emoji-grid"
-              aria-label="Выбрать эмодзи"
-              onScroll={(event) => {
-                const grid = event.currentTarget;
-                if (grid.scrollHeight - grid.scrollTop - grid.clientHeight < 480) {
-                  setVisibleEmojiCount((count) => Math.min(count + EMOJI_BATCH_SIZE, avatarEmojis.length));
-                }
-              }}
-            >
-              {avatarEmojis.slice(0, visibleEmojiCount).map((emoji) => <button type="button" key={emoji} aria-label={`Эмодзи ${emoji}`} disabled={props.submitting} onClick={() => props.onEmoji(emoji)}>{emoji}</button>)}
-            </div>
-          </motion.section>
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
-  );
-}
-
-export function ActionMenu(props: {
+export const ActionMenu = memo(function ActionMenu(props: {
   mode: ActionSheet;
   showTrigger: boolean;
   opponents: Opponent[];
@@ -141,7 +84,7 @@ export function ActionMenu(props: {
   };
 
   return (
-    <LayoutGroup id="add-flow">
+    <LayoutGroup id="add-flow" inherit={false}>
       <div className="floating-add-host">
         <AnimatePresence initial={false}>
           {!props.mode && props.showTrigger ? (
@@ -149,7 +92,7 @@ export function ActionMenu(props: {
               className="floating-add-scale"
               key="add-trigger"
             >
-              <motion.button
+              <m.button
                 ref={triggerRef}
                 className="floating-add-button"
                 type="button"
@@ -162,33 +105,33 @@ export function ActionMenu(props: {
                   props.onOpen();
                 }}
               >
-                <Glass
+                <AdaptiveGlass
                   className="floating-add-material"
                   radius={30}
                   style={{ display: "grid", overflow: "hidden", placeItems: "center" }}
                 >
-                  <motion.span
+                  <m.span
                     className="add-flow-plus"
                     initial={false}
                     animate={{ opacity: 1, transform: "scale(1)" }}
                   >
                     <AppIcon name="add" aria-hidden="true" size={32} strokeWidth={2} />
-                  </motion.span>
-                </Glass>
-              </motion.button>
+                  </m.span>
+                </AdaptiveGlass>
+              </m.button>
             </div>
           ) : null}
         </AnimatePresence>
       </div>
-      <motion.div className="action-layer" layoutRoot>
+      <m.div className="action-layer" layoutRoot>
         <AnimatePresence initial={false}>
           {props.mode ? (
-            <motion.div
+            <m.div
               className={isRoot ? "action-overlay" : "action-overlay action-overlay-expanded"}
               role="presentation"
               onClick={props.onClose}
             >
-              <motion.section
+              <m.section
                 ref={dialogRef}
                 tabIndex={-1}
                 className={isRoot ? "action-sheet action-sheet-root" : "action-sheet action-sheet-expanded"}
@@ -208,7 +151,7 @@ export function ActionMenu(props: {
               >
             <AnimatePresence initial={false} mode="popLayout" custom={stateDirection}>
               {isRoot ? (
-                <motion.div
+                <m.div
                   className="action-list add-flow-menu action-sheet-state"
                   key="actions"
                   custom={stateDirection}
@@ -221,9 +164,9 @@ export function ActionMenu(props: {
                   <button type="button" onClick={props.onScore}><span className="action-icon action-icon-blue"><AppIcon name="add" size={27} /></span><span><strong>Добавить счёт</strong><small>Записать результат партии</small></span></button>
                   <button type="button" onClick={props.onShare}><span className="action-icon action-icon-green"><AppIcon name="send" size={25} /></span><span><strong>Отправить код</strong><small>Пригласить нового соперника</small></span></button>
                   <button type="button" onClick={props.onAccept}><span className="action-icon action-icon-pink"><AppIcon name="circle-plus" size={26} /></span><span><strong>Добавить соперника</strong><small>Ввести полученный код</small></span></button>
-                </motion.div>
+                </m.div>
               ) : (
-                <motion.div
+                <m.div
                   className="action-sheet-content action-sheet-detail action-sheet-state"
                   key={props.mode}
                   custom={stateDirection}
@@ -235,7 +178,7 @@ export function ActionMenu(props: {
                 >
                   <header>
                     <MorphingHeading as="h2">{titles[props.mode]}</MorphingHeading>
-                    <motion.button
+                    <m.button
                       className="modal-icon-button"
                       type="button"
                       aria-label="Назад"
@@ -246,7 +189,7 @@ export function ActionMenu(props: {
                       transition={{ duration: reduceMotion ? 0.12 : 0.14, ease: easeOut }}
                     >
                       <AppIcon name="arrow-left" size={20} />
-                    </motion.button>
+                    </m.button>
                   </header>
                   <div className="action-sheet-panel">
                     {props.mode === "opponents" ? <div className="action-list opponent-picker">
@@ -268,14 +211,14 @@ export function ActionMenu(props: {
                       <button className="sheet-primary-button" type="submit" disabled={props.submitting}>Добавить</button>
                     </form> : null}
                   </div>
-                </motion.div>
+                </m.div>
               )}
             </AnimatePresence>
-              </motion.section>
-            </motion.div>
+              </m.section>
+            </m.div>
           ) : null}
         </AnimatePresence>
-      </motion.div>
+      </m.div>
     </LayoutGroup>
   );
-}
+});

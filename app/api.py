@@ -352,6 +352,7 @@ def opponent_games(
         "games": [asdict(game) for game in view.games],
         "page": view.page,
         "total_pages": view.total_pages,
+        "total_items": view.total_items,
     }
 
 

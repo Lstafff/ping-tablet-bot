@@ -1,5 +1,6 @@
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { type FormEvent } from "react";
+import { AnimatePresence, useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
+import { memo, type FormEvent } from "react";
 
 import type { Profile } from "../../api/types";
 import { AnimatedNumber } from "../../components/AnimatedNumber";
@@ -23,22 +24,22 @@ function FntrBadge({ className = "" }: { className?: string }) {
   return <span className={`fntr-badge${className ? ` ${className}` : ""}`}>ФНТР</span>;
 }
 
-export function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: string; submitting: boolean; onLevel(): void; onAvatarEdit(): void; onNameInput(value: string): void; onSaveName(event: FormEvent<HTMLFormElement>): void }) {
+export const ProfileScreen = memo(function ProfileScreen(props: { profile: Profile; editing: boolean; nameInput: string; submitting: boolean; onLevel(): void; onAvatarEdit(): void; onNameInput(value: string): void; onSaveName(event: FormEvent<HTMLFormElement>): void }) {
   const { profile } = props;
   const reduceMotion = useReducedMotion();
   return (
     <>
       <section className="profile-hero family-profile-hero">
         <div className="profile-avatar-wrap">
-          <motion.span
+          <m.span
             className="profile-avatar"
             aria-hidden="true"
           >
             <ProfileAvatarContent value={profile.user.avatar_value} />
-          </motion.span>
+          </m.span>
           {profile.user.rating_is_fnt ? <FntrBadge className="profile-avatar-fntr-badge" /> : null}
           <AnimatePresence initial={false}>
-            {props.editing ? <motion.button className="profile-avatar-edit modal-icon-button" type="button" aria-label="Изменить аватар" initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.94)" }} animate={{ opacity: 1, transform: "scale(1)" }} exit={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.94)" }} transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }} onClick={props.onAvatarEdit}><AppIcon name="pencil" size={14} /></motion.button> : null}
+            {props.editing ? <m.button className="profile-avatar-edit modal-icon-button" type="button" aria-label="Изменить аватар" initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.94)" }} animate={{ opacity: 1, transform: "scale(1)" }} exit={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.94)" }} transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }} onClick={props.onAvatarEdit}><AppIcon name="pencil" size={14} /></m.button> : null}
           </AnimatePresence>
         </div>
         {props.editing ? <form id="profile-name-form" className="profile-name-form" onSubmit={props.onSaveName}>
@@ -72,9 +73,9 @@ export function ProfileScreen(props: { profile: Profile; editing: boolean; nameI
       </div>
     </>
   );
-}
+});
 
-export function LevelsScreen(props: {
+export const LevelsScreen = memo(function LevelsScreen(props: {
   profile: Profile;
   ratingValue: string;
   ratingSubmitting: boolean;
@@ -128,4 +129,4 @@ export function LevelsScreen(props: {
       </section>
     </>
   );
-}
+});

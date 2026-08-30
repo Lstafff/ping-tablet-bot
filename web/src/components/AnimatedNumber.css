@@ -23,10 +23,6 @@
   line-height: var(--line-height-single);
 }
 
-.t-digit {
-  will-change: transform, opacity;
-}
-
 .rolling-separator.t-digit {
   display: inline-block;
 }

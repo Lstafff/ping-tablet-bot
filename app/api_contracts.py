@@ -125,6 +125,7 @@ class GamesViewResponse(BaseModel):
     games: list[RecentGameResponse]
     page: int
     total_pages: int
+    total_items: int
 
 
 class ParsedScoreResponse(BaseModel):

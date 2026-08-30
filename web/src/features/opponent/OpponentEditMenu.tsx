@@ -1,4 +1,5 @@
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
 import { useEffect, useRef, useState } from "react";
 
 import { AppIcon } from "../../components/AppIcon";
@@ -148,7 +149,7 @@ export function OpponentEditMenu(props: {
   };
 
   return (
-    <motion.div
+    <m.div
       className="action-overlay"
       role="presentation"
       onClick={props.onClose}
@@ -157,7 +158,7 @@ export function OpponentEditMenu(props: {
       exit={{ opacity: 0, transition: { duration: reduceMotion ? 0.12 : 0.15, ease: [0.22, 1, 0.36, 1] } }}
       transition={{ duration: reduceMotion ? 0.12 : 0.25, ease: [0.22, 1, 0.36, 1] }}
     >
-      <motion.section
+      <m.section
         ref={dialogRef}
         tabIndex={-1}
         className="action-sheet action-sheet-root opponent-edit-sheet"
@@ -171,7 +172,7 @@ export function OpponentEditMenu(props: {
         transition={{ duration: reduceMotion ? 0.12 : 0.25, ease: [0.22, 1, 0.36, 1] }}
       >
         <AnimatePresence initial={false} mode="popLayout" custom={stateDirection}>
-        <motion.div
+        <m.div
           className="action-sheet-content action-sheet-state"
           key={mode}
           custom={stateDirection}
@@ -184,7 +185,7 @@ export function OpponentEditMenu(props: {
           <header>
             <MorphingHeading as="h2">{titles[mode]}</MorphingHeading>
             <button className="modal-icon-button" type="button" aria-label={isRoot ? "Закрыть" : "Назад"} onClick={isRoot ? props.onClose : props.onBack}>
-              <motion.span
+              <m.span
                 className="action-header-icon"
                 key={isRoot ? "close" : "back"}
                 initial={{ opacity: 0, transform: reduceMotion ? "rotate(0deg) scale(1)" : "rotate(-45deg) scale(0.94)" }}
@@ -193,7 +194,7 @@ export function OpponentEditMenu(props: {
                 transition={{ duration: 0.18, ease: easeOut }}
               >
                 <AppIcon name={isRoot ? "x" : "arrow-left"} size={20} />
-              </motion.span>
+              </m.span>
             </button>
           </header>
           <div className="action-sheet-panel">
@@ -227,9 +228,9 @@ export function OpponentEditMenu(props: {
                     </div>
                   ) : null}
           </div>
-        </motion.div>
+        </m.div>
         </AnimatePresence>
-      </motion.section>
-    </motion.div>
+      </m.section>
+    </m.div>
   );
 }

@@ -14,9 +14,9 @@ try:
 
     from app.api import AppState, RatingRequestGuard, create_app, require_webapp_user
     from app.config import Config
-    from app.domain import ExtendedStats, Opponent, Stats, User
+    from app.domain import ExtendedStats, Opponent, RecentGame, Stats, User
     from app.scoring import parse_score
-    from app.services import OpponentStatsView, ProfileView, ScoreSubmission
+    from app.services import OpponentGamesView, OpponentStatsView, ProfileView, ScoreSubmission
     from app.webapp_auth import WebAppUser
 
     API_TEST_DEPENDENCIES_AVAILABLE = True
@@ -57,6 +57,22 @@ class FakeService:
 
     def get_opponent_stats(self, user_id: int, opponent_id: int) -> Stats:
         return Stats(wins=1, losses=0, points_for=11, points_against=7)
+
+    def get_opponent_games_stats(
+        self,
+        user_id: int,
+        opponent_id: int,
+        page: int = 1,
+        page_size: int = 10,
+    ) -> OpponentGamesView:
+        return OpponentGamesView(
+            opponent_name="Соперник",
+            games=[RecentGame(played_at="2026-08-28T12:00:00+03:00", own_score=11, opponent_score=7)],
+            user_name="Игрок",
+            page=page,
+            total_pages=1,
+            total_items=1,
+        )
 
     def get_profile(self, user_id: int) -> ProfileView:
         return ProfileView(
@@ -174,6 +190,16 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["stats"]["wins"], 1)
         self.assertEqual(response.json()["opponent_name"], "Соперник")
+
+    def test_opponent_games_response_exposes_total_items_for_client_side_page_derivation(self) -> None:
+        response = self.client.get(
+            "/api/opponents/10/games?limit=100",
+            headers=self.authorization(int(time.time())),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["total_items"], 1)
+        self.assertEqual(response.json()["total_pages"], 1)
 
     def test_profile_response_matches_explicit_contract(self) -> None:
         response = self.client.get(

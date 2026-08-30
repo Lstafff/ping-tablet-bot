@@ -1,5 +1,6 @@
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
+import { memo, useEffect, useRef, useState } from "react";
 
 import { AppIcon } from "./AppIcon";
 import { easeOut } from "../lib/motion";
@@ -7,7 +8,7 @@ import "./Snackbar.css";
 
 export type SnackbarTone = "neutral" | "success" | "error";
 
-export function Snackbar({
+export const Snackbar = memo(function Snackbar({
   message,
   tone = "neutral",
   onDismiss,
@@ -33,8 +34,8 @@ export function Snackbar({
   return (
     <AnimatePresence>
       {message ? (
-        <motion.div className="app-snackbar-layer">
-          <motion.div
+        <m.div className="app-snackbar-layer">
+          <m.div
             className={`app-snackbar app-snackbar-${tone}`}
             role={tone === "error" ? "alert" : "status"}
             aria-live={tone === "error" ? "assertive" : "polite"}
@@ -59,9 +60,9 @@ export function Snackbar({
             <button type="button" aria-label="Закрыть уведомление" onClick={onDismiss}>
               <AppIcon name="x" size={18} />
             </button>
-          </motion.div>
-        </motion.div>
+          </m.div>
+        </m.div>
       ) : null}
     </AnimatePresence>
   );
-}
+});

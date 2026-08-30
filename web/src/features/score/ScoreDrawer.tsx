@@ -1,5 +1,6 @@
-import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion } from "motion/react";
-import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, LayoutGroup, animate, useMotionValue, useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
+import { memo, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Drawer } from "vaul";
 
 import { AnimatedNumber } from "../../components/AnimatedNumber";
@@ -106,9 +107,10 @@ function ScoreValidationSnackbar({ message }: { message: string }) {
   }, [dragY]);
 
   return (
-    <AnimatePresence>
-      {message ? (
-        <motion.div
+    <LayoutGroup id="score-validation" inherit={false}>
+      <AnimatePresence>
+        {message ? (
+        <m.div
           className={expanded ? "score-validation-layer score-validation-layer-expanded" : "score-validation-layer"}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -117,7 +119,7 @@ function ScoreValidationSnackbar({ message }: { message: string }) {
         >
           <AnimatePresence>
             {expanded ? (
-              <motion.div
+              <m.div
                 className="score-validation-backdrop"
                 role="presentation"
                 aria-hidden="true"
@@ -132,7 +134,7 @@ function ScoreValidationSnackbar({ message }: { message: string }) {
 
           <AnimatePresence>
             {expanded ? (
-              <motion.section
+              <m.section
                 className="score-validation-surface score-validation-expanded"
                 key="expanded"
                 layout
@@ -147,7 +149,7 @@ function ScoreValidationSnackbar({ message }: { message: string }) {
                 exit={{ opacity: 0 }}
                 transition={{ layout: layoutTransition, opacity: { duration: reduceMotion ? 0.12 : 0.18, ease: easeOut } }}
               >
-                <motion.div
+                <m.div
                   className="score-rules-list"
                   initial={{ opacity: 0, transform: reduceMotion ? "translateY(0px)" : "translateY(6px)" }}
                   animate={{ opacity: 1, transform: "translateY(0px)" }}
@@ -160,7 +162,7 @@ function ScoreValidationSnackbar({ message }: { message: string }) {
                       <div><strong>{rule.title}</strong><p>{rule.description}</p></div>
                     </div>
                   ))}
-                </motion.div>
+                </m.div>
                 <div
                   className="score-validation-handle"
                   aria-hidden="true"
@@ -175,9 +177,9 @@ function ScoreValidationSnackbar({ message }: { message: string }) {
                   onPointerUp={finishSwipe}
                   onPointerCancel={cancelSwipe}
                 />
-              </motion.section>
+              </m.section>
             ) : (
-              <motion.div
+              <m.div
                 className="score-validation-surface score-validation-compact"
                 key="compact"
                 layout
@@ -199,7 +201,7 @@ function ScoreValidationSnackbar({ message }: { message: string }) {
               >
                 <span>{message}</span>
                 <span className="score-validation-info" aria-hidden="true">
-                  <motion.span layoutId="score-validation-info"><AppIcon name="info" size={21} /></motion.span>
+                  <m.span layoutId="score-validation-info"><AppIcon name="info" size={21} /></m.span>
                 </span>
                 <div
                   className="score-validation-gesture-layer"
@@ -209,16 +211,17 @@ function ScoreValidationSnackbar({ message }: { message: string }) {
                   onPointerUp={finishSwipe}
                   onPointerCancel={cancelSwipe}
                 />
-              </motion.div>
+              </m.div>
             )}
           </AnimatePresence>
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
+        </m.div>
+        ) : null}
+      </AnimatePresence>
+    </LayoutGroup>
   );
 }
 
-export function ScoreDrawer(props: {
+export const ScoreDrawer = memo(function ScoreDrawer(props: {
   open: boolean;
   opponentName: string;
   ownScore: string;
@@ -256,7 +259,7 @@ export function ScoreDrawer(props: {
       </Drawer.Portal>
     </Drawer.Root>
   );
-}
+});
 
 function ScoreScreen(props: {
   opponentName: string;
@@ -275,7 +278,7 @@ function ScoreScreen(props: {
   const canContinue = props.side === "own" ? Boolean(props.ownScore) : Boolean(props.ownScore && props.opponentScore);
 
   return (
-    <motion.section className="score-screen">
+    <m.section className="score-screen">
       <header className="score-header">
         <button type="button" aria-label="Назад" onClick={props.onBack}><AppIcon name="arrow-left" size={29} /></button>
         <h1><strong>Добавление счёта</strong><small>с&nbsp;{props.opponentName}</small></h1>
@@ -302,6 +305,6 @@ function ScoreScreen(props: {
       />
       <NumericKeypad ariaLabel="Клавиатура счёта" onDigit={props.onDigit} onErase={props.onErase} />
       <button className="score-continue" type="button" disabled={!canContinue || props.submitting} onClick={props.onContinue}>{props.submitting ? "Сохраняем…" : props.side === "own" ? "Дальше" : "Сохранить"}</button>
-    </motion.section>
+    </m.section>
   );
 }

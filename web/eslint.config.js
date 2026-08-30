@@ -22,6 +22,18 @@ export default tseslint.config(
       "react-hooks/exhaustive-deps": "warn",
       "react-refresh/only-export-components": "off",
       "@typescript-eslint/ban-ts-comment": "off",
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "motion/react",
+              importNames: ["motion"],
+              message: "Use the lightweight m components from motion/react-m inside the app LazyMotion boundary.",
+            },
+          ],
+        },
+      ],
     },
   },
 );

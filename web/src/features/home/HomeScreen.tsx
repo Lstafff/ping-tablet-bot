@@ -1,4 +1,5 @@
-import { motion } from "motion/react";
+import * as m from "motion/react-m";
+import { memo } from "react";
 
 import type { Opponent, Profile } from "../../api/types";
 import { AnimatedNumber } from "../../components/AnimatedNumber";
@@ -16,7 +17,7 @@ function winRateTone(rate: number): "win-rate-low" | "win-rate-medium" | "win-ra
   return "win-rate-medium";
 }
 
-export function HomeScreen({ profile, opponents, onOpenOpponent }: { profile: Profile; opponents: Opponent[]; onOpenOpponent(opponent: Opponent): void }) {
+export const HomeScreen = memo(function HomeScreen({ profile, opponents, morphLayoutIdentity, onOpenOpponent }: { profile: Profile; opponents: Opponent[]; morphLayoutIdentity?: string | number | null; onOpenOpponent(opponent: Opponent): void }) {
   const rate = winRate(profile.stats);
   return (
     <>
@@ -41,30 +42,31 @@ export function HomeScreen({ profile, opponents, onOpenOpponent }: { profile: Pr
 
       {opponents.length ? (
         <div className="opponent-list">
-          {opponents.map((opponent) => (
-            <button
+          {opponents.map((opponent) => {
+            const participatesInMorph = morphLayoutIdentity === opponent.id;
+            return <button
               className="opponent-card"
               type="button"
               key={opponent.id}
               onClick={() => onOpenOpponent(opponent)}
             >
-              <motion.span
+              <m.span
                 className="avatar"
-                layoutId={opponentSharedLayoutId(opponent.id, "avatar")}
+                layoutId={participatesInMorph ? opponentSharedLayoutId(opponent.id, "avatar") : undefined}
                 transition={{ layout: { duration: 0.25, ease: easeOut } }}
                 aria-hidden="true"
               >
                 <ProfileAvatarContent value={opponent.avatar_value ?? null} defaultIconSize={22} />
-              </motion.span>
+              </m.span>
               <span className="opponent-card-copy">
-                <motion.strong layoutId={opponentSharedLayoutId(opponent.id, "name")} transition={{ layout: { duration: 0.25, ease: easeOut } }}>{opponentName(opponent)}</motion.strong>
-                <motion.small layoutId={opponent.stats ? opponentSharedLayoutId(opponent.id, "score") : undefined} transition={{ layout: { duration: 0.25, ease: easeOut } }}>
+                <m.strong layoutId={participatesInMorph ? opponentSharedLayoutId(opponent.id, "name") : undefined} transition={{ layout: { duration: 0.25, ease: easeOut } }}>{opponentName(opponent)}</m.strong>
+                <m.small layoutId={participatesInMorph && opponent.stats ? opponentSharedLayoutId(opponent.id, "score") : undefined} transition={{ layout: { duration: 0.25, ease: easeOut } }}>
                   {opponent.stats ? <ScorePair left={opponent.stats.wins} right={opponent.stats.losses} /> : "Счёт пока не добавлен"}
-                </motion.small>
+                </m.small>
               </span>
               <AppIcon className="card-arrow" name="chevron-right" aria-hidden="true" size={25} />
-            </button>
-          ))}
+            </button>;
+          })}
         </div>
       ) : (
         <section className="empty-state">
@@ -74,4 +76,4 @@ export function HomeScreen({ profile, opponents, onOpenOpponent }: { profile: Pr
       )}
     </>
   );
-}
+});

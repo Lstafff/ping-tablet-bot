@@ -71,6 +71,7 @@ export type GamesView = {
   games: RecentGame[];
   page: number;
   total_pages: number;
+  total_items: number;
 };
 
 export type HistoryGame = RecentGame & {

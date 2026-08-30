@@ -1,5 +1,6 @@
-import { AnimatePresence, animate, motion, useReducedMotion } from "motion/react";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { AnimatePresence, animate, useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
+import { memo, useEffect, useLayoutEffect, useRef } from "react";
 
 import type { DailyView, ExtendedStats, GamesView, Opponent, OpponentStats, RecentGame, Stats } from "../../api/types";
 import { AnimatedNumber } from "../../components/AnimatedNumber";
@@ -14,6 +15,13 @@ import { calculateOpponentHeaderCollapseState, calculateOpponentHeaderSnapTarget
 import "./opponent.css";
 
 export type StatsTab = "summary" | "days" | "games";
+
+const opponentTabOrder: Record<StatsTab, number> = { summary: 0, days: 1, games: 2 };
+const opponentTabOptions = [
+  { value: "summary" as const, label: "Общая" },
+  { value: "days" as const, label: "По дням" },
+  { value: "games" as const, label: "По играм" },
+];
 
 export type OpponentScreenProps = {
   opponent: Opponent;
@@ -35,12 +43,11 @@ export type OpponentScreenProps = {
   onBack(): void;
 };
 
-export function OpponentScreen(props: OpponentScreenProps) {
+export const OpponentScreen = memo(function OpponentScreen(props: OpponentScreenProps) {
   const { opponent, stats } = props;
   const reduceMotion = useReducedMotion();
   const previousTab = useRef(props.tab);
-  const tabOrder: Record<StatsTab, number> = { summary: 0, days: 1, games: 2 };
-  const tabDirection = Math.sign(tabOrder[props.tab] - tabOrder[previousTab.current]);
+  const tabDirection = Math.sign(opponentTabOrder[props.tab] - opponentTabOrder[previousTab.current]);
 
   useEffect(() => {
     previousTab.current = props.tab;
@@ -77,32 +84,28 @@ export function OpponentScreen(props: OpponentScreenProps) {
 
       {stats ? (
         <>
-          <motion.div className="opponent-reveal-group" {...reveal(0)}>
+          <m.div className="opponent-reveal-group" {...reveal(0)}>
             <ActivityHeatmap games={props.chartGames} />
-          </motion.div>
+          </m.div>
 
-          <motion.div className="opponent-reveal-group" {...reveal(1)}>
+          <m.div className="opponent-reveal-group" {...reveal(1)}>
             <section className="opponent-metrics" aria-label="Главная статистика">
               <div><span>Мячи</span><strong><ScorePair left={<AnimatedNumber value={stats.stats.points_for} animateOnMount />} right={<AnimatedNumber value={stats.stats.points_against} animateOnMount />} /></strong></div>
               <div><span>Текущая серия</span><strong><AnimatedNumber value={stats.extended_stats.win_streak} animateOnMount /></strong></div>
             </section>
-          </motion.div>
+          </m.div>
 
-          <motion.div className="opponent-reveal-group opponent-stats-region" {...reveal(2)}>
+          <m.div className="opponent-reveal-group opponent-stats-region" {...reveal(2)}>
             <SegmentedControl
               ariaLabel="Ваша статистика"
               idPrefix="opponent-stats"
               value={props.tab}
-              options={[
-                { value: "summary", label: "Общая" },
-                { value: "days", label: "По дням" },
-                { value: "games", label: "По играм" },
-              ]}
+              options={opponentTabOptions}
               onChange={props.onTabChange}
             />
 
             <AnimatePresence initial={false} mode="popLayout" custom={tabDirection}>
-              <motion.div
+              <m.div
                 className="opponent-tab-content"
                 id={`opponent-stats-panel-${props.tab}`}
                 role="tabpanel"
@@ -126,16 +129,16 @@ export function OpponentScreen(props: OpponentScreenProps) {
                 transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: easeOut }}
               >
                 {tabContent}
-              </motion.div>
+              </m.div>
             </AnimatePresence>
-          </motion.div>
+          </m.div>
         </>
       ) : null}
     </>
   );
-}
+});
 
-export function OpponentCollapsingHeader({ opponent, profileAvatar, layoutIdentity = opponent.id, stats, onBack, onEdit, pending = false }: { opponent: Opponent; profileAvatar: string | null; layoutIdentity?: string | number; stats?: Stats; onBack(): void; onEdit(): void; pending?: boolean }) {
+export const OpponentCollapsingHeader = memo(function OpponentCollapsingHeader({ opponent, profileAvatar, layoutIdentity = opponent.id, stats, onBack, onEdit, pending = false }: { opponent: Opponent; profileAvatar: string | null; layoutIdentity?: string | number; stats?: Stats; onBack(): void; onEdit(): void; pending?: boolean }) {
   const reduceMotion = useReducedMotion();
   const headerRef = useRef<HTMLElement>(null);
   const backdropRef = useRef<HTMLSpanElement>(null);
@@ -246,7 +249,7 @@ export function OpponentCollapsingHeader({ opponent, profileAvatar, layoutIdenti
         <span className="opponent-header-backdrop" ref={backdropRef} aria-hidden="true" />
         <HeaderAvatarBackMorph className="opponent-header-back" value={profileAvatar} onBack={onBack} />
         <HeaderActionButton className="opponent-header-edit" icon="pencil" label="Редактировать" onClick={onEdit} />
-        <motion.span
+        <m.span
           className="opponent-header-avatar-stage"
           layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "avatar")}
           transition={{ layout: { duration: 0.24, ease: easeOut } }}
@@ -255,29 +258,29 @@ export function OpponentCollapsingHeader({ opponent, profileAvatar, layoutIdenti
           <span className="avatar avatar-opponent opponent-header-avatar-content" ref={avatarContentRef}>
             <ProfileAvatarContent value={opponent.avatar_value ?? null} defaultIconSize={40} />
           </span>
-        </motion.span>
+        </m.span>
         {resolvedStats ? (
           <>
             <span className="opponent-header-name-stage">
-              <motion.span className="opponent-header-name-layout" layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "name")} transition={{ layout: { duration: 0.24, ease: easeOut } }}>
+              <m.span className="opponent-header-name-layout" layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "name")} transition={{ layout: { duration: 0.24, ease: easeOut } }}>
                 <h1 className="opponent-header-name" ref={nameRef}>{opponentName(opponent)}</h1>
-              </motion.span>
+              </m.span>
             </span>
             <span className="opponent-header-score-stage">
-              <motion.span className="opponent-header-score-layout" layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "score")} transition={{ layout: { duration: 0.24, ease: easeOut } }}>
+              <m.span className="opponent-header-score-layout" layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "score")} transition={{ layout: { duration: 0.24, ease: easeOut } }}>
                 <span className="opponent-scoreline opponent-header-score" ref={scoreRef} aria-label={`Побед ${resolvedStats.wins}, поражений ${resolvedStats.losses}`}>
                   <ScorePair left={<strong><AnimatedNumber value={resolvedStats.wins} animateOnMount /></strong>} right={<strong><AnimatedNumber value={resolvedStats.losses} animateOnMount /></strong>} />
                 </span>
-              </motion.span>
+              </m.span>
             </span>
             <p className="opponent-header-summary" ref={summaryRef}><strong><AnimatedNumber value={winRate(resolvedStats)} animateOnMount />%</strong> побед · <AnimatedNumber value={gamesCount(resolvedStats)} animateOnMount /> партий</p>
           </>
-        ) : <span className="opponent-header-name-stage"><motion.span className="opponent-header-name-layout" layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "name")} transition={{ layout: { duration: 0.24, ease: easeOut } }}><h1 className="opponent-header-name" ref={nameRef}>{opponentName(opponent)}</h1></motion.span></span>}
+        ) : <span className="opponent-header-name-stage"><m.span className="opponent-header-name-layout" layoutId={reduceMotion ? undefined : opponentSharedLayoutId(layoutIdentity, "name")} transition={{ layout: { duration: 0.24, ease: easeOut } }}><h1 className="opponent-header-name" ref={nameRef}>{opponentName(opponent)}</h1></m.span></span>}
       </header>
       <div className="opponent-header-spacer" aria-hidden="true" />
     </>
   );
-}
+});
 
 const activityWeekCount = 26;
 
@@ -306,7 +309,7 @@ function dayCountLabel(value: number): string {
   return `${value} дней`;
 }
 
-export function ActivityHeatmap({ games }: { games: RecentGame[] }) {
+export const ActivityHeatmap = memo(function ActivityHeatmap({ games }: { games: RecentGame[] }) {
   const today = new Date();
   today.setHours(12, 0, 0, 0);
   const currentWeekStart = new Date(today);
@@ -365,9 +368,9 @@ export function ActivityHeatmap({ games }: { games: RecentGame[] }) {
       </div>
     </section>
   );
-}
+});
 
-export function StatsSummary({ stats }: { stats: ExtendedStats }) {
+export const StatsSummary = memo(function StatsSummary({ stats }: { stats: ExtendedStats }) {
   return (
     <section className="details-section">
       <dl className="facts-list">
@@ -378,18 +381,18 @@ export function StatsSummary({ stats }: { stats: ExtendedStats }) {
       </dl>
     </section>
   );
-}
+});
 
-export function DailyTable({ view, loadingMore, loadError, onLoadMore }: { view: DailyView | null; loadingMore: boolean; loadError: string; onLoadMore(): void }) {
+export const DailyTable = memo(function DailyTable({ view, loadingMore, loadError, onLoadMore }: { view: DailyView | null; loadingMore: boolean; loadError: string; onLoadMore(): void }) {
   return (
     <section className="table-section">
       {view?.daily_stats.length ? <div className="data-table" role="list">{view.daily_stats.map((day) => <div className="table-row" key={day.played_on} role="listitem"><time dateTime={day.played_on}>{formatDate(day.played_on)}</time><b><ScorePair left={day.wins} right={day.losses} /></b></div>)}</div> : <p className="muted-copy">Пока нет сыгранных матчей.</p>}
       <ProgressiveLoadTrigger error={loadError} hasMore={(view?.page ?? 1) < (view?.total_pages ?? 1)} loading={loadingMore} onLoadMore={onLoadMore} />
     </section>
   );
-}
+});
 
-export function GamesTable({ view, loadingMore, loadError, onLoadMore }: { view: GamesView | null; loadingMore: boolean; loadError: string; onLoadMore(): void }) {
+export const GamesTable = memo(function GamesTable({ view, loadingMore, loadError, onLoadMore }: { view: GamesView | null; loadingMore: boolean; loadError: string; onLoadMore(): void }) {
   return (
     <section className="table-section">
       {view?.games.length ? <div className="data-table" role="list">{view.games.map((game) => {
@@ -407,7 +410,7 @@ export function GamesTable({ view, loadingMore, loadError, onLoadMore }: { view:
       <ProgressiveLoadTrigger error={loadError} hasMore={(view?.page ?? 1) < (view?.total_pages ?? 1)} loading={loadingMore} onLoadMore={onLoadMore} />
     </section>
   );
-}
+});
 
 function formatDate(value: string): string {
   const date = new Date(value);

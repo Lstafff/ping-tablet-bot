@@ -111,6 +111,7 @@ const previewGames: GamesView = {
   ],
   page: 1,
   total_pages: 1,
+  total_items: 11,
 };
 
 const PREVIEW_PAGE_SIZE = 3;
@@ -206,7 +207,7 @@ async function previewApi<T>(path: string, options: RequestInit): Promise<T> {
     const page = requestedPage(path);
     const limit = Math.max(1, Number(url.searchParams.get("limit") ?? PREVIEW_PAGE_SIZE));
     const result = pagedPreview(opponentGames, page, limit);
-    return { games: result.items, page, total_pages: result.totalPages } as T;
+    return { games: result.items, page, total_pages: result.totalPages, total_items: opponentGames.length } as T;
   }
   if (path.includes("/daily")) {
     const page = requestedPage(path);

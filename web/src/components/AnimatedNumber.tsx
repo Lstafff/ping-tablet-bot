@@ -1,7 +1,7 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import "./AnimatedNumber.css";
 
-export function AnimatedNumber({
+export const AnimatedNumber = memo(function AnimatedNumber({
   value,
   className = "",
   animateOnMount = false,
@@ -39,4 +39,4 @@ export function AnimatedNumber({
       })}
     </span>
   );
-}
+});

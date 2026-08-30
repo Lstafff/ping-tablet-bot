@@ -1,5 +1,6 @@
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useId } from "react";
+import { AnimatePresence, useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
+import { memo, useId } from "react";
 
 import { easeInOut, easeOut } from "../lib/motion";
 import { AppIcon, type AppIconName } from "./AppIcon";
@@ -27,13 +28,13 @@ export function MorphingHeading({
 
 function TextStateSwapHeading({ as = "h1", children, className }: { as?: "h1" | "h2"; children: string; className?: string }) {
   const reduceMotion = useReducedMotion();
-  const Heading = as === "h2" ? motion.h2 : motion.h1;
+  const Heading = as === "h2" ? m.h2 : m.h1;
 
   return (
     <Heading className={className} aria-label={children}>
       <span className="screen-title-copy" aria-hidden="true">
         <AnimatePresence initial={false} mode="wait">
-          <motion.span
+          <m.span
             className="text-state-swap"
             key={children}
             initial={{
@@ -48,7 +49,7 @@ function TextStateSwapHeading({ as = "h1", children, className }: { as?: "h1" | 
             transition={{ duration: reduceMotion ? 0.12 : 0.15, ease: easeInOut }}
           >
             {children}
-          </motion.span>
+          </m.span>
         </AnimatePresence>
       </span>
     </Heading>
@@ -57,16 +58,16 @@ function TextStateSwapHeading({ as = "h1", children, className }: { as?: "h1" | 
 
 export function LegacyWaveHeaderTitle({ as = "h1", children, className }: { as?: "h1" | "h2"; children: string; className?: string }) {
   const reduceMotion = useReducedMotion();
-  const Heading = as === "h2" ? motion.h2 : motion.h1;
+  const Heading = as === "h2" ? m.h2 : m.h1;
   const glyphs = Array.from(children);
 
   return (
     <Heading className={className} aria-label={children}>
       <span className="screen-title-copy" aria-hidden="true">
         <AnimatePresence initial={false} mode="popLayout">
-          <motion.span className="screen-title-wave" key={children}>
+          <m.span className="screen-title-wave" key={children}>
             {glyphs.map((glyph, index) => (
-              <motion.span
+              <m.span
                 className="screen-title-glyph"
                 key={`${children}-${index}-${glyph}`}
                 initial={{ opacity: 0, transform: reduceMotion ? "translateY(0%)" : "translateY(100%)" }}
@@ -75,9 +76,9 @@ export function LegacyWaveHeaderTitle({ as = "h1", children, className }: { as?:
                 transition={{ duration: 0.12, delay: reduceMotion ? 0 : index * 0.003, ease: easeOut }}
               >
                 {glyph === " " ? "\u00a0" : glyph}
-              </motion.span>
+              </m.span>
             ))}
-          </motion.span>
+          </m.span>
         </AnimatePresence>
       </span>
     </Heading>
@@ -98,7 +99,7 @@ export function LegacyMorphingHeaderTitle({
   const reduceMotion = useReducedMotion();
   const generatedId = useId().replace(/:/g, "");
   const headingId = morphId ?? `heading-${generatedId}`;
-  const Heading = as === "h2" ? motion.h2 : motion.h1;
+  const Heading = as === "h2" ? m.h2 : m.h1;
   const glyphs = Array.from(children).map((glyph, index) => ({
     glyph,
     slotId: `${headingId}-slot-${index}`,
@@ -106,10 +107,10 @@ export function LegacyMorphingHeaderTitle({
 
   return (
     <Heading className={className} aria-label={children}>
-      <motion.span className="screen-title-copy" aria-hidden="true">
+      <m.span className="screen-title-copy" aria-hidden="true">
         <AnimatePresence mode="popLayout">
           {glyphs.map(({ glyph, slotId }) => (
-            <motion.span
+            <m.span
               className="screen-title-slot"
               key={slotId}
               layout="position"
@@ -124,7 +125,7 @@ export function LegacyMorphingHeaderTitle({
                   }}
             >
               <AnimatePresence initial={false} mode="sync">
-                <motion.span
+                <m.span
                   className="screen-title-glyph"
                   key={glyph}
                   initial={{
@@ -136,12 +137,12 @@ export function LegacyMorphingHeaderTitle({
                   transition={{ duration: reduceMotion ? 0.12 : 0.14, ease: easeOut }}
                 >
                   {glyph === " " ? "\u00a0" : glyph}
-                </motion.span>
+                </m.span>
               </AnimatePresence>
-            </motion.span>
+            </m.span>
           ))}
         </AnimatePresence>
-      </motion.span>
+      </m.span>
     </Heading>
   );
 }
@@ -155,7 +156,7 @@ export function HeaderActionButton({ icon, label, onClick, flipped = false, clas
   const classes = ["page-header-action-button", className].filter(Boolean).join(" ");
 
   return (
-    <motion.button
+    <m.button
       className={classes}
       type="button"
       onClick={onClick}
@@ -168,7 +169,7 @@ export function HeaderActionButton({ icon, label, onClick, flipped = false, clas
     >
       <span className="page-header-action-icon">
         <AnimatePresence initial={false} mode="sync">
-          <motion.span
+          <m.span
             className={`header-action-glyph${icon === "filter" ? " history-sort-icon" : ""}`}
             key={icon}
             initial={{ opacity: 0 }}
@@ -177,10 +178,10 @@ export function HeaderActionButton({ icon, label, onClick, flipped = false, clas
             transition={{ duration: reduceMotion ? 0.1 : 0.14, ease: easeOut }}
           >
             <AppIcon name={icon} size={22} />
-          </motion.span>
+          </m.span>
         </AnimatePresence>
       </span>
-    </motion.button>
+    </m.button>
   );
 }
 
@@ -206,28 +207,28 @@ function HeaderProfileAvatar({ value, back }: { value: string | null; back: bool
     ? { duration: 0.12, ease: easeOut }
     : { duration: 0.24, ease: easeInOut };
   return (
-    <motion.span
+    <m.span
       className={`header-profile-avatar header-leading-surface${back ? " header-leading-surface-back" : ""}`}
       layoutId={reduceMotion ? undefined : "profile-avatar-surface"}
       transition={{ layout: morphTransition }}
       aria-hidden="true"
     >
-      <motion.span
+      <m.span
         className="header-leading-avatar-background"
         animate={{ opacity: back ? 0 : 1, transform: reduceMotion || !back ? "scale(1)" : "scale(0.72)" }}
         transition={morphTransition}
       />
-      <motion.span
+      <m.span
         className="header-leading-custom-avatar"
         animate={{ opacity: back ? 0 : 1, transform: reduceMotion || !back ? "scale(1)" : "scale(0.72)" }}
         transition={morphTransition}
       >
         <ProfileAvatarContent value={value} defaultIconSize={22} />
-      </motion.span>
-      <motion.svg className="header-leading-morph-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
+      </m.span>
+      <m.svg className="header-leading-morph-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
         <AnimatePresence initial={false}>
           {back ? (
-            <motion.path
+            <m.path
               key="back"
               d="m15 18-6-6 6-6"
               initial={{ opacity: 0, pathLength: 0, transform: reduceMotion ? "scale(1)" : "scale(0.72)" }}
@@ -237,8 +238,8 @@ function HeaderProfileAvatar({ value, back }: { value: string | null; back: bool
             />
           ) : null}
         </AnimatePresence>
-      </motion.svg>
-    </motion.span>
+      </m.svg>
+    </m.span>
   );
 }
 
@@ -252,7 +253,7 @@ export function HeaderAvatarBackMorph({ value, onBack, className = "" }: { value
   );
 }
 
-export function PageHeader({ title, sticky = false, onBack, profileAvatar, sortNewestFirst, onSort, onSettings }: { title: string; sticky?: boolean; onBack?(): void; profileAvatar?: string | null; sortNewestFirst?: boolean; onSort?(): void; onSettings?(): void }) {
+export const PageHeader = memo(function PageHeader({ title, sticky = false, onBack, profileAvatar, sortNewestFirst, onSort, onSettings }: { title: string; sticky?: boolean; onBack?(): void; profileAvatar?: string | null; sortNewestFirst?: boolean; onSort?(): void; onSettings?(): void }) {
   return (
     <header className={sticky ? "page-header page-header-sticky" : "page-header"}>
       {profileAvatar !== undefined ? (
@@ -268,4 +269,4 @@ export function PageHeader({ title, sticky = false, onBack, profileAvatar, sortN
       <HeaderTrailingMorph newestFirst={sortNewestFirst} onSort={onSort} onSettings={onSettings} />
     </header>
   );
-}
+});

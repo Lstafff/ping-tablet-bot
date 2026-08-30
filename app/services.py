@@ -130,6 +130,7 @@ class OpponentGamesView:
     user_name: str
     page: int
     total_pages: int
+    total_items: int
 
 
 @dataclass(frozen=True)
@@ -418,6 +419,7 @@ class TennisService:
             user_name=display_user_name(user.first_name, user.username),
             page=page,
             total_pages=total_pages,
+            total_items=games_count,
         )
 
     def get_game_history(

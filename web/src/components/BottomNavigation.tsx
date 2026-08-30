@@ -1,6 +1,8 @@
-import { Glass } from "@samasante/liquid-glass";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, LayoutGroup, useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
+import { memo } from "react";
 
+import { AdaptiveGlass } from "./AdaptiveGlass";
 import { AppIcon, AppIconName } from "./AppIcon";
 import { easeInOut, easeOut } from "../lib/motion";
 import { tma } from "../lib/tma";
@@ -14,7 +16,7 @@ const tabs: ReadonlyArray<{ id: MainTab; label: string; icon: AppIconName }> = [
   { id: "profile", label: "Профиль", icon: "user" },
 ] as const;
 
-export function BottomNavigation({
+export const BottomNavigation = memo(function BottomNavigation({
   active,
   onSelect,
   actionLabel,
@@ -40,13 +42,14 @@ export function BottomNavigation({
   const actionMorphTransition = reduceMotion ? { duration: 0 } : { duration: 0.18, ease: easeInOut };
 
   return (
-    <Glass
-      className={actionVisible ? "bottom-nav bottom-nav-action" : "bottom-nav"}
-      radius={30}
-      style={{ display: "block", overflow: "hidden" }}
-    >
-      <nav className="bottom-nav-content" aria-label="Разделы">
-        <motion.div
+    <LayoutGroup id="main-tabs" inherit={false}>
+      <AdaptiveGlass
+        className={actionVisible ? "bottom-nav bottom-nav-action" : "bottom-nav"}
+        radius={30}
+        style={{ display: "block", overflow: "hidden" }}
+      >
+        <nav className="bottom-nav-content" aria-label="Разделы">
+        <m.div
             className="nav-tabs-grid"
             initial={false}
             animate={{ opacity: actionVisible ? 0 : 1 }}
@@ -56,7 +59,7 @@ export function BottomNavigation({
             {tabs.map(({ id, label, icon }) => {
               const isActive = active === id;
               return (
-                <motion.button
+                <m.button
                   className={isActive ? "nav-button nav-button-active" : "nav-button"}
                   type="button"
                   key={id}
@@ -70,7 +73,7 @@ export function BottomNavigation({
                   }}
                 >
                   {isActive ? (
-                    <motion.span
+                    <m.span
                       className="nav-active-pill"
                       layoutId="main-tab-active-pill"
                       aria-hidden="true"
@@ -81,19 +84,19 @@ export function BottomNavigation({
                     <AppIcon name={icon} aria-hidden="true" size={22} />
                     <span className="nav-button-label" aria-hidden="true">{label}</span>
                   </span>
-                </motion.button>
+                </m.button>
               );
             })}
-          </motion.div>
+          </m.div>
           <AnimatePresence initial={false}>
             {actionVisible ? (
-              <motion.div
+              <m.div
                 className={auxiliaryActionLabel ? "nav-action-row nav-action-row-with-auxiliary" : "nav-action-row"}
                 initial={{ opacity: 1 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 1 }}
               >
-                <motion.button
+                <m.button
                   className="nav-save-button"
                   type={actionForm ? "submit" : "button"}
                   form={actionForm}
@@ -102,7 +105,7 @@ export function BottomNavigation({
                   disabled={actionDisabled}
                   onClick={actionForm ? undefined : onAction}
                 >
-                  <motion.span
+                  <m.span
                     className="nav-save-surface"
                     aria-hidden="true"
                     initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
@@ -110,7 +113,7 @@ export function BottomNavigation({
                     exit={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
                     transition={actionMorphTransition}
                   />
-                  <motion.span
+                  <m.span
                     className="nav-button-content nav-button-save-label"
                     initial={{ opacity: 0, transform: reduceMotion ? "scale(1)" : "scale(0.96)" }}
                     animate={{ opacity: 1, transform: "scale(1)" }}
@@ -118,8 +121,8 @@ export function BottomNavigation({
                     transition={{ duration: reduceMotion ? 0.12 : 0.12, delay: reduceMotion ? 0 : 0.06, ease: easeOut }}
                   >
                     {actionLabel}
-                  </motion.span>
-                </motion.button>
+                  </m.span>
+                </m.button>
                 {auxiliaryActionLabel ? (
                   <button
                     className="nav-auxiliary-button"
@@ -132,10 +135,11 @@ export function BottomNavigation({
                     <AppIcon name="refresh" aria-hidden="true" size={25} />
                   </button>
                 ) : null}
-              </motion.div>
+              </m.div>
             ) : null}
           </AnimatePresence>
-      </nav>
-    </Glass>
+        </nav>
+      </AdaptiveGlass>
+    </LayoutGroup>
   );
-}
+});

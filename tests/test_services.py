@@ -194,6 +194,15 @@ class TennisServiceTest(unittest.TestCase):
         self.assertEqual(view.total_pages, 2)
         self.assertEqual([item.played_on for item in view.daily_stats], ["2026-07-01"])
 
+    def test_opponent_games_view_reports_total_items_independently_from_page_size(self) -> None:
+        service = TennisService(FakeStorage(), seed_test_opponent=False)
+
+        view = service.get_opponent_games_stats(1, 10, page=1, page_size=1)
+
+        self.assertEqual(len(view.games), 1)
+        self.assertEqual(view.total_pages, 2)
+        self.assertEqual(view.total_items, 2)
+
     def test_game_history_includes_opponent_and_result(self) -> None:
         service = TennisService(FakeStorage(), seed_test_opponent=False)
 

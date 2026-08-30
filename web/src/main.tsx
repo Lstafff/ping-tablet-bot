@@ -1,5 +1,6 @@
-import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AnimatePresence, LayoutGroup, LazyMotion, MotionConfig, useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
+import { FormEvent, Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import ReactDOM from "react-dom/client";
 
@@ -24,17 +25,19 @@ import { BottomNavigation, MainTab } from "./components/BottomNavigation";
 import { PageHeader } from "./components/PageHeader";
 export { LegacyMorphingHeaderTitle, LegacyWaveHeaderTitle } from "./components/PageHeader";
 import { Snackbar, type SnackbarTone } from "./components/Snackbar";
-import { ActionMenu, AvatarPicker, type ActionSheet } from "./features/actions/ActionMenu";
+import { ActionMenu, type ActionSheet } from "./features/actions/ActionMenu";
 import { HistoryScreen } from "./features/history/HistoryScreen";
 import { HomeScreen } from "./features/home/HomeScreen";
 import { OpponentEditMenu, type OpponentEditSheet } from "./features/opponent/OpponentEditMenu";
 import { OpponentScreen, type StatsTab } from "./features/opponent/OpponentFlow";
 import { LevelsScreen, ProfileScreen } from "./features/profile/ProfileScreens";
-import { ScoreDrawer, type ScoreSide } from "./features/score/ScoreDrawer";
+import type { ScoreSide } from "./features/score/ScoreDrawer";
 import { easeInOut, easeOut } from "./lib/motion";
+import { firstOpponentGamesPage, opponentGamesPageSize } from "./lib/opponentGames";
 import { api } from "./lib/preview-api";
 import { historyGameKey, opponentName, userName } from "./lib/player";
 import { tma } from "./lib/tma";
+import { useEventCallback } from "./lib/useEventCallback";
 import "./tokens.css";
 import "./styles.css";
 
@@ -46,6 +49,12 @@ type PendingAction = "score" | "opponent" | "invite" | "rating" | "profile" | "a
 type PaginationRequest = { token: number; inFlight: boolean };
 type SnackbarNotice = { id: number; tone: SnackbarTone; message: string } | null;
 type ScreenMotion = { kind: "none" } | { kind: "reveal" } | { kind: "tab"; direction: -1 | 1 } | { kind: "forward" } | { kind: "back" };
+
+const loadAvatarPicker = () => import("./features/actions/AvatarPicker");
+const loadScoreDrawer = () => import("./features/score/ScoreDrawer");
+const loadMotionFeatures = () => import("./lib/motionFeatures").then((module) => module.default);
+const AvatarPicker = lazy(() => loadAvatarPicker().then((module) => ({ default: module.AvatarPicker })));
+const ScoreDrawer = lazy(() => loadScoreDrawer().then((module) => ({ default: module.ScoreDrawer })));
 
 const mainTabPosition: Record<MainTab, number> = {
   stats: 0,
@@ -249,10 +258,11 @@ function App() {
     setGamesLoadError("");
     setError("");
     if (showScreen) setScreen("opponent");
-    const loadGames = api<GamesView>(`/api/opponents/${opponent.id}/games?page=${page}&limit=10`)
+    const loadGames = api<GamesView>(`/api/opponents/${opponent.id}/games?page=1&limit=100`)
       .then((response) => {
         if (requestId !== opponentRequestId.current) return;
-        setGames(response);
+        setChartGames(response.games);
+        setGames(firstOpponentGamesPage(response));
       })
       .catch((loadError: unknown) => {
         if (requestId === opponentRequestId.current) setGamesLoadError(messageFromError(loadError));
@@ -265,15 +275,10 @@ function App() {
       .catch((loadError: unknown) => {
         if (requestId === opponentRequestId.current) setDailyLoadError(messageFromError(loadError));
       });
-    const loadChart = api<GamesView>(`/api/opponents/${opponent.id}/games?page=1&limit=100`)
-      .then((response) => {
-        if (requestId === opponentRequestId.current) setChartGames(response.games);
-      })
-      .catch(() => undefined);
     const statsResponse = await api<OpponentStats>(`/api/opponents/${opponent.id}/stats`);
     if (requestId !== opponentRequestId.current) return;
     setOpponentStats(statsResponse);
-    void Promise.all([loadGames, loadDaily, loadChart]);
+    void Promise.all([loadGames, loadDaily]);
   };
 
   const loadOpponentDays = async (page: number) => {
@@ -386,17 +391,16 @@ function App() {
     gamesPageRequest.current.inFlight = false;
     setDailyLoadingMore(false);
     setGamesLoadingMore(false);
-    const [statsResponse, gamesResponse, dailyResponse, chartResponse] = await Promise.all([
+    const [statsResponse, gamesResponse, dailyResponse] = await Promise.all([
       api<OpponentStats>(`/api/opponents/${selectedOpponent.id}/stats`),
-      api<GamesView>(`/api/opponents/${selectedOpponent.id}/games?limit=10`),
-      api<DailyView>(`/api/opponents/${selectedOpponent.id}/daily`),
       api<GamesView>(`/api/opponents/${selectedOpponent.id}/games?limit=100`),
+      api<DailyView>(`/api/opponents/${selectedOpponent.id}/daily`),
     ]);
     if (requestId !== opponentRequestId.current) return;
     setOpponentStats(statsResponse);
-    setGames(gamesResponse);
+    setGames(firstOpponentGamesPage(gamesResponse));
     setDaily(dailyResponse);
-    setChartGames(chartResponse.games);
+    setChartGames(gamesResponse.games);
     void loadHome().catch((loadError: unknown) => setError(messageFromError(loadError)));
   };
 
@@ -412,7 +416,12 @@ function App() {
 
   const openOpponent = (opponent: Opponent, tab: StatsTab = "summary", page = 1, returnScreen: "home" | "stats" = screen === "stats" ? "stats" : "home", layoutIdentity: string | number = opponent.id) => {
     setScreenTransition("forward");
-    setOpponentLayoutIdentity(layoutIdentity);
+    if (opponentLayoutIdentity !== layoutIdentity) {
+      // Commit only the selected row's shared-layout identities before its
+      // source screen unmounts. This preserves the morph without registering
+      // every history/opponent row in Motion's projection tree.
+      flushSync(() => setOpponentLayoutIdentity(layoutIdentity));
+    }
     opponentReturnScreen.current = returnScreen;
     if (screen === "home" || screen === "stats" || screen === "profile") {
       nestedEntryScrollSnapshot.current = { screen, top: window.scrollY };
@@ -463,12 +472,17 @@ function App() {
         stats: result.opponent_stats.stats,
       } : opponent));
       if (savedGame) {
-        setGames((current) => ({
-          opponent_name: current?.opponent_name ?? result.opponent_name,
-          games: [savedGame, ...(current?.games ?? []).filter((game) => game.game_id !== savedGame.game_id)],
-          page: 1,
-          total_pages: current?.total_pages ?? 1,
-        }));
+        setGames((current) => {
+          const alreadyPresent = current?.games.some((game) => game.game_id === savedGame.game_id) ?? false;
+          const totalItems = (current?.total_items ?? current?.games.length ?? 0) + (alreadyPresent ? 0 : 1);
+          return {
+            opponent_name: current?.opponent_name ?? result.opponent_name,
+            games: [savedGame, ...(current?.games ?? []).filter((game) => game.game_id !== savedGame.game_id)],
+            page: 1,
+            total_pages: Math.max(1, Math.ceil(totalItems / opponentGamesPageSize)),
+            total_items: totalItems,
+          };
+        });
         setChartGames((current) => [savedGame, ...current.filter((game) => game.game_id !== savedGame.game_id)]);
         setDaily((current) => addGameToDailyView(current, savedGame, result.opponent_name, result.opponent_stats.user_name));
         setHistory((current) => ({
@@ -865,6 +879,88 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, profile]);
 
+  const handleOpenLevel = useEventCallback(() => {
+    if (!profile) return;
+    setScreenTransition("default");
+    setRatingInput(profile.user.rating ?? "");
+    setSnackbar(null);
+    setScreen("levels");
+  });
+  const handleAvatarEdit = useEventCallback(() => {
+    void loadAvatarPicker();
+    setError("");
+    setAvatarPickerOpen(true);
+  });
+  const handleHistoryLoadMore = useEventCallback(() => {
+    void loadHistory((history?.page ?? 1) + 1, true);
+  });
+  const handleHistoryOpponent = useEventCallback(openHistoryOpponent);
+  const handleRatingClear = useEventCallback(() => {
+    void clearRating();
+  });
+  const handleOpponentDaysLoadMore = useEventCallback(() => {
+    void loadOpponentDays((daily?.page ?? 1) + 1);
+  });
+  const handleOpponentGamesLoadMore = useEventCallback(() => {
+    void loadOpponentGames((games?.page ?? 1) + 1);
+  });
+  const handleOpenOpponent = useEventCallback(openOpponent);
+  const handleOpponentTab = useEventCallback(selectOpponentTab);
+  const handleOpponentEdit = useEventCallback(openEdit);
+  const handleBack = useEventCallback(goBack);
+  const handleSelectMainTab = useEventCallback(selectMainTab);
+  const handleOpenScorePicker = useEventCallback(() => {
+    void loadScoreDrawer();
+    setActionSheet("opponents");
+  });
+  const handleActionOpen = useEventCallback(() => setActionSheet("actions"));
+  const handleActionClose = useEventCallback(() => setActionSheet(null));
+  const handleActionBack = useEventCallback(() => setActionSheet("actions"));
+  const handleScoreOpponent = useEventCallback(openScoreForOpponent);
+  const handleShareOpen = useEventCallback(() => {
+    void openInvite("share");
+  });
+  const handleAcceptOpen = useEventCallback(() => {
+    void openInvite("accept");
+  });
+  const handleCopyInvite = useEventCallback(() => {
+    void copyInvite();
+  });
+  const handleShareInvite = useEventCallback(() => {
+    void shareInvite();
+  });
+  const handleAcceptInvite = useEventCallback(acceptInvite);
+  const handleOpponentScore = useEventCallback(() => openScore("opponent"));
+  const handleUndoScore = useEventCallback(() => {
+    void undoScore();
+  });
+  const handleSaveProfileName = useEventCallback(saveProfileName);
+  const handleSaveRating = useEventCallback(saveRating);
+  const handleScoreDrawerOpenChange = useEventCallback((open: boolean) => {
+    if (!open) closeScoreToOrigin();
+  });
+  const handleScoreDigit = useEventCallback(enterScoreDigit);
+  const handleScoreErase = useEventCallback(eraseScoreDigit);
+  const handleScoreContinue = useEventCallback(continueScore);
+  const handleScoreBack = useEventCallback(backFromScoreToOpponentPicker);
+  const handleScoreClose = useEventCallback(closeScoreToOrigin);
+  const handleScoreSide = useEventCallback((side: ScoreSide) => {
+    setScoreValidationMessage("");
+    setScoreSide(side);
+  });
+  const handleAvatarPickerClose = useEventCallback(() => setAvatarPickerOpen(false));
+  const handleAvatarEmoji = useEventCallback((emoji: string) => {
+    void saveAvatar(emoji);
+  });
+  const handleHistorySort = useEventCallback(() => {
+    setHistoryNewestFirst((value) => !value);
+  });
+  const handleProfileSettings = useEventCallback(startProfileEditing);
+  const handleSnackbarDismiss = useEventCallback(() => {
+    setError("");
+    setSnackbar(null);
+  });
+
   const page = (() => {
     if (loading) {
       return <InitialAppSkeleton />;
@@ -879,18 +975,10 @@ function App() {
           editing={profileEditing}
           nameInput={profileNameInput}
           submitting={profileSubmitting}
-          onLevel={() => {
-            setScreenTransition("default");
-            setRatingInput(profile.user.rating ?? "");
-            setSnackbar(null);
-            setScreen("levels");
-          }}
-          onAvatarEdit={() => {
-            setError("");
-            setAvatarPickerOpen(true);
-          }}
+          onLevel={handleOpenLevel}
+          onAvatarEdit={handleAvatarEdit}
           onNameInput={setProfileNameInput}
-          onSaveName={saveProfileName}
+          onSaveName={handleSaveProfileName}
         />
       );
     }
@@ -900,10 +988,11 @@ function App() {
           newestFirst={historyNewestFirst}
           view={history}
           opponents={opponents}
+          morphLayoutIdentity={opponentLayoutIdentity}
           loadingMore={historyLoadingMore}
           loadError={historyLoadError}
-          onLoadMore={() => void loadHistory((history?.page ?? 1) + 1, true)}
-          onOpenOpponent={openHistoryOpponent}
+          onLoadMore={handleHistoryLoadMore}
+          onOpenOpponent={handleHistoryOpponent}
         />
       );
     }
@@ -914,8 +1003,8 @@ function App() {
           ratingValue={ratingInput}
           ratingSubmitting={ratingSubmitting}
           onRatingValue={setRatingInput}
-          onRatingSave={saveRating}
-          onRatingClear={() => void clearRating()}
+          onRatingSave={handleSaveRating}
+          onRatingClear={handleRatingClear}
         />
       );
     }
@@ -930,19 +1019,19 @@ function App() {
           daily={daily}
           games={games}
           chartGames={chartGames}
-          onTabChange={selectOpponentTab}
+          onTabChange={handleOpponentTab}
           dailyLoadingMore={dailyLoadingMore}
           dailyLoadError={dailyLoadError}
           gamesLoadingMore={gamesLoadingMore}
           gamesLoadError={gamesLoadError}
-          onDaysLoadMore={() => void loadOpponentDays((daily?.page ?? 1) + 1)}
-          onGamesLoadMore={() => void loadOpponentGames((games?.page ?? 1) + 1)}
-          onEdit={openEdit}
-          onBack={goBack}
+          onDaysLoadMore={handleOpponentDaysLoadMore}
+          onGamesLoadMore={handleOpponentGamesLoadMore}
+          onEdit={handleOpponentEdit}
+          onBack={handleBack}
         />
       );
     }
-    return <HomeScreen profile={profile} opponents={opponents} onOpenOpponent={openOpponent} />;
+    return <HomeScreen profile={profile} opponents={opponents} morphLayoutIdentity={opponentLayoutIdentity} onOpenOpponent={handleOpenOpponent} />;
   })();
 
   const canShowNavigation = profile && !loading && (screen === "home" || screen === "stats" || screen === "profile" || screen === "opponent");
@@ -962,6 +1051,7 @@ function App() {
 
   return (
     <MotionConfig reducedMotion="user">
+      <LazyMotion features={loadMotionFeatures} strict>
       <LayoutGroup id="ping-tablet-layout">
         <div className="app-shell" data-vaul-drawer-wrapper="">
           {!loading && profile && isMainTabScreen(screen) ? (
@@ -970,17 +1060,14 @@ function App() {
               sticky={screen === "stats"}
               profileAvatar={screen === "profile" ? undefined : profile.user.avatar_value}
               sortNewestFirst={screen === "stats" ? historyNewestFirst : undefined}
-              onSort={screen === "stats" ? () => setHistoryNewestFirst((value) => !value) : undefined}
-              onSettings={screen === "profile" && !profileEditing ? startProfileEditing : undefined}
+              onSort={screen === "stats" ? handleHistorySort : undefined}
+              onSettings={screen === "profile" && !profileEditing ? handleProfileSettings : undefined}
             />
           ) : null}
           <Snackbar
             message={error || snackbar?.message || ""}
             tone={error ? "error" : snackbar?.tone}
-            onDismiss={() => {
-              setError("");
-              setSnackbar(null);
-            }}
+            onDismiss={handleSnackbarDismiss}
           />
           <AnimatePresence
             initial={false}
@@ -992,7 +1079,7 @@ function App() {
               });
             }}
           >
-            <motion.main
+            <m.main
               className="screen"
               key={loading ? "initial-loading" : screen}
               data-screen={screen}
@@ -1054,7 +1141,7 @@ function App() {
             >
               {screen === "levels" ? <PageHeader title="Уровень" onBack={goBack} /> : null}
               {page}
-            </motion.main>
+            </m.main>
           </AnimatePresence>
         </div>
 
@@ -1063,14 +1150,14 @@ function App() {
             <div className="bottom-nav-slot">
               <BottomNavigation
                 active={activeTab}
-                onSelect={selectMainTab}
+                onSelect={handleSelectMainTab}
                 actionLabel={screen === "profile" && profileEditing ? "Сохранить" : screen === "opponent" ? "Добавить счёт" : undefined}
                 actionForm={screen === "profile" && profileEditing ? "profile-name-form" : undefined}
                 actionDisabled={screen === "profile" && profileEditing ? profileSubmitting || !profileNameInput.trim() : screen === "opponent" ? !opponentStats || scoreSubmitting : false}
-                onAction={screen === "opponent" ? () => openScore("opponent") : undefined}
+                onAction={screen === "opponent" ? handleOpponentScore : undefined}
                 auxiliaryActionLabel={screen === "opponent" && lastSavedGameId !== null ? "Отменить последний счёт" : undefined}
                 auxiliaryActionDisabled={scoreSubmitting}
-                onAuxiliaryAction={screen === "opponent" && lastSavedGameId !== null ? () => void undoScore() : undefined}
+                onAuxiliaryAction={screen === "opponent" && lastSavedGameId !== null ? handleUndoScore : undefined}
               />
             </div>
             {reserveTabAdd ? (
@@ -1081,43 +1168,40 @@ function App() {
                 code={inviteCode}
                 input={inviteInput}
                 submitting={inviteSubmitting}
-                onOpen={() => setActionSheet("actions")}
-                onClose={() => setActionSheet(null)}
-                onBack={() => setActionSheet("actions")}
-                onScore={() => setActionSheet("opponents")}
-                onScoreOpponent={openScoreForOpponent}
-                onShare={() => void openInvite("share")}
-                onAccept={() => void openInvite("accept")}
+                onOpen={handleActionOpen}
+                onClose={handleActionClose}
+                onBack={handleActionBack}
+                onScore={handleOpenScorePicker}
+                onScoreOpponent={handleScoreOpponent}
+                onShare={handleShareOpen}
+                onAccept={handleAcceptOpen}
                 onInput={setInviteInput}
-                onCopyInvite={() => void copyInvite()}
-                onShareInvite={() => void shareInvite()}
-                onAcceptInvite={acceptInvite}
+                onCopyInvite={handleCopyInvite}
+                onShareInvite={handleShareInvite}
+                onAcceptInvite={handleAcceptInvite}
               />
             ) : null}
           </div>
         ) : null}
         {selectedOpponent ? (
-          <ScoreDrawer
-            open={scoreDrawerOpen}
-            opponentName={selectedName}
-            ownScore={ownScore}
-            opponentScore={opponentScore}
-            side={scoreSide}
-            submitting={scoreSubmitting}
-            validationMessage={scoreValidationMessage}
-            onOpenChange={(open) => {
-              if (!open) closeScoreToOrigin();
-            }}
-            onDigit={enterScoreDigit}
-            onErase={eraseScoreDigit}
-            onContinue={continueScore}
-            onBack={backFromScoreToOpponentPicker}
-            onClose={closeScoreToOrigin}
-            onSide={(side) => {
-              setScoreValidationMessage("");
-              setScoreSide(side);
-            }}
-          />
+          <Suspense fallback={null}>
+            <ScoreDrawer
+              open={scoreDrawerOpen}
+              opponentName={selectedName}
+              ownScore={ownScore}
+              opponentScore={opponentScore}
+              side={scoreSide}
+              submitting={scoreSubmitting}
+              validationMessage={scoreValidationMessage}
+              onOpenChange={handleScoreDrawerOpenChange}
+              onDigit={handleScoreDigit}
+              onErase={handleScoreErase}
+              onContinue={handleScoreContinue}
+              onBack={handleScoreBack}
+              onClose={handleScoreClose}
+              onSide={handleScoreSide}
+            />
+          </Suspense>
         ) : null}
         <AnimatePresence initial={false}>
           {opponentEditSheet ? (
@@ -1147,13 +1231,18 @@ function App() {
             />
           ) : null}
         </AnimatePresence>
-        <AvatarPicker
-          open={avatarPickerOpen}
-          submitting={avatarSubmitting}
-          onClose={() => setAvatarPickerOpen(false)}
-          onEmoji={(emoji) => void saveAvatar(emoji)}
-        />
+        {profileEditing || avatarPickerOpen ? (
+          <Suspense fallback={null}>
+            <AvatarPicker
+              open={avatarPickerOpen}
+              submitting={avatarSubmitting}
+              onClose={handleAvatarPickerClose}
+              onEmoji={handleAvatarEmoji}
+            />
+          </Suspense>
+        ) : null}
       </LayoutGroup>
+      </LazyMotion>
     </MotionConfig>
   );
 }
